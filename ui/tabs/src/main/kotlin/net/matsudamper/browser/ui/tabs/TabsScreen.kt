@@ -1,6 +1,5 @@
 package net.matsudamper.browser.ui.tabs
 
-import android.content.res.Configuration
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -70,9 +69,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
-import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
-import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 internal object TabsLayoutDefaults {
@@ -174,7 +171,6 @@ fun TabsScreen(
                 groupHasPlayingTab = loadingState.groupHasPlayingTab,
                 snackbarHostState = snackbarHostState,
                 newTabListener = loadingState.newTabListener,
-                profileSwitcher = loadingState.profileSwitcher,
                 onReorderTabs = currentCallbacks::onReorderTabs,
                 onReorderGroups = currentCallbacks::onReorderGroups,
                 onGroupSelected = currentCallbacks::onGroupSelected,
@@ -198,7 +194,6 @@ private fun TabsScreenLoadedContent(
     groupHasPlayingTab: List<Boolean>,
     snackbarHostState: SnackbarHostState,
     newTabListener: TabsScreenUiState.LoadingState.Loaded.NewTabListener,
-    profileSwitcher: ProfileSwitcherUiState,
     onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onGroupSelected: (Int) -> Unit,
@@ -256,14 +251,13 @@ private fun TabsScreenLoadedContent(
             } else {
                 val itemViewportLeft = (targetItem.offset - layoutInfo.viewportStartOffset).toFloat()
                 val itemViewportRight = itemViewportLeft + targetItem.size
-                // 末尾の contentPadding にはプロファイルボタンが重なるため、見える範囲から除く
-                val visibleRight = (layoutInfo.viewportSize.width - layoutInfo.afterContentPadding).toFloat()
-                // スクロール量にグループ追加ボタン 1 つ分のバッファを加えて余裕を持たせる
-                val bufferPx = with(density) { AddGroupButtonWidth.toPx() }
+                val viewportWidth = layoutInfo.viewportSize.width.toFloat()
+                // スクロール量に ±24dp のバッファを加えて少し余裕を持たせる
+                val bufferPx = with(density) { 24.dp.toPx() }
                 when {
-                    itemViewportRight > visibleRight -> {
+                    itemViewportRight > viewportWidth -> {
                         // 右にはみ出している: はみ出し分 + バッファ分スクロール
-                        groupTabListState.animateScrollBy(itemViewportRight - visibleRight + bufferPx)
+                        groupTabListState.animateScrollBy(itemViewportRight - viewportWidth + bufferPx)
                     }
 
                     itemViewportLeft < 0f -> {
@@ -309,8 +303,6 @@ private fun TabsScreenLoadedContent(
     var renameDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
 
     var deleteDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
-
-    var isProfileDialogVisible by remember { mutableStateOf(false) }
 
     var floatingActionButtonBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
 
@@ -375,12 +367,16 @@ private fun TabsScreenLoadedContent(
                 onGroupSelected = onGroupSelected,
                 onReorderGroups = onReorderGroups,
                 onAddGroup = onAddGroup,
-                profileIcon = profileSwitcher.activeProfileIcon,
-                onClickProfile = { isProfileDialogVisible = true },
                 onGroupTabBoundsChanged = { index, bounds ->
                     groupTabBounds[index] = bounds
                 },
                 onDraggingChanged = { isGroupDragging = it },
+                listState = groupTabListState,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            PagerIndicator(
+                pagerState = pagerState,
                 listState = groupTabListState,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -474,13 +470,6 @@ private fun TabsScreenLoadedContent(
                 onDismiss = { renameDialogGroupIndex = null },
             )
         }
-    }
-
-    if (isProfileDialogVisible) {
-        ProfileManagementDialog(
-            uiState = profileSwitcher,
-            onDismiss = { isProfileDialogVisible = false },
-        )
     }
 
     val deleteIndex = deleteDialogGroupIndex
@@ -604,16 +593,13 @@ private fun SnackbarContent(
     }
 }
 
-/** ページインジケータの高さ。GroupTabBar のプロファイル領域がこの行まで覆うために共有する */
-internal val PagerIndicatorHeight = 2.dp
-
 /**
  * HorizontalPager のスクロール進捗に連動して動くインジケータ。
- * グループタブ列の直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
+ * グループタブバーの直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
  * タブバーがスクロールされていても表示位置と同期する。
  */
 @Composable
-internal fun PagerIndicator(
+private fun PagerIndicator(
     pagerState: PagerState,
     listState: LazyListState,
     modifier: Modifier = Modifier,
@@ -621,8 +607,7 @@ internal fun PagerIndicator(
     val indicatorColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
 
-    // 右端のプロファイル領域へ潜った部分は GroupTabBar のグラデーションに隠れる
-    Canvas(modifier = modifier.height(PagerIndicatorHeight)) {
+    Canvas(modifier = modifier.height(2.dp)) {
         drawRect(color = trackColor)
         // スクロールやページ変化での無効化を描画フェーズだけに留めるため draw ラムダ内で状態を読み取る
         val layoutInfo = listState.layoutInfo
@@ -673,7 +658,6 @@ private fun PreviewFloatingGroupMenu() {
         groupHasPlayingTab = listOf(),
         snackbarHostState = remember { SnackbarHostState() },
         newTabListener = PreviewNewTabListener,
-        profileSwitcher = PreviewProfileSwitcherUiState,
         onReorderTabs = { _, _, _ -> },
         onReorderGroups = { _, _ -> },
         onGroupSelected = {},
@@ -683,56 +667,6 @@ private fun PreviewFloatingGroupMenu() {
         onDeleteGroup = {},
         onToggleDefaultGroup = {},
     )
-}
-
-/** グループタブがプロファイルボタンまで届き、右端のフェードで区切られる状態 */
-@Composable
-private fun PreviewManyGroupsContent() {
-    val groups = remember {
-        listOf(
-            TabGroupData(TabGroupId("g1"), "デフォルト"),
-            TabGroupData(TabGroupId("g2"), "開発"),
-            TabGroupData(TabGroupId("g3"), "ニュース"),
-            TabGroupData(TabGroupId("g4"), "ショッピング"),
-            TabGroupData(TabGroupId("g5"), "動画"),
-        )
-    }
-    val groupedTabs = remember {
-        listOf(
-            listOf(previewTabData(id = "1", title = "Example Domain")),
-            listOf(previewTabData(id = "2", title = "GitHub")),
-            listOf(previewTabData(id = "3", title = "News")),
-            listOf(previewTabData(id = "4", title = "Shop")),
-            listOf(previewTabData(id = "5", title = "Video")),
-        )
-    }
-    TabsScreenLoadedContent(
-        groupedTabs = groupedTabs,
-        groups = groups,
-        activeGroupIndex = 0,
-        selectedTabId = "1",
-        groupHasPlayingTab = listOf(),
-        snackbarHostState = remember { SnackbarHostState() },
-        newTabListener = PreviewNewTabListener,
-        profileSwitcher = PreviewProfileSwitcherUiState,
-        onReorderTabs = { _, _, _ -> },
-        onReorderGroups = { _, _ -> },
-        onGroupSelected = {},
-        onGroupPageChanged = {},
-        onAddGroup = {},
-        onRenameGroup = { _, _ -> },
-        onDeleteGroup = {},
-        onToggleDefaultGroup = {},
-    )
-}
-
-@Composable
-@Preview(name = "多数グループ Light")
-@Preview(name = "多数グループ Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
-private fun PreviewManyGroups() {
-    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
-        PreviewManyGroupsContent()
-    }
 }
 
 /** グループが1つのみの場合 (削除メニューが disabled になる状態) */
@@ -760,7 +694,6 @@ private fun PreviewSingleGroup() {
         groupHasPlayingTab = listOf(),
         snackbarHostState = remember { SnackbarHostState() },
         newTabListener = PreviewNewTabListener,
-        profileSwitcher = PreviewProfileSwitcherUiState,
         onReorderTabs = { _, _, _ -> },
         onReorderGroups = { _, _ -> },
         onGroupSelected = {},
@@ -801,7 +734,6 @@ private fun PreviewWithSnackbar() {
             selectedTabId = "1",
             snackbarHostState = remember { SnackbarHostState() },
             newTabListener = PreviewNewTabListener,
-            profileSwitcher = PreviewProfileSwitcherUiState,
             onReorderTabs = { _, _, _ -> },
             onReorderGroups = { _, _ -> },
             onGroupSelected = {},

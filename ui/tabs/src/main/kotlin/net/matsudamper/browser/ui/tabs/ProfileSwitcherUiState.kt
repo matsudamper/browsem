@@ -2,8 +2,9 @@ package net.matsudamper.browser.ui.tabs
 
 import androidx.compose.runtime.Stable
 import net.matsudamper.browser.data.ProfileIcon
+import net.matsudamper.browser.data.ProfileId
 
-/** タブ一覧右上のプロファイルボタンと、そこから開くプロファイル管理ダイアログの状態 */
+/** タブメニューのプロファイル切り替えアイコンと、そこから開くプロファイル管理ダイアログの状態 */
 @Stable
 data class ProfileSwitcherUiState(
     val activeProfileIcon: ProfileIcon,
@@ -12,6 +13,7 @@ data class ProfileSwitcherUiState(
 ) {
     @Stable
     data class ProfileItem(
+        val id: ProfileId,
         val name: String,
         val icon: ProfileIcon,
         val tabCount: Int,

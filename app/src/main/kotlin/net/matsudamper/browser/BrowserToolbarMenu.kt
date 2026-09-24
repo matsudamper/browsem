@@ -33,7 +33,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -46,14 +49,30 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.data.ProfileIcon
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.tabs.MoveTabToProfileDialog
+import net.matsudamper.browser.ui.tabs.ProfileIconBadge
+import net.matsudamper.browser.ui.tabs.ProfileManagementDialog
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
+
+private val PreviewProfileSwitcherUiStateForMenu = ProfileSwitcherUiState(
+    activeProfileIcon = ProfileIcon.PERSON,
+    profiles = listOf(),
+    callbacks = object : ProfileSwitcherUiState.Callbacks {
+        override fun onAddProfile() = Unit
+    },
+)
 
 /** DropdownMenu の上下マージン。Material3 の MenuVerticalMargin と同値 */
 private val ToolbarMenuVerticalMargin = 48.dp
@@ -150,9 +169,16 @@ internal fun ToolbarMenu(
     onOpenSiteSettings: (() -> Unit)?,
     onOpenDownloads: (() -> Unit)?,
     onOpenDevTools: (() -> Unit)?,
+    profileSwitcher: ProfileSwitcherUiState?,
+    currentTabProfileId: ProfileId?,
+    onMoveTabToProfile: ((ProfileId) -> Unit)?,
 ) {
     val menuScrollState = rememberScrollState()
     val menuMaxHeight = rememberToolbarMenuMaxHeight(menuAnchorBottomPx)
+    // DropdownMenu の中身で Dialog を出すとポップアップが入れ子になり、ダイアログ内の
+    // DropdownMenu の表示位置がずれる。メニューを閉じても残るよう DropdownMenu の外で持つ
+    var isProfileDialogVisible by remember { mutableStateOf(false) }
+    var isMoveDialogVisible by remember { mutableStateOf(false) }
     DropdownMenu(
         expanded = visibleMenu,
         onDismissRequest = { onDismissRequest() },
@@ -198,6 +224,34 @@ internal fun ToolbarMenu(
             onOpenSiteSettings = onOpenSiteSettings,
             onOpenDownloads = onOpenDownloads,
             onOpenDevTools = onOpenDevTools,
+            profileSwitcher = profileSwitcher,
+            currentTabProfileId = currentTabProfileId,
+            onMoveTabToProfile = onMoveTabToProfile,
+            onOpenProfileDialog = {
+                onDismissRequest()
+                isProfileDialogVisible = true
+            },
+            onOpenMoveTabDialog = {
+                onDismissRequest()
+                isMoveDialogVisible = true
+            },
+        )
+    }
+    if (isProfileDialogVisible && profileSwitcher != null) {
+        ProfileManagementDialog(
+            uiState = profileSwitcher,
+            onDismiss = { isProfileDialogVisible = false },
+        )
+    }
+    if (isMoveDialogVisible && profileSwitcher != null && currentTabProfileId != null && onMoveTabToProfile != null) {
+        MoveTabToProfileDialog(
+            profiles = profileSwitcher.profiles,
+            currentProfileId = currentTabProfileId,
+            onSelect = { profileId ->
+                isMoveDialogVisible = false
+                onMoveTabToProfile(profileId)
+            },
+            onDismiss = { isMoveDialogVisible = false },
         )
     }
 }
@@ -241,6 +295,11 @@ private fun ToolbarMenuContent(
     isPageLoading: Boolean,
     onStopLoading: () -> Unit,
     onOpenDevTools: (() -> Unit)?,
+    profileSwitcher: ProfileSwitcherUiState?,
+    currentTabProfileId: ProfileId?,
+    onMoveTabToProfile: ((ProfileId) -> Unit)?,
+    onOpenProfileDialog: () -> Unit,
+    onOpenMoveTabDialog: () -> Unit,
 ) {
     Column {
         Row(
@@ -470,6 +529,42 @@ private fun ToolbarMenuContent(
                 }
             }
         }
+        if (profileSwitcher != null && currentTabProfileId != null && onMoveTabToProfile != null) {
+            HorizontalDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "プロファイル",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        modifier = Modifier
+                            .testTag(BrowserToolbarMenuTestTags.ProfileSwitchButton.testTag)
+                            .semantics { contentDescription = "プロファイルを管理" },
+                        onClick = onOpenProfileDialog,
+                    ) {
+                        ProfileIconBadge(icon = profileSwitcher.activeProfileIcon, size = 28.dp, isEmphasized = false)
+                    }
+                    IconButton(
+                        modifier = Modifier.testTag(BrowserToolbarMenuTestTags.MoveTabToProfileButton.testTag),
+                        enabled = profileSwitcher.profiles.any { it.id != currentTabProfileId },
+                        onClick = onOpenMoveTabDialog,
+                    ) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_drive_file_move_24dp),
+                            contentDescription = "タブを別のプロファイルへ移動",
+                        )
+                    }
+                }
+            }
+        }
         if (extensionActions.isNotEmpty() && extensionActionScrollState != null) {
             HorizontalDivider()
             ExtensionActionRow(
@@ -676,6 +771,7 @@ private fun ToolbarMenuContentPreview(
     onOpenInBrowser: (() -> Unit)?,
     onOpenDownloads: (() -> Unit)?,
     onOpenDevTools: (() -> Unit)?,
+    profileSwitcher: ProfileSwitcherUiState? = PreviewProfileSwitcherUiStateForMenu,
 ) {
     ToolbarMenuContent(
         onDismissRequest = {},
@@ -714,6 +810,11 @@ private fun ToolbarMenuContentPreview(
         onOpenSiteSettings = {},
         onOpenDownloads = onOpenDownloads,
         onOpenDevTools = onOpenDevTools,
+        profileSwitcher = profileSwitcher,
+        currentTabProfileId = ProfileId.DEFAULT,
+        onMoveTabToProfile = profileSwitcher?.let { { _ -> } },
+        onOpenProfileDialog = {},
+        onOpenMoveTabDialog = {},
     )
 }
 
@@ -765,6 +866,7 @@ private fun PreviewToolbarMenuContentWebApp() {
                 onOpenInBrowser = {},
                 onOpenDownloads = null,
                 onOpenDevTools = null,
+                profileSwitcher = null,
             )
         }
     }
@@ -887,5 +989,11 @@ sealed interface BrowserToolbarMenuTestTags {
     }
     object SettingsButton : BrowserToolbarMenuTestTags {
         override val id = "settings_button"
+    }
+    object ProfileSwitchButton : BrowserToolbarMenuTestTags {
+        override val id = "profile_switch_button"
+    }
+    object MoveTabToProfileButton : BrowserToolbarMenuTestTags {
+        override val id = "move_tab_to_profile_button"
     }
 }

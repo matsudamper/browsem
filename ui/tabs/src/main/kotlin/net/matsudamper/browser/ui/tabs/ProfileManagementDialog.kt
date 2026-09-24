@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -37,6 +39,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ProfileIcon
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.resources.R as ResourcesR
 
 /**
@@ -44,7 +47,7 @@ import net.matsudamper.browser.resources.R as ResourcesR
  * 行のタップで切り替え、「⋮」メニューで名前変更・アイコン変更・削除、下部ボタンで追加を行う。
  */
 @Composable
-internal fun ProfileManagementDialog(
+fun ProfileManagementDialog(
     uiState: ProfileSwitcherUiState,
     onDismiss: () -> Unit,
 ) {
@@ -215,6 +218,79 @@ private fun ProfileRow(
     }
 }
 
+/**
+ * タブの移動先プロファイルを選ぶダイアログ。
+ * [currentProfileId] はタブが属しているプロファイルのため選択できない。
+ */
+@Composable
+fun MoveTabToProfileDialog(
+    profiles: List<ProfileSwitcherUiState.ProfileItem>,
+    currentProfileId: ProfileId,
+    onSelect: (ProfileId) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("タブを移動") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                profiles.forEachIndexed { index, profile ->
+                    val isCurrentProfile = profile.id == currentProfileId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isCurrentProfile) { onSelect(profile.id) }
+                            .padding(vertical = 8.dp)
+                            .testTag(ProfileManagementTestTags.MoveTargetItem(index).testTag),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ProfileIconBadge(
+                            icon = profile.icon,
+                            size = 36.dp,
+                            isEmphasized = false,
+                            modifier = Modifier.padding(start = 12.dp),
+                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 8.dp),
+                        ) {
+                            Text(
+                                text = profile.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isCurrentProfile) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (isCurrentProfile) {
+                                Text(
+                                    text = "現在のプロファイル",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
+}
+
 @Composable
 private fun DeleteProfileDialog(
     profileName: String,
@@ -245,7 +321,7 @@ private fun DeleteProfileDialog(
 
 /** 丸い背景に載せたプロファイルアイコン。一覧とバー右端のボタンで共用する */
 @Composable
-internal fun ProfileIconBadge(
+fun ProfileIconBadge(
     icon: ProfileIcon,
     size: Dp,
     isEmphasized: Boolean,
@@ -375,10 +451,6 @@ sealed interface ProfileManagementTestTags {
 
     val testTag get() = "${ProfileManagementTestTags::class.java.name}#$id"
 
-    object OpenDialogButton : ProfileManagementTestTags {
-        override val id: String = "open_dialog_button"
-    }
-
     object AddProfileButton : ProfileManagementTestTags {
         override val id: String = "add_profile_button"
     }
@@ -418,6 +490,10 @@ sealed interface ProfileManagementTestTags {
     class IconOption(icon: ProfileIcon) : ProfileManagementTestTags {
         override val id: String = "icon_option_${icon.name}"
     }
+
+    class MoveTargetItem(index: Int) : ProfileManagementTestTags {
+        override val id: String = "move_target_item_$index"
+    }
 }
 
 private object PreviewProfileListener : ProfileSwitcherUiState.ProfileItem.Listener {
@@ -430,9 +506,9 @@ private object PreviewProfileListener : ProfileSwitcherUiState.ProfileItem.Liste
 internal val PreviewProfileSwitcherUiState = ProfileSwitcherUiState(
     activeProfileIcon = ProfileIcon.PERSON,
     profiles = listOf(
-        ProfileSwitcherUiState.ProfileItem("デフォルト", ProfileIcon.PERSON, 5, true, false, PreviewProfileListener),
-        ProfileSwitcherUiState.ProfileItem("仕事", ProfileIcon.WORK, 2, false, true, PreviewProfileListener),
-        ProfileSwitcherUiState.ProfileItem("買い物", ProfileIcon.SHOPPING_CART, 0, false, true, PreviewProfileListener),
+        ProfileSwitcherUiState.ProfileItem(ProfileId.DEFAULT, "デフォルト", ProfileIcon.PERSON, 5, true, false, PreviewProfileListener),
+        ProfileSwitcherUiState.ProfileItem(ProfileId("work"), "仕事", ProfileIcon.WORK, 2, false, true, PreviewProfileListener),
+        ProfileSwitcherUiState.ProfileItem(ProfileId("shopping"), "買い物", ProfileIcon.SHOPPING_CART, 0, false, true, PreviewProfileListener),
     ),
     callbacks = object : ProfileSwitcherUiState.Callbacks {
         override fun onAddProfile() = Unit
@@ -444,6 +520,17 @@ internal val PreviewProfileSwitcherUiState = ProfileSwitcherUiState(
 private fun PreviewProfileManagementDialog() {
     ProfileManagementDialog(
         uiState = PreviewProfileSwitcherUiState,
+        onDismiss = {},
+    )
+}
+
+@Composable
+@Preview
+private fun PreviewMoveTabToProfileDialog() {
+    MoveTabToProfileDialog(
+        profiles = PreviewProfileSwitcherUiState.profiles,
+        currentProfileId = ProfileId.DEFAULT,
+        onSelect = {},
         onDismiss = {},
     )
 }

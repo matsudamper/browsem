@@ -436,6 +436,7 @@ private fun MainBrowserContent(
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
     val themeColorExtension = viewModel.themeColorExtension
     val mediaWebExtension = viewModel.mediaWebExtension
+    val profileSwitcher by viewModel.profileSwitcher.collectAsState()
 
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
@@ -501,6 +502,10 @@ private fun MainBrowserContent(
                     if (targetTabId != null) {
                         selectTab(targetTabId, null)
                     }
+                }
+
+                override fun selectTab(tabId: String) {
+                    selectTab(tabId, null)
                 }
             })
         }
@@ -686,6 +691,10 @@ private fun MainBrowserContent(
                                         outerNavActions.openSiteSettings(currentUrl, key.tabId)
                                     },
                                     onOpenTabs = { innerBackStack.add(BrowserNavDestination.Tabs) },
+                                    profileSwitcher = profileSwitcher,
+                                    onMoveTabToProfile = { tabId, url, profileId ->
+                                        viewModel.moveTabToProfile(tabId, url, profileId)
+                                    },
                                     browserSessionLifecycleController = browserSessionLifecycleController,
                                     onOpenNewSessionRequest = { uri ->
                                         val newTab = browserTabController.createTabForNewSession(
@@ -796,27 +805,6 @@ private fun MainBrowserContent(
                                         )
                                         selectTab(newTab.tabId, null)
                                     }
-                                }
-
-                                override fun openNewTabBehind(currentGroupId: TabGroupId?, profileId: ProfileId) {
-                                    scope.launch {
-                                        val tabId = UUID.randomUUID().toString()
-                                        if (currentGroupId != null) {
-                                            tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
-                                        }
-                                        val newTab = viewModel.createTabWithHomepage(
-                                            tabId = tabId,
-                                            insertAfterSelectedTab = false,
-                                            profileId = profileId,
-                                        )
-                                        browserTabController.selectTab(newTab.tabId)
-                                        navController.replaceCurrentBrowserTab(newTab.tabId)
-                                    }
-                                }
-
-                                override fun clearProfileStorage(profileId: ProfileId) {
-                                    val contextId = profileId.geckoContextId ?: return
-                                    viewModel.runtime.storageController.clearDataForSessionContext(contextId)
                                 }
                             })
                         }

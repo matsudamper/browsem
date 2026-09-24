@@ -86,6 +86,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.forminput.FormInputRepository
@@ -107,6 +108,7 @@ import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate
@@ -153,6 +155,8 @@ internal fun GeckoBrowserTab(
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)?,
     urlBarSuggestions: UrlBarSuggestionsUiState,
     onUrlInputChanged: ((String) -> Unit)?,
+    profileSwitcher: ProfileSwitcherUiState?,
+    onMoveTabToProfile: ((tabId: String, url: String, profileId: ProfileId) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -1407,6 +1411,11 @@ internal fun GeckoBrowserTab(
                         onToolbarDragEnd()
                     },
                     onAddToHomeScreen = state::requestAddToHomeScreen,
+                    profileSwitcher = profileSwitcher,
+                    currentTabProfileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId),
+                    onMoveTabToProfile = onMoveTabToProfile?.let { callback ->
+                        { profileId -> callback(browserTab.tabId, state.currentPageUrl, profileId) }
+                    },
                 )
             }
             val detectedLang = state.translation.detectedPageLanguage

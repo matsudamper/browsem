@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -19,12 +20,15 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.core.ExternalDownloadTabNavigationPolicy
+import net.matsudamper.browser.data.ProfileData
+import net.matsudamper.browser.data.ProfileIcon
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.ResolvedBrowserSettings
@@ -41,6 +45,7 @@ import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -121,6 +126,9 @@ internal class BrowserViewModel(
 
         /** 外部ダウンロードタブを閉じた後に遷移すべきタブ ID */
         fun onExternalDownloadTabClosed(targetTabId: String?)
+
+        /** プロファイルの切り替え・タブ移動で、背後の Browser の選択タブを差し替える */
+        fun selectTab(tabId: String)
     }
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -256,6 +264,152 @@ internal class BrowserViewModel(
                 browserTabController.selectTab(tabId)
             }
             // setupComplete は browserTabController.restoreTabs() 内で complete 済み
+        }
+    }
+
+    private val profileCallbacks = object : ProfileSwitcherUiState.Callbacks {
+        override fun onAddProfile() {
+            addProfile()
+        }
+    }
+
+    /** タブメニューのプロファイル切り替えアイコンから開く、プロファイル管理ダイアログの状態 */
+    val profileSwitcher: StateFlow<ProfileSwitcherUiState> = combine(
+        profileRepository.observeProfiles(),
+        profileRepository.observeTabCounts(),
+    ) { profiles, tabCounts -> buildProfileSwitcher(profiles, tabCounts) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = buildProfileSwitcher(profiles = listOf(), tabCounts = mapOf()),
+        )
+
+    private fun buildProfileSwitcher(
+        profiles: List<ProfileData>,
+        tabCounts: Map<ProfileId, Int>,
+    ): ProfileSwitcherUiState {
+        return ProfileSwitcherUiState(
+            activeProfileIcon = profiles.firstOrNull { it.isActive }?.icon ?: ProfileIcon.PERSON,
+            profiles = profiles.map { profile ->
+                ProfileSwitcherUiState.ProfileItem(
+                    id = profile.id,
+                    name = profile.name,
+                    icon = profile.icon,
+                    tabCount = tabCounts[profile.id] ?: 0,
+                    isActive = profile.isActive,
+                    isDeletable = profile.id != ProfileId.DEFAULT,
+                    listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
+                        override fun onSelect() {
+                            switchProfile(profile.id)
+                        }
+
+                        override fun onRename(newName: String) {
+                            viewModelScope.launch {
+                                profileRepository.renameProfile(profile.id, newName)
+                            }
+                        }
+
+                        override fun onChangeIcon(icon: ProfileIcon) {
+                            viewModelScope.launch {
+                                profileRepository.updateProfileIcon(profile.id, icon)
+                            }
+                        }
+
+                        override fun onDelete() {
+                            deleteProfile(profile.id)
+                        }
+                    },
+                )
+            },
+            callbacks = profileCallbacks,
+        )
+    }
+
+    private fun addProfile() {
+        viewModelScope.launch {
+            val profileCount = profileSwitcher.value.profiles.size
+            profileRepository.addProfile(
+                name = "プロファイル ${profileCount + 1}",
+                icon = ProfileIcon.PERSON,
+                sortOrder = profileCount,
+            )
+        }
+    }
+
+    private fun switchProfile(profileId: ProfileId) {
+        if (browserTabController.activeProfileId == profileId) return
+        viewModelScope.launch { switchProfileNow(profileId) }
+    }
+
+    /**
+     * プロファイルを切り替える。切り替え先にタブがあればそれを選択し、
+     * 無ければ新規タブを作って背後の Browser をそれに差し替える。
+     */
+    private suspend fun switchProfileNow(profileId: ProfileId) {
+        profileRepository.setActiveProfile(profileId)
+        val existingTabId = browserTabController.tabStoreState.value.tabs
+            .firstOrNull { it.profileId == profileId.value }
+            ?.id
+        val targetTabId = existingTabId ?: run {
+            val tabId = UUID.randomUUID().toString()
+            val groupId = tabGroupRepository.getGroupIdForExternalTab(profileId)
+            if (groupId != null) {
+                tabGroupRepository.assignTabToGroup(tabId, groupId)
+            }
+            createTabWithHomepage(
+                tabId = tabId,
+                insertAfterSelectedTab = false,
+                profileId = profileId,
+            ).tabId
+        }
+        browserTabController.selectTab(targetTabId)
+        eventHandler.trySend { it.selectTab(targetTabId) }
+    }
+
+    /**
+     * プロファイルを削除する。有効プロファイルならデフォルトへ切り替えてから、
+     * 属するタブを閉じ、DB の行を消し、Gecko 側のサイトデータを削除する。
+     */
+    private fun deleteProfile(profileId: ProfileId) {
+        if (profileId == ProfileId.DEFAULT) return
+        viewModelScope.launch {
+            if (browserTabController.activeProfileId == profileId) {
+                switchProfileNow(ProfileId.DEFAULT)
+            }
+            browserTabController.closeTabsOfProfile(profileId.value)
+            profileRepository.deleteProfile(profileId)
+            val contextId = profileId.geckoContextId
+            if (contextId != null) {
+                runtime.storageController.clearDataForSessionContext(contextId)
+            }
+        }
+    }
+
+    /**
+     * タブを指定プロファイルのデフォルトグループへ移動し、同じ URL を読み込み直す。
+     * GeckoSession は contextId（プロファイル）ごとに固定で差し替えられないため、
+     * 実装上は現在のタブを閉じて移動先プロファイルに同じ URL の新規タブを開き直す。
+     */
+    fun moveTabToProfile(tabId: String, url: String, profileId: ProfileId) {
+        viewModelScope.launch {
+            val tab = browserTabController.tabStoreState.value.tabs.firstOrNull { it.id == tabId }
+            if (tab == null || tab.profileId == profileId.value) return@launch
+            val newTabId = UUID.randomUUID().toString()
+            val groupId = tabGroupRepository.getGroupIdForExternalTab(profileId)
+            if (groupId != null) {
+                tabGroupRepository.assignTabToGroup(newTabId, groupId)
+            }
+            val session = browserTabController.createSessionForProfile(profileId)
+            browserTabController.createAndAppendTabWithSession(
+                session = session,
+                tabId = newTabId,
+                initialUrl = url,
+            )
+            profileRepository.setActiveProfile(profileId)
+            browserTabController.selectTab(newTabId)
+            eventHandler.trySend { it.selectTab(newTabId) }
+            browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = newTabId)
+            browserTabController.confirmClosedTab()
         }
     }
 
