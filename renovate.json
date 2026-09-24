@@ -14,7 +14,8 @@
     {
       "matchPackageNames": [
         "androidx.work:**",
-        "androidx.navigation3:**"
+        "androidx.navigation3:**",
+        "gradle"
       ],
       "automerge": true
     }
