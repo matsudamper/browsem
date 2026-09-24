@@ -37,6 +37,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ProfileIcon
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.resources.R as ResourcesR
 
 /**
@@ -213,6 +214,73 @@ private fun ProfileRow(
             }
         }
     }
+}
+
+/**
+ * タブの移動先プロファイルを選ぶダイアログ。
+ * 使用中のプロファイルは現在のタブが属しているため選択できない。
+ */
+@Composable
+fun MoveTabToProfileDialog(
+    profiles: List<ProfileSwitcherUiState.ProfileItem>,
+    onSelect: (ProfileId) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("タブを移動") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                profiles.forEachIndexed { index, profile ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !profile.isActive) { onSelect(profile.id) }
+                            .padding(vertical = 8.dp)
+                            .testTag(ProfileManagementTestTags.MoveTargetItem(index).testTag),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ProfileIconBadge(
+                            icon = profile.icon,
+                            size = 36.dp,
+                            isEmphasized = false,
+                            modifier = Modifier.padding(start = 12.dp),
+                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 8.dp),
+                        ) {
+                            Text(
+                                text = profile.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (profile.isActive) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (profile.isActive) {
+                                Text(
+                                    text = "現在のプロファイル",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
 }
 
 @Composable
@@ -414,6 +482,10 @@ sealed interface ProfileManagementTestTags {
     class IconOption(icon: ProfileIcon) : ProfileManagementTestTags {
         override val id: String = "icon_option_${icon.name}"
     }
+
+    class MoveTargetItem(index: Int) : ProfileManagementTestTags {
+        override val id: String = "move_target_item_$index"
+    }
 }
 
 private object PreviewProfileListener : ProfileSwitcherUiState.ProfileItem.Listener {
@@ -426,9 +498,9 @@ private object PreviewProfileListener : ProfileSwitcherUiState.ProfileItem.Liste
 internal val PreviewProfileSwitcherUiState = ProfileSwitcherUiState(
     activeProfileIcon = ProfileIcon.PERSON,
     profiles = listOf(
-        ProfileSwitcherUiState.ProfileItem("デフォルト", ProfileIcon.PERSON, 5, true, false, PreviewProfileListener),
-        ProfileSwitcherUiState.ProfileItem("仕事", ProfileIcon.WORK, 2, false, true, PreviewProfileListener),
-        ProfileSwitcherUiState.ProfileItem("買い物", ProfileIcon.SHOPPING_CART, 0, false, true, PreviewProfileListener),
+        ProfileSwitcherUiState.ProfileItem(ProfileId.DEFAULT, "デフォルト", ProfileIcon.PERSON, 5, true, false, PreviewProfileListener),
+        ProfileSwitcherUiState.ProfileItem(ProfileId("work"), "仕事", ProfileIcon.WORK, 2, false, true, PreviewProfileListener),
+        ProfileSwitcherUiState.ProfileItem(ProfileId("shopping"), "買い物", ProfileIcon.SHOPPING_CART, 0, false, true, PreviewProfileListener),
     ),
     callbacks = object : ProfileSwitcherUiState.Callbacks {
         override fun onAddProfile() = Unit
@@ -440,6 +512,16 @@ internal val PreviewProfileSwitcherUiState = ProfileSwitcherUiState(
 private fun PreviewProfileManagementDialog() {
     ProfileManagementDialog(
         uiState = PreviewProfileSwitcherUiState,
+        onDismiss = {},
+    )
+}
+
+@Composable
+@Preview
+private fun PreviewMoveTabToProfileDialog() {
+    MoveTabToProfileDialog(
+        profiles = PreviewProfileSwitcherUiState.profiles,
+        onSelect = {},
         onDismiss = {},
     )
 }

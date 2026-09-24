@@ -33,7 +33,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
@@ -438,7 +437,6 @@ private fun MainBrowserContent(
     val themeColorExtension = viewModel.themeColorExtension
     val mediaWebExtension = viewModel.mediaWebExtension
     val profileSwitcher by viewModel.profileSwitcher.collectAsState()
-    val context = LocalContext.current
 
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
@@ -508,15 +506,6 @@ private fun MainBrowserContent(
 
                 override fun selectTab(tabId: String) {
                     selectTab(tabId, null)
-                }
-
-                override fun onMoveToDefaultProfileResult(alreadyDefault: Boolean) {
-                    val message = if (alreadyDefault) {
-                        "既にデフォルトプロファイルです"
-                    } else {
-                        "デフォルトプロファイルへ移動しました"
-                    }
-                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
             })
         }
@@ -703,8 +692,8 @@ private fun MainBrowserContent(
                                     },
                                     onOpenTabs = { innerBackStack.add(BrowserNavDestination.Tabs) },
                                     profileSwitcher = profileSwitcher,
-                                    onMoveToDefaultProfile = { tabId, url ->
-                                        viewModel.moveTabToDefaultProfileAndReload(tabId, url)
+                                    onMoveTabToProfile = { tabId, url, profileId ->
+                                        viewModel.moveTabToProfile(tabId, url, profileId)
                                     },
                                     browserSessionLifecycleController = browserSessionLifecycleController,
                                     onOpenNewSessionRequest = { uri ->

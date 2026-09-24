@@ -86,6 +86,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.forminput.FormInputRepository
@@ -155,7 +156,7 @@ internal fun GeckoBrowserTab(
     urlBarSuggestions: UrlBarSuggestionsUiState,
     onUrlInputChanged: ((String) -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
-    onMoveToDefaultProfile: ((tabId: String, url: String) -> Unit)?,
+    onMoveTabToProfile: ((tabId: String, url: String, profileId: ProfileId) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -1411,8 +1412,8 @@ internal fun GeckoBrowserTab(
                     },
                     onAddToHomeScreen = state::requestAddToHomeScreen,
                     profileSwitcher = profileSwitcher,
-                    onMoveToDefaultProfile = onMoveToDefaultProfile?.let {
-                        { it(browserTab.tabId, state.currentPageUrl) }
+                    onMoveTabToProfile = onMoveTabToProfile?.let { callback ->
+                        { profileId -> callback(browserTab.tabId, state.currentPageUrl, profileId) }
                     },
                 )
             }

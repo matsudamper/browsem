@@ -129,9 +129,6 @@ internal class BrowserViewModel(
 
         /** プロファイルの切り替え・タブ移動で、背後の Browser の選択タブを差し替える */
         fun selectTab(tabId: String)
-
-        /** デフォルトプロファイルへのタブ移動結果を通知する（既にデフォルトなら何もしていない） */
-        fun onMoveToDefaultProfileResult(alreadyDefault: Boolean)
     }
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -295,6 +292,7 @@ internal class BrowserViewModel(
             activeProfileIcon = profiles.firstOrNull { it.isActive }?.icon ?: ProfileIcon.PERSON,
             profiles = profiles.map { profile ->
                 ProfileSwitcherUiState.ProfileItem(
+                    id = profile.id,
                     name = profile.name,
                     icon = profile.icon,
                     tabCount = tabCounts[profile.id] ?: 0,
@@ -388,35 +386,30 @@ internal class BrowserViewModel(
     }
 
     /**
-     * タブをデフォルトプロファイルへ移動する。
+     * タブを指定プロファイルのデフォルトグループへ移動し、同じ URL を読み込み直す。
      * GeckoSession は contextId（プロファイル）ごとに固定で差し替えられないため、
-     * 実装上は現在のタブを閉じてデフォルトプロファイルに同じ URL の新規タブを開き直す。
+     * 実装上は現在のタブを閉じて移動先プロファイルに同じ URL の新規タブを開き直す。
      */
-    fun moveTabToDefaultProfileAndReload(tabId: String, url: String) {
+    fun moveTabToProfile(tabId: String, url: String, profileId: ProfileId) {
         viewModelScope.launch {
             val tab = browserTabController.tabStoreState.value.tabs.firstOrNull { it.id == tabId }
-            if (tab == null) return@launch
-            if (tab.profileId == ProfileId.DEFAULT.value) {
-                eventHandler.trySend { it.onMoveToDefaultProfileResult(alreadyDefault = true) }
-                return@launch
-            }
+            if (tab == null || tab.profileId == profileId.value) return@launch
             val newTabId = UUID.randomUUID().toString()
-            val groupId = tabGroupRepository.getGroupIdForExternalTab(ProfileId.DEFAULT)
+            val groupId = tabGroupRepository.getGroupIdForExternalTab(profileId)
             if (groupId != null) {
                 tabGroupRepository.assignTabToGroup(newTabId, groupId)
             }
-            val session = browserTabController.createSessionForProfile(ProfileId.DEFAULT)
+            val session = browserTabController.createSessionForProfile(profileId)
             browserTabController.createAndAppendTabWithSession(
                 session = session,
                 tabId = newTabId,
                 initialUrl = url,
             )
-            profileRepository.setActiveProfile(ProfileId.DEFAULT)
+            profileRepository.setActiveProfile(profileId)
             browserTabController.selectTab(newTabId)
             eventHandler.trySend { it.selectTab(newTabId) }
             browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = newTabId)
             browserTabController.confirmClosedTab()
-            eventHandler.trySend { it.onMoveToDefaultProfileResult(alreadyDefault = false) }
         }
     }
 

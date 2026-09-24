@@ -57,9 +57,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ProfileIcon
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.tabs.MoveTabToProfileDialog
 import net.matsudamper.browser.ui.tabs.ProfileIconBadge
 import net.matsudamper.browser.ui.tabs.ProfileManagementDialog
 import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
@@ -168,7 +170,7 @@ internal fun ToolbarMenu(
     onOpenDownloads: (() -> Unit)?,
     onOpenDevTools: (() -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
-    onMoveToDefaultProfile: (() -> Unit)?,
+    onMoveTabToProfile: ((ProfileId) -> Unit)?,
 ) {
     val menuScrollState = rememberScrollState()
     val menuMaxHeight = rememberToolbarMenuMaxHeight(menuAnchorBottomPx)
@@ -218,7 +220,7 @@ internal fun ToolbarMenu(
             onOpenDownloads = onOpenDownloads,
             onOpenDevTools = onOpenDevTools,
             profileSwitcher = profileSwitcher,
-            onMoveToDefaultProfile = onMoveToDefaultProfile,
+            onMoveTabToProfile = onMoveTabToProfile,
         )
     }
 }
@@ -263,9 +265,10 @@ private fun ToolbarMenuContent(
     onStopLoading: () -> Unit,
     onOpenDevTools: (() -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
-    onMoveToDefaultProfile: (() -> Unit)?,
+    onMoveTabToProfile: ((ProfileId) -> Unit)?,
 ) {
     var isProfileDialogVisible by remember { mutableStateOf(false) }
+    var isMoveDialogVisible by remember { mutableStateOf(false) }
     Column {
         Row(
             modifier = Modifier
@@ -494,7 +497,7 @@ private fun ToolbarMenuContent(
                 }
             }
         }
-        if (profileSwitcher != null && onMoveToDefaultProfile != null) {
+        if (profileSwitcher != null && onMoveTabToProfile != null) {
             HorizontalDivider()
             Row(
                 modifier = Modifier
@@ -518,15 +521,12 @@ private fun ToolbarMenuContent(
                         ProfileIconBadge(icon = profileSwitcher.activeProfileIcon, size = 28.dp, isEmphasized = false)
                     }
                     IconButton(
-                        modifier = Modifier.testTag(BrowserToolbarMenuTestTags.MoveToDefaultProfileButton.testTag),
-                        onClick = {
-                            onDismissRequest()
-                            onMoveToDefaultProfile()
-                        },
+                        modifier = Modifier.testTag(BrowserToolbarMenuTestTags.MoveTabToProfileButton.testTag),
+                        onClick = { isMoveDialogVisible = true },
                     ) {
                         Icon(
                             painter = painterResource(ResourcesR.drawable.ic_drive_file_move_24dp),
-                            contentDescription = "デフォルトプロファイルへ移動",
+                            contentDescription = "タブを別のプロファイルへ移動",
                         )
                     }
                 }
@@ -711,6 +711,17 @@ private fun ToolbarMenuContent(
             onDismiss = { isProfileDialogVisible = false },
         )
     }
+    if (isMoveDialogVisible && profileSwitcher != null && onMoveTabToProfile != null) {
+        MoveTabToProfileDialog(
+            profiles = profileSwitcher.profiles,
+            onSelect = { profileId ->
+                isMoveDialogVisible = false
+                onDismissRequest()
+                onMoveTabToProfile(profileId)
+            },
+            onDismiss = { isMoveDialogVisible = false },
+        )
+    }
 }
 
 /**
@@ -784,7 +795,7 @@ private fun ToolbarMenuContentPreview(
         onOpenDownloads = onOpenDownloads,
         onOpenDevTools = onOpenDevTools,
         profileSwitcher = profileSwitcher,
-        onMoveToDefaultProfile = profileSwitcher?.let { {} },
+        onMoveTabToProfile = profileSwitcher?.let { { _ -> } },
     )
 }
 
@@ -963,7 +974,7 @@ sealed interface BrowserToolbarMenuTestTags {
     object ProfileSwitchButton : BrowserToolbarMenuTestTags {
         override val id = "profile_switch_button"
     }
-    object MoveToDefaultProfileButton : BrowserToolbarMenuTestTags {
-        override val id = "move_to_default_profile_button"
+    object MoveTabToProfileButton : BrowserToolbarMenuTestTags {
+        override val id = "move_tab_to_profile_button"
     }
 }

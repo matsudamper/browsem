@@ -181,7 +181,7 @@ class WebAppActivity : ComponentActivity() {
                                 onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
                                 onReevaluateOpenerRetention = reevaluateOpenerRetention,
                                 profileSwitcher = null,
-                                onMoveToDefaultProfile = null,
+                                onMoveTabToProfile = null,
                             )
                         }
                     }

@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -133,7 +134,7 @@ internal fun BrowserToolBar(
     onOpenDownloads: (() -> Unit)?,
     onOpenDevTools: (() -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
-    onMoveToDefaultProfile: (() -> Unit)?,
+    onMoveTabToProfile: ((ProfileId) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     var visibleMenu by remember { mutableStateOf(false) }
@@ -223,7 +224,7 @@ internal fun BrowserToolBar(
                 onOpenDownloads = onOpenDownloads,
                 onOpenDevTools = onOpenDevTools,
                 profileSwitcher = profileSwitcher,
-                onMoveToDefaultProfile = onMoveToDefaultProfile,
+                onMoveTabToProfile = onMoveTabToProfile,
             )
         },
     )
@@ -737,7 +738,7 @@ private fun BrowserToolBarPreviewContent(
         onOpenDownloads = null,
         onOpenDevTools = null,
         profileSwitcher = null,
-        onMoveToDefaultProfile = null,
+        onMoveTabToProfile = null,
     )
 }
 
