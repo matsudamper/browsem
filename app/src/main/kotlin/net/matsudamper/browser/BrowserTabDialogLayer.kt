@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -661,7 +662,7 @@ private fun ContextMenuDialog(
         // ボタンを縦に並べたいので confirm は空にして dismissButton スロットに集約する
         confirmButton = {},
         dismissButton = {
-            // 片手で持っていても押しやすいように全幅にし、テキストを中央寄せにする
+            // 片手で持っていても押しやすいように全幅にする
             Column(modifier = Modifier.fillMaxWidth()) {
                 when (menu) {
                     is BrowserTabScreenState.ContextMenuState.Link -> {
@@ -719,12 +720,6 @@ private fun ContextMenuDialog(
                             onClick = { onDownloadImage(menu.imageSrcUrl) },
                         )
                     }
-                }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = onDismiss,
-                ) {
-                    Text(text = "キャンセル")
                 }
             }
         },
@@ -809,12 +804,17 @@ private fun ContextMenuActionButton(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
     ) {
-        Icon(
-            painter = painterResource(id = iconRes),
-            contentDescription = null,
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text = text)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = text)
+        }
     }
 }
 
