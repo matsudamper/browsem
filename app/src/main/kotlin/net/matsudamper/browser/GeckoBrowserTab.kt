@@ -1412,6 +1412,7 @@ internal fun GeckoBrowserTab(
                     },
                     onAddToHomeScreen = state::requestAddToHomeScreen,
                     profileSwitcher = profileSwitcher,
+                    currentTabProfileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId),
                     onMoveTabToProfile = onMoveTabToProfile?.let { callback ->
                         { profileId -> callback(browserTab.tabId, state.currentPageUrl, profileId) }
                     },

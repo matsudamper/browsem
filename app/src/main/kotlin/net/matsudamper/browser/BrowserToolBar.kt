@@ -134,6 +134,7 @@ internal fun BrowserToolBar(
     onOpenDownloads: (() -> Unit)?,
     onOpenDevTools: (() -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
+    currentTabProfileId: ProfileId?,
     onMoveTabToProfile: ((ProfileId) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -224,6 +225,7 @@ internal fun BrowserToolBar(
                 onOpenDownloads = onOpenDownloads,
                 onOpenDevTools = onOpenDevTools,
                 profileSwitcher = profileSwitcher,
+                currentTabProfileId = currentTabProfileId,
                 onMoveTabToProfile = onMoveTabToProfile,
             )
         },
@@ -738,6 +740,7 @@ private fun BrowserToolBarPreviewContent(
         onOpenDownloads = null,
         onOpenDevTools = null,
         profileSwitcher = null,
+        currentTabProfileId = null,
         onMoveTabToProfile = null,
     )
 }

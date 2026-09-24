@@ -170,6 +170,7 @@ internal fun ToolbarMenu(
     onOpenDownloads: (() -> Unit)?,
     onOpenDevTools: (() -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
+    currentTabProfileId: ProfileId?,
     onMoveTabToProfile: ((ProfileId) -> Unit)?,
 ) {
     val menuScrollState = rememberScrollState()
@@ -224,6 +225,7 @@ internal fun ToolbarMenu(
             onOpenDownloads = onOpenDownloads,
             onOpenDevTools = onOpenDevTools,
             profileSwitcher = profileSwitcher,
+            currentTabProfileId = currentTabProfileId,
             onMoveTabToProfile = onMoveTabToProfile,
             onOpenProfileDialog = {
                 onDismissRequest()
@@ -241,9 +243,10 @@ internal fun ToolbarMenu(
             onDismiss = { isProfileDialogVisible = false },
         )
     }
-    if (isMoveDialogVisible && profileSwitcher != null && onMoveTabToProfile != null) {
+    if (isMoveDialogVisible && profileSwitcher != null && currentTabProfileId != null && onMoveTabToProfile != null) {
         MoveTabToProfileDialog(
             profiles = profileSwitcher.profiles,
+            currentProfileId = currentTabProfileId,
             onSelect = { profileId ->
                 isMoveDialogVisible = false
                 onMoveTabToProfile(profileId)
@@ -293,6 +296,7 @@ private fun ToolbarMenuContent(
     onStopLoading: () -> Unit,
     onOpenDevTools: (() -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
+    currentTabProfileId: ProfileId?,
     onMoveTabToProfile: ((ProfileId) -> Unit)?,
     onOpenProfileDialog: () -> Unit,
     onOpenMoveTabDialog: () -> Unit,
@@ -525,7 +529,7 @@ private fun ToolbarMenuContent(
                 }
             }
         }
-        if (profileSwitcher != null && onMoveTabToProfile != null) {
+        if (profileSwitcher != null && currentTabProfileId != null && onMoveTabToProfile != null) {
             HorizontalDivider()
             Row(
                 modifier = Modifier
@@ -550,7 +554,7 @@ private fun ToolbarMenuContent(
                     }
                     IconButton(
                         modifier = Modifier.testTag(BrowserToolbarMenuTestTags.MoveTabToProfileButton.testTag),
-                        enabled = profileSwitcher.profiles.any { !it.isActive },
+                        enabled = profileSwitcher.profiles.any { it.id != currentTabProfileId },
                         onClick = onOpenMoveTabDialog,
                     ) {
                         Icon(
@@ -807,6 +811,7 @@ private fun ToolbarMenuContentPreview(
         onOpenDownloads = onOpenDownloads,
         onOpenDevTools = onOpenDevTools,
         profileSwitcher = profileSwitcher,
+        currentTabProfileId = ProfileId.DEFAULT,
         onMoveTabToProfile = profileSwitcher?.let { { _ -> } },
         onOpenProfileDialog = {},
         onOpenMoveTabDialog = {},

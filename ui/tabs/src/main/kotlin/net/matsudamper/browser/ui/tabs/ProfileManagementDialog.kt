@@ -220,11 +220,12 @@ private fun ProfileRow(
 
 /**
  * タブの移動先プロファイルを選ぶダイアログ。
- * 使用中のプロファイルは現在のタブが属しているため選択できない。
+ * [currentProfileId] はタブが属しているプロファイルのため選択できない。
  */
 @Composable
 fun MoveTabToProfileDialog(
     profiles: List<ProfileSwitcherUiState.ProfileItem>,
+    currentProfileId: ProfileId,
     onSelect: (ProfileId) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -238,10 +239,11 @@ fun MoveTabToProfileDialog(
                     .verticalScroll(rememberScrollState()),
             ) {
                 profiles.forEachIndexed { index, profile ->
+                    val isCurrentProfile = profile.id == currentProfileId
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = !profile.isActive) { onSelect(profile.id) }
+                            .clickable(enabled = !isCurrentProfile) { onSelect(profile.id) }
                             .padding(vertical = 8.dp)
                             .testTag(ProfileManagementTestTags.MoveTargetItem(index).testTag),
                         verticalAlignment = Alignment.CenterVertically,
@@ -260,7 +262,7 @@ fun MoveTabToProfileDialog(
                             Text(
                                 text = profile.name,
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = if (profile.isActive) {
+                                color = if (isCurrentProfile) {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 } else {
                                     MaterialTheme.colorScheme.onSurface
@@ -268,7 +270,7 @@ fun MoveTabToProfileDialog(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            if (profile.isActive) {
+                            if (isCurrentProfile) {
                                 Text(
                                     text = "現在のプロファイル",
                                     style = MaterialTheme.typography.bodySmall,
@@ -527,6 +529,7 @@ private fun PreviewProfileManagementDialog() {
 private fun PreviewMoveTabToProfileDialog() {
     MoveTabToProfileDialog(
         profiles = PreviewProfileSwitcherUiState.profiles,
+        currentProfileId = ProfileId.DEFAULT,
         onSelect = {},
         onDismiss = {},
     )
