@@ -129,6 +129,9 @@ internal class BrowserViewModel(
 
         /** プロファイルの切り替え・タブ移動で、背後の Browser の選択タブを差し替える */
         fun selectTab(tabId: String)
+
+        /** デフォルトプロファイルへのタブ移動結果を通知する（既にデフォルトなら何もしていない） */
+        fun onMoveToDefaultProfileResult(alreadyDefault: Boolean)
     }
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -392,7 +395,11 @@ internal class BrowserViewModel(
     fun moveTabToDefaultProfileAndReload(tabId: String, url: String) {
         viewModelScope.launch {
             val tab = browserTabController.tabStoreState.value.tabs.firstOrNull { it.id == tabId }
-            if (tab == null || tab.profileId == ProfileId.DEFAULT.value) return@launch
+            if (tab == null) return@launch
+            if (tab.profileId == ProfileId.DEFAULT.value) {
+                eventHandler.trySend { it.onMoveToDefaultProfileResult(alreadyDefault = true) }
+                return@launch
+            }
             val newTabId = UUID.randomUUID().toString()
             val groupId = tabGroupRepository.getGroupIdForExternalTab(ProfileId.DEFAULT)
             if (groupId != null) {
@@ -409,6 +416,7 @@ internal class BrowserViewModel(
             eventHandler.trySend { it.selectTab(newTabId) }
             browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = newTabId)
             browserTabController.confirmClosedTab()
+            eventHandler.trySend { it.onMoveToDefaultProfileResult(alreadyDefault = false) }
         }
     }
 
