@@ -10,6 +10,13 @@
         "org.mozilla.geckoview:**"
       ],
       "automerge": true
+    },
+    {
+      "matchPackageNames": [
+        "androidx.work:**",
+        "androidx.navigation3:**"
+      ],
+      "automerge": true
     }
   ]
 }
