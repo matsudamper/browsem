@@ -465,6 +465,12 @@ class BrowserTabController(
     }
 
     override fun closeTabsOfProfile(profileId: String): String? {
+        // Undo 待ちで tabRegistry から切り離し済みのタブも対象プロファイルなら確定破棄する。
+        // これをしないと DB 行・Gecko ストレージを削除した後に Undo で復活してしまう
+        val detached = detachedTab
+        if (detached != null && ProfileId.fromGeckoContextId(detached.tab.session.settings.contextId).value == profileId) {
+            confirmClosedTab()
+        }
         val targets = tabRegistry.values().filter { tab ->
             ProfileId.fromGeckoContextId(tab.session.settings.contextId).value == profileId
         }
