@@ -522,6 +522,7 @@ private fun ToolbarMenuContent(
                     }
                     IconButton(
                         modifier = Modifier.testTag(BrowserToolbarMenuTestTags.MoveTabToProfileButton.testTag),
+                        enabled = profileSwitcher.profiles.any { !it.isActive },
                         onClick = { isMoveDialogVisible = true },
                     ) {
                         Icon(
