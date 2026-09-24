@@ -10,7 +10,6 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
-import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -23,6 +22,7 @@ import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.DownloadByteFormat
 import net.matsudamper.browser.download.DownloadEngine
 import net.matsudamper.browser.download.DownloadFailureReason
+import net.matsudamper.browser.download.DownloadFileName
 import net.matsudamper.browser.download.DownloadHttpClient
 import net.matsudamper.browser.download.DownloadHttpResponse
 import net.matsudamper.browser.download.DownloadMediaStoreMimeType
@@ -72,7 +72,6 @@ internal class DownloadWorker(
 
         val enqueuedAt = System.currentTimeMillis()
 
-        val guessedFileName = URLUtil.guessFileName(url, null, null)
 
         ensureNotificationChannel(context)
         setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L, stableWorkerId))
@@ -164,33 +163,6 @@ internal class DownloadWorker(
         if (repository.isStopRequested(id.toString())) {
             throw CancellationException("ダウンロードがキャンセルまたは一時停止されました")
         }
-    }
-
-    /**
-     * Content-Disposition・URLからダウンロードファイル名を推測する。
-     *
-     * URLUtil.guessFileName に mimeType を渡すと、ファイル名の拡張子が mimeType と
-     * 「一致しない」と判定された場合に、mimeType 由来の拡張子で上書きされる。
-     * この「拡張子」の切り出しには最初のピリオドが使われるため、
-     * "tab_volume_controller-1.0.2.zip" のようにバージョン番号でピリオドを複数含む
-     * ファイル名では、"1.0.2.zip" 部分が丸ごと消えてしまう。
-     * GitHub Releases 等が返す Content-Type: application/octet-stream は
-     * MimeTypeMap 上 ".bin" に対応付けられているため、
-     * "tab_volume_controller-1.0.2.zip" → "tab_volume_controller-1.bin" のように壊れる。
-     *
-     * そのため、Content-Disposition・URL由来のファイル名に拡張子が既にある場合は
-     * mimeType を渡さずそのまま採用し、拡張子が全く無い場合のみ mimeType から補完する。
-     */
-    private fun guessDownloadFileName(urlString: String, contentDisposition: String?, mimeType: String): String {
-        val guessedWithoutMimeType = URLUtil.guessFileName(urlString, contentDisposition, null)
-        // mimeType を渡さない場合、拡張子が全く無いファイル名には URLUtil が機械的に
-        // ".bin" を補うため、そのケースに限り mimeType を渡して適切な拡張子を補完させる
-        val fileName = if (guessedWithoutMimeType.endsWith(".bin", ignoreCase = true)) {
-            URLUtil.guessFileName(urlString, contentDisposition, mimeType)
-        } else {
-            guessedWithoutMimeType
-        }
-        return fileName.ifBlank { "download-${System.currentTimeMillis()}" }
     }
 
     private suspend fun postCompletionNotification(fileName: String, fileUri: String, stableWorkerId: String) {
@@ -295,7 +267,7 @@ internal class DownloadWorker(
             val body = response.body ?: throw IOException("レスポンスボディが空です。")
             val contentLength = DownloadMetadata.parseContentLength(response.header("Content-Length"))
             val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
-            val fileName = guessDownloadFileName(urlString, response.header("Content-Disposition"), mimeType)
+            val fileName = DownloadFileName.resolve(urlString, response.header("Content-Disposition"), mimeType)
             val mediaStoreMimeType = DownloadMediaStoreMimeType.fromFileName(fileName, mimeType)
 
             setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength, stableWorkerId))
