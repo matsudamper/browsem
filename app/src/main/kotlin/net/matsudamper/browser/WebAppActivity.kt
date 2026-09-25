@@ -28,6 +28,7 @@ import java.net.URI
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
@@ -77,6 +78,7 @@ class WebAppActivity : ComponentActivity() {
         }
 
         val initialUrl = resolveInitialUrl()
+        val profileId = resolveProfileId()
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
@@ -117,7 +119,10 @@ class WebAppActivity : ComponentActivity() {
                             // Activity再生成（フォルダブル開閉等）時はViewModelのcontrollerに既存タブが残っているため再利用する。
                             // タブの破棄はViewModelの onCleared() で行う。
                             value = browserTabController.tabs.firstOrNull()
-                                ?: browserTabController.createAndAppendTab(initialUrl = resolvedInitialUrl)
+                                ?: browserTabController.createAndAppendTab(
+                                    initialUrl = resolvedInitialUrl,
+                                    profileId = profileId,
+                                )
                         }
                         val activeTab = browserTab
                         if (activeTab == null) {
@@ -280,6 +285,14 @@ class WebAppActivity : ComponentActivity() {
     }
 
     /**
+     * プロファイル導入前に追加されたアプリは extra を持たないため、デフォルトプロファイルで開く。
+     */
+    private fun resolveProfileId(): ProfileId {
+        val profileIdValue = intent.getStringExtra(EXTRA_PROFILE_ID)
+        return if (profileIdValue.isNullOrEmpty()) ProfileId.DEFAULT else ProfileId(profileIdValue)
+    }
+
+    /**
      * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
      * ユーザーが GRANT または DENY を選択するまで待機する。
      */
@@ -302,5 +315,9 @@ class WebAppActivity : ComponentActivity() {
         pendingDownloadNotificationPermissionDeferred = deferred
         requestDownloadNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         deferred.await()
+    }
+
+    companion object {
+        internal const val EXTRA_PROFILE_ID = "extra_profile_id"
     }
 }
