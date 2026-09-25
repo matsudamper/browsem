@@ -77,8 +77,9 @@ class WebAppActivity : ComponentActivity() {
             geckoRuntime = initialized
         }
 
-        val initialUrl = resolveInitialUrl()
-        val profileId = resolveProfileId()
+        val launchTarget = resolveLaunchTarget()
+        val initialUrl = launchTarget?.pageUrl
+        val profileId = launchTarget?.profileId ?: ProfileId.DEFAULT
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
@@ -275,21 +276,13 @@ class WebAppActivity : ComponentActivity() {
     }
 
     /**
-     * Intentのデータから安全なURLを取り出す。
-     * ACTION_VIEW かつ http/https スキームの場合のみURLとして採用し、
-     * それ以外は null を返してホームページにフォールバックさせる。
+     * Intentのデータから起動するページとプロファイルを取り出す。
+     * ページ URL は http/https の場合のみ採用し、それ以外は null にしてホームページにフォールバックさせる。
      */
-    private fun resolveInitialUrl(): String? {
+    private fun resolveLaunchTarget(): WebAppLaunchTarget? {
         if (intent.action != Intent.ACTION_VIEW) return null
-        return ExternalInitialUrlPolicy.sanitize(intent.dataString)
-    }
-
-    /**
-     * プロファイル導入前に追加されたアプリは extra を持たないため、デフォルトプロファイルで開く。
-     */
-    private fun resolveProfileId(): ProfileId {
-        val profileIdValue = intent.getStringExtra(EXTRA_PROFILE_ID)
-        return if (profileIdValue.isNullOrEmpty()) ProfileId.DEFAULT else ProfileId(profileIdValue)
+        val launchTarget = WebAppLaunchUri.parse(intent.data) ?: return null
+        return launchTarget.copy(pageUrl = ExternalInitialUrlPolicy.sanitize(launchTarget.pageUrl))
     }
 
     /**
@@ -315,9 +308,5 @@ class WebAppActivity : ComponentActivity() {
         pendingDownloadNotificationPermissionDeferred = deferred
         requestDownloadNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         deferred.await()
-    }
-
-    companion object {
-        internal const val EXTRA_PROFILE_ID = "extra_profile_id"
     }
 }

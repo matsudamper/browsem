@@ -146,8 +146,7 @@ private fun addWebAppToHome(
     // (= FLAG_ACTIVITY_NEW_DOCUMENT 相当) が保証するため、ピン Intent 側にフラグは不要。
     val intent = Intent(context, WebAppActivity::class.java).apply {
         action = Intent.ACTION_VIEW
-        data = Uri.parse(url)
-        putExtra(WebAppActivity.EXTRA_PROFILE_ID, profileId.value)
+        data = WebAppLaunchUri.create(pageUrl = url, profileId = profileId)
     }
     // documentLaunchMode のアプリピンは、ランチャーがアイコンの透過部分を黒で塗りつぶし、
     // 暗い favicon と合わさって真っ黒に見える。透過を不透明な白背景で埋めてから渡す。
