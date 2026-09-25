@@ -156,7 +156,7 @@ private fun addWebAppToHome(
     } else {
         IconCompat.createWithResource(context, R.mipmap.ic_launcher)
     }
-    val info = ShortcutInfoCompat.Builder(context, "webapp_${url.hashCode()}")
+    val info = ShortcutInfoCompat.Builder(context, "webapp_${profileId.value}_${url.hashCode()}")
         .setShortLabel(title.ifBlank { url }.take(25))
         .setLongLabel(title.ifBlank { url })
         .setIcon(icon)
