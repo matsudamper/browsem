@@ -1,5 +1,6 @@
 package net.matsudamper.browser.download
 
+import android.net.Uri
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import java.io.UnsupportedEncodingException
@@ -33,8 +34,11 @@ object DownloadFileName {
             return dispositionFileName
         }
 
+        // URLUtil.guessFileName は mimeType を渡さないと、拡張子の無い名前に機械的に ".bin" を補う
         val urlFileName = URLUtil.guessFileName(urlString, null, null)
-        return correctUrlDerivedExtension(urlFileName, mimeType)
+        val isBinExtensionGenerated = Uri.parse(urlString).lastPathSegment
+            ?.endsWith(".bin", ignoreCase = true) != true
+        return correctUrlDerivedExtension(urlFileName, isBinExtensionGenerated, mimeType)
             .ifBlank { fallbackFileName() }
     }
 
@@ -69,7 +73,7 @@ object DownloadFileName {
         }
     }
 
-    private fun correctUrlDerivedExtension(fileName: String, mimeType: String): String {
+    private fun correctUrlDerivedExtension(fileName: String, isBinExtensionGenerated: Boolean, mimeType: String): String {
         val normalizedMimeType = mimeType.lowercase(Locale.US)
         if (normalizedMimeType in genericMimeTypes) {
             return fileName
@@ -87,7 +91,7 @@ object DownloadFileName {
         }
 
         val currentMimeType = currentExtension
-            .takeIf { it.isNotEmpty() && it != "bin" }
+            .takeIf { it.isNotEmpty() && !(it == "bin" && isBinExtensionGenerated) }
             ?.let { mimeTypeMap.getMimeTypeFromExtension(it) }
         if (currentMimeType != null) {
             return fileName

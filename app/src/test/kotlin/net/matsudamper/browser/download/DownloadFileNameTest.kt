@@ -106,6 +106,18 @@ class DownloadFileNameTest {
     }
 
     @Test
+    fun explicitBinExtensionInUrlIsKept() {
+        assertEquals(
+            "firmware.bin",
+            DownloadFileName.resolve(
+                urlString = "https://example.com/firmware.bin",
+                contentDisposition = null,
+                mimeType = "application/pdf",
+            ),
+        )
+    }
+
+    @Test
     fun numericVersionSuffixIsKeptWhenMimeTypeAddsExtension() {
         assertEquals(
             "package-1.0.2.zip",
