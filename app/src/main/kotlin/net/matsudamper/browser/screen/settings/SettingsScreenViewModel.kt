@@ -250,26 +250,33 @@ internal class SettingsScreenViewModel(
                                 settingsRepository.setTranslationProvider(
                                     TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                                 )
-                            }
-                            return@collectLatest
-                        }
-                        if (settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO) {
-                            val resolvedModelKey = GeminiNanoModel.resolveKey(
-                                models = state.geminiNanoModels,
-                                savedKey = settings.geminiNanoModelKey,
-                            )
-                            if (resolvedModelKey != settings.geminiNanoModelKey) {
-                                settingsRepository.setGeminiNanoModelKey(resolvedModelKey)
                                 return@collectLatest
                             }
-                        }
-                        val resolvedSemanticKey = GeminiNanoModel.resolveKey(
-                            models = state.geminiNanoModels,
-                            savedKey = settings.geminiNanoSemanticSearchModelKey,
-                        )
-                        if (resolvedSemanticKey != settings.geminiNanoSemanticSearchModelKey) {
-                            settingsRepository.setGeminiNanoSemanticSearchModelKey(resolvedSemanticKey)
-                            return@collectLatest
+                            if (settings.semanticSearchProvider == SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO) {
+                                settingsRepository.setSemanticSearchProvider(
+                                    SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST,
+                                )
+                                return@collectLatest
+                            }
+                        } else {
+                            if (settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO) {
+                                val resolvedModelKey = GeminiNanoModel.resolveKey(
+                                    models = state.geminiNanoModels,
+                                    savedKey = settings.geminiNanoModelKey,
+                                )
+                                if (resolvedModelKey != settings.geminiNanoModelKey) {
+                                    settingsRepository.setGeminiNanoModelKey(resolvedModelKey)
+                                    return@collectLatest
+                                }
+                            }
+                            val resolvedSemanticKey = GeminiNanoModel.resolveKey(
+                                models = state.geminiNanoModels,
+                                savedKey = settings.geminiNanoSemanticSearchModelKey,
+                            )
+                            if (resolvedSemanticKey != settings.geminiNanoSemanticSearchModelKey) {
+                                settingsRepository.setGeminiNanoSemanticSearchModelKey(resolvedSemanticKey)
+                                return@collectLatest
+                            }
                         }
                     }
                     uiStateFlow.update {
