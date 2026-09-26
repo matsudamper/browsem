@@ -218,6 +218,16 @@ internal class BrowserTabScreenState(
         session = { session },
     )
 
+    val semanticFindInPage = SemanticFindInPageState(
+        coroutineScope = coroutineScope,
+        pageTranslationWebExtension = pageTranslationWebExtension,
+        session = { session },
+        currentPageUrl = { currentPageUrl },
+        geminiNanoModelKey = { geminiNanoSemanticSearchModelKey },
+    )
+
+    var geminiNanoSemanticSearchModelKey by mutableStateOf("")
+
     var showDevTools by mutableStateOf(false)
         private set
 

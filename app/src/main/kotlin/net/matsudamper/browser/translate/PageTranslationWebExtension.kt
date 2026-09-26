@@ -54,6 +54,7 @@ class PageTranslationWebExtension(
         val expectedUrl: String?,
         val deferred: CompletableDeferred<PageSnapshot>,
         val startedAtElapsedRealtime: Long,
+        val semanticOnly: Boolean,
         val segments: MutableList<Segment> = mutableListOf(),
         var documentId: String? = null,
         var htmlLanguage: String? = null,
@@ -173,10 +174,11 @@ class PageTranslationWebExtension(
             expectedUrl = expectedUrl,
             deferred = CompletableDeferred(),
             startedAtElapsedRealtime = SystemClock.elapsedRealtime(),
+            semanticOnly = false,
         )
         pendingScans.put(session, pending)?.deferred?.cancel()
         registerSession(session)
-        sendStartIfReady(session)
+        sendScanRequestIfReady(session)
 
         return try {
             val snapshot = withTimeout(SCAN_TIMEOUT_MS) {
@@ -204,6 +206,67 @@ class PageTranslationWebExtension(
         } finally {
             pendingScans.remove(session, pending)
         }
+    }
+
+    /**
+     * 意味検索向けに翻訳用の MutationObserver を起動せず、テキストセグメントだけ取得する。
+     */
+    suspend fun scanSemanticPage(session: GeckoSession, expectedUrl: String?): PageSnapshot {
+        installationError?.let { throw it }
+        stopActiveTranslation(session)
+        awaitingActivationDocuments.remove(session)
+        bufferedDynamicSegments.remove(session)
+
+        val pending = PendingScan(
+            requestId = "semantic-${requestSequence.incrementAndGet()}",
+            expectedUrl = expectedUrl,
+            deferred = CompletableDeferred(),
+            startedAtElapsedRealtime = SystemClock.elapsedRealtime(),
+            semanticOnly = true,
+        )
+        pendingScans.put(session, pending)?.deferred?.cancel()
+        registerSession(session)
+        sendScanRequestIfReady(session)
+
+        return try {
+            withTimeout(SCAN_TIMEOUT_MS) {
+                pending.deferred.await()
+            }
+        } finally {
+            pendingScans.remove(session, pending)
+        }
+    }
+
+    fun applySemanticHighlights(
+        session: GeckoSession,
+        documentId: String,
+        segmentIds: List<String>,
+        focusIndex: Int,
+    ) {
+        if (segmentIds.isEmpty()) {
+            clearSemanticHighlights(session)
+            return
+        }
+        val payload = JSONArray()
+        segmentIds.forEach { id -> payload.put(id) }
+        sendMessage(
+            session,
+            JSONObject().apply {
+                put("action", "semanticHighlight")
+                put("documentId", documentId)
+                put("segmentIds", payload)
+                put("focusIndex", focusIndex.coerceAtLeast(0))
+            },
+        )
+    }
+
+    fun clearSemanticHighlights(session: GeckoSession) {
+        sendMessage(
+            session,
+            JSONObject().apply {
+                put("action", "semanticClear")
+            },
+        )
     }
 
     fun activateTranslation(
@@ -343,7 +406,7 @@ class PageTranslationWebExtension(
                             }
                         },
                     )
-                    sendStartIfReady(session)
+                    sendScanRequestIfReady(session)
                 }
             },
             NATIVE_APP_ID,
@@ -429,7 +492,9 @@ class PageTranslationWebExtension(
         val pending = pendingScans[session] ?: return
         if (pending.requestId != json.optString("requestId")) return
         val documentId = pending.documentId ?: return
-        awaitingActivationDocuments[session] = documentId
+        if (!pending.semanticOnly) {
+            awaitingActivationDocuments[session] = documentId
+        }
         pending.deferred.complete(
             PageSnapshot(
                 documentId = documentId,
@@ -487,13 +552,14 @@ class PageTranslationWebExtension(
         }
     }
 
-    private fun sendStartIfReady(session: GeckoSession) {
+    private fun sendScanRequestIfReady(session: GeckoSession) {
         val pending = pendingScans[session] ?: return
         if (sessionPorts[session] == null) return
+        val action = if (pending.semanticOnly) "semanticScan" else "start"
         sendMessage(
             session,
             JSONObject().apply {
-                put("action", "start")
+                put("action", action)
                 put("requestId", pending.requestId)
             },
         )

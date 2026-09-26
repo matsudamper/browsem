@@ -17,6 +17,7 @@ data class SettingsScreenUiState(
     val translationProvider: TranslationProvider,
     val geminiNanoModels: List<GeminiNanoModel>,
     val selectedGeminiNanoModelKey: String,
+    val selectedGeminiNanoSemanticSearchModelKey: String,
     val enableThirdPartyCa: Boolean,
     val enableWebSuggestions: Boolean,
     val inputAutoZoomEnabled: Boolean,
@@ -46,6 +47,8 @@ data class SettingsScreenUiState(
 
         /** 翻訳プロバイダーを Gemini Nano にして、使うモデルを選ぶ */
         fun selectGeminiNanoModel(modelKey: String)
+
+        fun selectGeminiNanoSemanticSearchModel(modelKey: String)
 
         fun setEnableThirdPartyCa(enabled: Boolean)
         fun setEnableWebSuggestions(enabled: Boolean)

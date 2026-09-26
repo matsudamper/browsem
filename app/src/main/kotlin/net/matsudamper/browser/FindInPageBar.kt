@@ -40,19 +40,27 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.resources.R as ResourcesR
 
+internal enum class FindInPageBarKind {
+    Text,
+    Semantic,
+}
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 internal fun FindInPageBar(
     query: String,
     matchCurrent: Int,
     matchTotal: Int,
+    kind: FindInPageBarKind,
     isRegex: Boolean,
+    isSearching: Boolean,
     queryError: String?,
     onQueryChange: (String) -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onClose: () -> Unit,
     onToggleRegex: () -> Unit,
+    onSearchCommit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -75,26 +83,28 @@ internal fun FindInPageBar(
                     )
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                ) {
-                    IconButton(
-                        modifier = Modifier,
-                        onClick = onToggleRegex,
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = if (isRegex) {
-                                MaterialTheme.colorScheme.inversePrimary
-                            } else {
-                                Color.Unspecified
-                            },
-                        ),
+                if (kind == FindInPageBarKind.Text) {
+                    Box(
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            modifier = Modifier
-                                .size(24.dp),
-                            painter = painterResource(ResourcesR.drawable.ic_regurar_expression),
-                            contentDescription = "正規表現",
-                        )
+                        IconButton(
+                            modifier = Modifier,
+                            onClick = onToggleRegex,
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = if (isRegex) {
+                                    MaterialTheme.colorScheme.inversePrimary
+                                } else {
+                                    Color.Unspecified
+                                },
+                            ),
+                        ) {
+                            Icon(
+                                modifier = Modifier
+                                    .size(24.dp),
+                                painter = painterResource(ResourcesR.drawable.ic_regurar_expression),
+                                contentDescription = "正規表現",
+                            )
+                        }
                     }
                 }
                 BasicTextField(
@@ -111,12 +121,24 @@ internal fun FindInPageBar(
                     textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { onNext() }),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            if (kind == FindInPageBarKind.Semantic) {
+                                onSearchCommit()
+                            } else {
+                                onNext()
+                            }
+                        },
+                    ),
                     decorationBox = { innerTextField ->
                         Box {
                             if (query.isEmpty()) {
                                 Text(
-                                    text = if (isRegex) "正規表現で検索..." else "ページ内を検索...",
+                                    text = when (kind) {
+                                        FindInPageBarKind.Semantic -> "意味で検索..."
+                                        FindInPageBarKind.Text ->
+                                            if (isRegex) "正規表現で検索..." else "ページ内を検索..."
+                                    },
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
@@ -125,7 +147,14 @@ internal fun FindInPageBar(
                         }
                     },
                 )
-                if (query.isNotEmpty() && queryError == null) {
+                if (kind == FindInPageBarKind.Semantic && isSearching) {
+                    Text(
+                        text = "検索中",
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else if (query.isNotEmpty() && queryError == null) {
                     Text(
                         text = "$matchCurrent/$matchTotal",
                         modifier = Modifier.padding(horizontal = 8.dp),
@@ -135,7 +164,7 @@ internal fun FindInPageBar(
                 }
                 IconButton(
                     onClick = onPrevious,
-                    enabled = query.isNotEmpty() && queryError == null,
+                    enabled = query.isNotEmpty() && queryError == null && !isSearching,
                 ) {
                     Icon(
                         painter = painterResource(ResourcesR.drawable.ic_keyboard_arrow_up_24dp),
@@ -144,7 +173,7 @@ internal fun FindInPageBar(
                 }
                 IconButton(
                     onClick = onNext,
-                    enabled = query.isNotEmpty() && queryError == null,
+                    enabled = query.isNotEmpty() && queryError == null && !isSearching,
                 ) {
                     Icon(
                         painter = painterResource(ResourcesR.drawable.ic_keyboard_arrow_down_24dp),
