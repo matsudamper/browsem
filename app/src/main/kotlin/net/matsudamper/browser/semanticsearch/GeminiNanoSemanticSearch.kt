@@ -1,5 +1,10 @@
 package net.matsudamper.browser.semanticsearch
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.GenerateContentRequest
@@ -7,12 +12,6 @@ import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeout
 import net.matsudamper.browser.translate.GeminiNanoModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 

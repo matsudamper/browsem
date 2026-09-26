@@ -136,6 +136,7 @@ internal fun FindInPageBar(
                                 Text(
                                     text = when (kind) {
                                         FindInPageBarKind.Semantic -> "意味で検索..."
+
                                         FindInPageBarKind.Text ->
                                             if (isRegex) "正規表現で検索..." else "ページ内を検索..."
                                     },
