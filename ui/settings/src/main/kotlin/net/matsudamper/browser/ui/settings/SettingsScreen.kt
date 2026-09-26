@@ -336,7 +336,8 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Text(
-                        text = "サイトごとの設定が「モック位置情報」のサイトへ、実際の位置ではなくこの座標を返します",
+                        text = "サイトごとの設定が「モック位置情報」のサイトへ、実際の位置ではなくこの座標を返します" +
+                            "（毎回この座標を中心に約10m以内でランダムに揺らいだ位置を返します）",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
