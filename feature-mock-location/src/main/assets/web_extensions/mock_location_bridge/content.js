@@ -30,6 +30,25 @@
     return geoConfig ? geoConfig.mode : 'mock';
   }
 
+  // モック座標に加えるランダムな揺らぎの半径（メートル）。
+  // 地球の丸みは無視し、緯度経度を平面近似で扱う
+  const JITTER_RADIUS_METERS = 10;
+  const METERS_PER_DEGREE_LATITUDE = 111320;
+
+  // 設定された座標を中心に、半径 JITTER_RADIUS_METERS 以内の円周内で一様にランダムな点を返す
+  function jitterCoordinate(lat, lng) {
+    // 円内で一様分布になるよう半径は sqrt(random) で決める
+    const radius = JITTER_RADIUS_METERS * Math.sqrt(Math.random());
+    const angle = Math.random() * 2 * Math.PI;
+    const offsetNorth = radius * Math.sin(angle);
+    const offsetEast = radius * Math.cos(angle);
+    const metersPerDegreeLongitude = METERS_PER_DEGREE_LATITUDE * Math.cos(lat * Math.PI / 180);
+    return {
+      latitude: lat + offsetNorth / METERS_PER_DEGREE_LATITUDE,
+      longitude: lng + offsetEast / metersPerDegreeLongitude,
+    };
+  }
+
   // Geolocation API の仕様ではコールバックは必ず非同期に呼ばれる。
   // モック/拒否を同期的に呼ぶと、getCurrentPosition() の「呼び出し直後」に
   // 状態を初期化するページ（例: 取得完了フラグを呼び出し後に立て直すサイト）で
@@ -74,8 +93,9 @@
     if (!success) return;
     // 非同期化するため、通知時点ではなく要求時点の座標・時刻を退避しておく。
     // timestamp は「位置を取得した時刻」を表すため要求時点の値を使う
-    const lat = geoConfig.latitude;
-    const lng = geoConfig.longitude;
+    const jittered = jitterCoordinate(geoConfig.latitude, geoConfig.longitude);
+    const lat = jittered.latitude;
+    const lng = jittered.longitude;
     const timestamp = Date.now();
     dispatchAsync(function () {
       if (!isWatchActive(watchId)) return;
