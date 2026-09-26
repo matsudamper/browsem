@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SemanticSearchProvider
+import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.semanticsearch.SemanticSearchConfig
 import net.matsudamper.browser.semanticsearch.SemanticSearchKeywordPrefilter
 import net.matsudamper.browser.semanticsearch.SemanticSearchRanker
@@ -20,6 +21,7 @@ import org.mozilla.geckoview.GeckoSession
 internal class SemanticFindInPageState(
     private val coroutineScope: CoroutineScope,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val findInPageWebExtension: FindInPageWebExtension,
     private val session: () -> GeckoSession,
     private val currentPageUrl: () -> String,
     private val semanticSearchConfig: () -> SemanticSearchConfig,
@@ -31,6 +33,7 @@ internal class SemanticFindInPageState(
     private var cachedUrlKey: String? = null
 
     private var matchedSegmentIds: List<String> = listOf()
+    private var matchedTexts: List<String> = listOf()
 
     val isVisible: Boolean get() = modeOpen
 
@@ -64,13 +67,14 @@ internal class SemanticFindInPageState(
         isSearching = false
         searchProgressMessage = null
         searchProgressDetail = null
+        matchedTexts = listOf()
     }
 
     fun close() {
         modeOpen = false
         searchJob?.cancel()
         searchJob = null
-        pageTranslationWebExtension.clearSemanticHighlights(session())
+        clearPageHighlights()
         query = ""
         matchCurrent = 0
         matchTotal = 0
@@ -79,6 +83,7 @@ internal class SemanticFindInPageState(
         searchProgressMessage = null
         searchProgressDetail = null
         matchedSegmentIds = listOf()
+        matchedTexts = listOf()
     }
 
     fun invalidatePageCache() {
@@ -97,19 +102,20 @@ internal class SemanticFindInPageState(
             matchCurrent = 0
             matchTotal = 0
             matchedSegmentIds = listOf()
-            pageTranslationWebExtension.clearSemanticHighlights(session())
+            matchedTexts = listOf()
+            clearPageHighlights()
         }
     }
 
     fun findNext() {
-        if (matchedSegmentIds.isEmpty()) return
-        val next = if (matchCurrent >= matchedSegmentIds.size) 1 else matchCurrent + 1
+        if (matchedTexts.isEmpty()) return
+        val next = if (matchCurrent >= matchedTexts.size) 1 else matchCurrent + 1
         focusMatch(next)
     }
 
     fun findPrevious() {
-        if (matchedSegmentIds.isEmpty()) return
-        val previous = if (matchCurrent <= 1) matchedSegmentIds.size else matchCurrent - 1
+        if (matchedTexts.isEmpty()) return
+        val previous = if (matchCurrent <= 1) matchedTexts.size else matchCurrent - 1
         focusMatch(previous)
     }
 
@@ -141,7 +147,7 @@ internal class SemanticFindInPageState(
                     maxCandidates = maxCandidates,
                 )
                 if (candidates.isEmpty()) {
-                    applyMatches(snapshot.documentId, listOf())
+                    applyMatches(listOf())
                     return@launch
                 }
                 val inferenceDetail = inferenceProgressDetail(
@@ -155,7 +161,7 @@ internal class SemanticFindInPageState(
                     candidates = candidates,
                     config = config,
                 )
-                applyMatches(snapshot.documentId, rankedIds)
+                applyMatches(rankedIds)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -163,7 +169,8 @@ internal class SemanticFindInPageState(
                 matchCurrent = 0
                 matchTotal = 0
                 matchedSegmentIds = listOf()
-                pageTranslationWebExtension.clearSemanticHighlights(session())
+                matchedTexts = listOf()
+                clearPageHighlights()
             } finally {
                 isSearching = false
                 searchProgressMessage = null
@@ -185,36 +192,42 @@ internal class SemanticFindInPageState(
         return snapshot
     }
 
-    private fun applyMatches(documentId: String, segmentIds: List<String>) {
+    private fun applyMatches(segmentIds: List<String>) {
         val snapshot = cachedSnapshot
         val segmentTexts = resolveSegmentTexts(segmentIds, snapshot)
         matchedSegmentIds = segmentIds
+        matchedTexts = segmentTexts
         matchTotal = segmentTexts.size
         matchCurrent = if (segmentTexts.isEmpty()) 0 else 1
         if (segmentTexts.isEmpty()) {
-            pageTranslationWebExtension.clearSemanticHighlights(session())
+            clearPageHighlights()
             if (segmentIds.isNotEmpty()) {
                 queryError = "ページ上に結果を表示できませんでした"
             }
             return
         }
-        pageTranslationWebExtension.applySemanticHighlights(
-            session = session(),
-            documentId = documentId,
-            segmentIds = segmentIds,
-            segmentTexts = segmentTexts,
-            focusIndex = 0,
-        )
+        focusMatch(1)
     }
 
     private fun focusMatch(index: Int) {
-        if (matchedSegmentIds.isEmpty() || matchTotal <= 0) return
-        val safeIndex = (index - 1).coerceIn(0, matchTotal - 1)
-        matchCurrent = safeIndex + 1
-        pageTranslationWebExtension.focusSemanticHighlight(
+        if (matchedTexts.isEmpty()) return
+        val safeIndex = index.coerceIn(1, matchedTexts.size)
+        matchCurrent = safeIndex
+        val searchText = matchedTexts[safeIndex - 1].take(FIND_IN_PAGE_MAX_QUERY_LENGTH)
+        if (searchText.isBlank()) {
+            queryError = "ページ上に結果を表示できませんでした"
+            return
+        }
+        findInPageWebExtension.search(
             session = session(),
-            focusIndex = safeIndex,
+            query = searchText,
+            isRegex = false,
         )
+    }
+
+    private fun clearPageHighlights() {
+        findInPageWebExtension.clear(session())
+        pageTranslationWebExtension.clearSemanticHighlights(session())
     }
 
     private fun resolveSegmentTexts(
@@ -271,5 +284,6 @@ internal class SemanticFindInPageState(
     companion object {
         private const val MAX_NANO_CANDIDATES = 16
         private const val MAX_CLOUD_CANDIDATES = 24
+        private const val FIND_IN_PAGE_MAX_QUERY_LENGTH = 500
     }
 }

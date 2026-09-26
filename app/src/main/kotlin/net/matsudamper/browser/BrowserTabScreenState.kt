@@ -223,6 +223,7 @@ internal class BrowserTabScreenState(
     val semanticFindInPage = SemanticFindInPageState(
         coroutineScope = coroutineScope,
         pageTranslationWebExtension = pageTranslationWebExtension,
+        findInPageWebExtension = findInPageWebExtension,
         session = { session },
         currentPageUrl = { currentPageUrl },
         semanticSearchConfig = {
