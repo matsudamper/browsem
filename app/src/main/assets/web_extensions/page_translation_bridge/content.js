@@ -449,12 +449,35 @@
     }
   }
 
+  function toStringArray(value) {
+    if (Array.isArray(value)) {
+      return value.map(function (item) {
+        return String(item);
+      });
+    }
+    if (value && typeof value === 'object') {
+      return Object.keys(value)
+        .sort(function (a, b) {
+          return Number(a) - Number(b);
+        })
+        .map(function (key) {
+          return String(value[key]);
+        });
+    }
+    return [];
+  }
+
   function clearSemanticHighlights() {
     document.querySelectorAll('.' + SEMANTIC_HIGHLIGHT_CLASS).forEach(function (el) {
       const parent = el.parentNode;
       if (!parent) return;
       parent.replaceChild(document.createTextNode(el.textContent || ''), el);
       parent.normalize();
+    });
+    document.querySelectorAll('[data-semantic-search-wrap="1"]').forEach(function (el) {
+      el.removeAttribute('data-semantic-search-wrap');
+      el.style.outline = '';
+      el.style.outlineOffset = '';
     });
     semanticHighlights = [];
     semanticFocusIndex = -1;
@@ -473,35 +496,96 @@
     current.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
-  function highlightSegmentIds(segmentIds, focusIndex) {
-    clearSemanticHighlights();
-    if (!Array.isArray(segmentIds) || segmentIds.length === 0) return;
+  function wrapTextNode(node) {
+    const parent = node.parentNode;
+    if (!parent) return null;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const mark = document.createElement('mark');
+      mark.className = SEMANTIC_HIGHLIGHT_CLASS;
+      mark.setAttribute('style', SEMANTIC_HIGHLIGHT_STYLE);
+      range.surroundContents(mark);
+      return mark;
+    } catch (error) {
+      if (parent.nodeType === 1) {
+        parent.setAttribute('data-semantic-search-wrap', '1');
+        parent.style.outline = '2px solid #0288d1';
+        parent.style.outlineOffset = '1px';
+        return parent;
+      }
+      return null;
+    }
+  }
 
-    segmentIds.forEach(function (id) {
-      const entry = entries.get(id);
-      if (!entry || entry.kind !== 'text' || !entry.node) return;
-      const node = entry.node;
-      if (node.nodeType !== 3) return;
-      const parent = node.parentNode;
-      if (!parent) return;
-      try {
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        const mark = document.createElement('mark');
-        mark.className = SEMANTIC_HIGHLIGHT_CLASS;
-        mark.setAttribute('style', SEMANTIC_HIGHLIGHT_STYLE);
-        range.surroundContents(mark);
+  function highlightEntryById(id) {
+    const entry = entries.get(id);
+    if (!entry) return false;
+    if (entry.kind === 'text' && entry.node && entry.node.isConnected) {
+      const mark = wrapTextNode(entry.node);
+      if (mark) {
         semanticHighlights.push(mark);
-      } catch (error) {
-        // surroundContents が失敗する場合は親要素を目立たせる
-        if (parent.nodeType === 1) {
-          parent.setAttribute('data-semantic-search-wrap', '1');
-          parent.style.outline = '2px solid #0288d1';
-          parent.style.outlineOffset = '1px';
-          semanticHighlights.push(parent);
+        return true;
+      }
+      return false;
+    }
+    if (entry.kind === 'attribute' && entry.element && entry.element.isConnected) {
+      entry.element.setAttribute('data-semantic-search-wrap', '1');
+      entry.element.style.outline = '2px solid #0288d1';
+      entry.element.style.outlineOffset = '1px';
+      semanticHighlights.push(entry.element);
+      return true;
+    }
+    return false;
+  }
+
+  function highlightBySnippet(snippet) {
+    const target = sourceText(snippet);
+    if (!target) return false;
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: function (node) {
+          const parent = node.parentElement;
+          if (!parent || isExcludedElement(parent)) return NodeFilter.FILTER_REJECT;
+          if (parent.closest && parent.closest('mark.' + SEMANTIC_HIGHLIGHT_CLASS)) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          const text = sourceText(node.nodeValue || '');
+          if (!text) return NodeFilter.FILTER_REJECT;
+          if (text !== target) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      },
+    );
+    let node = walker.nextNode();
+    while (node) {
+      if (node.isConnected) {
+        const mark = wrapTextNode(node);
+        if (mark) {
+          semanticHighlights.push(mark);
+          return true;
         }
       }
-    });
+      node = walker.nextNode();
+    }
+    return false;
+  }
+
+  function highlightSegmentMatches(segmentIds, segmentTexts, focusIndex) {
+    clearSemanticHighlights();
+    const ids = toStringArray(segmentIds);
+    const texts = toStringArray(segmentTexts);
+    const count = Math.max(ids.length, texts.length);
+    if (count === 0) return;
+
+    for (let index = 0; index < count; index += 1) {
+      const id = ids[index] || '';
+      const text = texts[index] || '';
+      if (id && highlightEntryById(id)) continue;
+      if (text && highlightBySnippet(text)) continue;
+    }
 
     if (semanticHighlights.length > 0) {
       const safeIndex = Math.max(0, Math.min(focusIndex, semanticHighlights.length - 1));
@@ -586,10 +670,19 @@
       return;
     }
     if (message.action === 'semanticHighlight') {
-      if (message.documentId !== documentId) return;
-      const ids = Array.isArray(message.segmentIds) ? message.segmentIds : [];
+      if (message.documentId && message.documentId !== documentId) return;
+      const ids = toStringArray(message.segmentIds);
+      const texts = toStringArray(message.segmentTexts);
       const focusIndex = typeof message.focusIndex === 'number' ? message.focusIndex : 0;
-      highlightSegmentIds(ids, focusIndex);
+      highlightSegmentMatches(ids, texts, focusIndex);
+      return;
+    }
+    if (message.action === 'semanticFocus') {
+      const focusIndex = typeof message.focusIndex === 'number' ? message.focusIndex : 0;
+      if (semanticHighlights.length === 0) return;
+      const safeIndex = Math.max(0, Math.min(focusIndex, semanticHighlights.length - 1));
+      semanticFocusIndex = safeIndex;
+      focusSemanticHighlight(safeIndex);
       return;
     }
     if (message.action === 'semanticClear') {

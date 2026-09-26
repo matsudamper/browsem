@@ -241,20 +241,34 @@ class PageTranslationWebExtension(
         session: GeckoSession,
         documentId: String,
         segmentIds: List<String>,
+        segmentTexts: List<String>,
         focusIndex: Int,
     ) {
-        if (segmentIds.isEmpty()) {
+        if (segmentIds.isEmpty() && segmentTexts.isEmpty()) {
             clearSemanticHighlights(session)
             return
         }
-        val payload = JSONArray()
-        segmentIds.forEach { id -> payload.put(id) }
+        val idPayload = JSONArray()
+        segmentIds.forEach { id -> idPayload.put(id) }
+        val textPayload = JSONArray()
+        segmentTexts.forEach { text -> textPayload.put(text) }
         sendMessage(
             session,
             JSONObject().apply {
                 put("action", "semanticHighlight")
                 put("documentId", documentId)
-                put("segmentIds", payload)
+                put("segmentIds", idPayload)
+                put("segmentTexts", textPayload)
+                put("focusIndex", focusIndex.coerceAtLeast(0))
+            },
+        )
+    }
+
+    fun focusSemanticHighlight(session: GeckoSession, focusIndex: Int) {
+        sendMessage(
+            session,
+            JSONObject().apply {
+                put("action", "semanticFocus")
                 put("focusIndex", focusIndex.coerceAtLeast(0))
             },
         )

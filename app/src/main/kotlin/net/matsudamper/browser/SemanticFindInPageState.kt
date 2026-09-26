@@ -176,10 +176,6 @@ internal class SemanticFindInPageState(
 
     private suspend fun loadSnapshot(): PageTranslationWebExtension.PageSnapshot {
         val urlKey = currentPageUrl().substringBefore('#')
-        val cached = cachedSnapshot
-        if (cached != null && cachedUrlKey == urlKey) {
-            return cached
-        }
         val snapshot = pageTranslationWebExtension.scanSemanticPage(
             session = session(),
             expectedUrl = currentPageUrl(),
@@ -190,32 +186,46 @@ internal class SemanticFindInPageState(
     }
 
     private fun applyMatches(documentId: String, segmentIds: List<String>) {
+        val snapshot = cachedSnapshot
+        val segmentTexts = resolveSegmentTexts(segmentIds, snapshot)
         matchedSegmentIds = segmentIds
-        matchTotal = segmentIds.size
-        matchCurrent = if (segmentIds.isEmpty()) 0 else 1
-        if (segmentIds.isEmpty()) {
+        matchTotal = segmentTexts.size
+        matchCurrent = if (segmentTexts.isEmpty()) 0 else 1
+        if (segmentTexts.isEmpty()) {
             pageTranslationWebExtension.clearSemanticHighlights(session())
+            if (segmentIds.isNotEmpty()) {
+                queryError = "ページ上に結果を表示できませんでした"
+            }
             return
         }
         pageTranslationWebExtension.applySemanticHighlights(
             session = session(),
             documentId = documentId,
             segmentIds = segmentIds,
+            segmentTexts = segmentTexts,
             focusIndex = 0,
         )
     }
 
     private fun focusMatch(index: Int) {
-        if (matchedSegmentIds.isEmpty()) return
-        val snapshot = cachedSnapshot ?: return
-        val safeIndex = (index - 1).coerceIn(0, matchedSegmentIds.size - 1)
+        if (matchedSegmentIds.isEmpty() || matchTotal <= 0) return
+        val safeIndex = (index - 1).coerceIn(0, matchTotal - 1)
         matchCurrent = safeIndex + 1
-        pageTranslationWebExtension.applySemanticHighlights(
+        pageTranslationWebExtension.focusSemanticHighlight(
             session = session(),
-            documentId = snapshot.documentId,
-            segmentIds = matchedSegmentIds,
             focusIndex = safeIndex,
         )
+    }
+
+    private fun resolveSegmentTexts(
+        segmentIds: List<String>,
+        snapshot: PageTranslationWebExtension.PageSnapshot?,
+    ): List<String> {
+        if (snapshot == null) return listOf()
+        val segmentsById = snapshot.segments.associateBy { it.id }
+        return segmentIds.mapNotNull { id ->
+            segmentsById[id]?.text?.takeIf { it.isNotBlank() }
+        }
     }
 
     private fun inferenceProgressMessage(provider: SemanticSearchProvider): String {
