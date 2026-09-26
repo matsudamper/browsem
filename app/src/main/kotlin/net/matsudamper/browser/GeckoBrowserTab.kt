@@ -1541,6 +1541,7 @@ internal fun GeckoBrowserTab(
             title = addToHomeScreenState.title,
             favicon = addToHomeScreenState.favicon,
             isIconLoading = addToHomeScreenState.isIconLoading,
+            profileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId),
             onDismiss = state::dismissAddToHomeScreen,
         )
     }

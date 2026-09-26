@@ -27,7 +27,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.net.URI
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
@@ -53,6 +56,7 @@ class WebAppActivity : ComponentActivity() {
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
+    private val profileRepository: ProfileRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -76,7 +80,9 @@ class WebAppActivity : ComponentActivity() {
             geckoRuntime = initialized
         }
 
-        val initialUrl = resolveInitialUrl()
+        val launchTarget = resolveLaunchTarget()
+        val initialUrl = launchTarget?.pageUrl
+        val profileId = launchTarget?.profileId ?: ProfileId.DEFAULT
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
@@ -117,7 +123,10 @@ class WebAppActivity : ComponentActivity() {
                             // Activity再生成（フォルダブル開閉等）時はViewModelのcontrollerに既存タブが残っているため再利用する。
                             // タブの破棄はViewModelの onCleared() で行う。
                             value = browserTabController.tabs.firstOrNull()
-                                ?: browserTabController.createAndAppendTab(initialUrl = resolvedInitialUrl)
+                                ?: browserTabController.createAndAppendTab(
+                                    initialUrl = resolvedInitialUrl,
+                                    profileId = resolveRegisteredProfileId(profileId),
+                                )
                         }
                         val activeTab = browserTab
                         if (activeTab == null) {
@@ -270,13 +279,23 @@ class WebAppActivity : ComponentActivity() {
     }
 
     /**
-     * Intentのデータから安全なURLを取り出す。
-     * ACTION_VIEW かつ http/https スキームの場合のみURLとして採用し、
-     * それ以外は null を返してホームページにフォールバックさせる。
+     * Intentのデータから起動するページとプロファイルを取り出す。
+     * ページ URL は http/https の場合のみ採用し、それ以外は null にしてホームページにフォールバックさせる。
      */
-    private fun resolveInitialUrl(): String? {
+    private fun resolveLaunchTarget(): WebAppLaunchTarget? {
         if (intent.action != Intent.ACTION_VIEW) return null
-        return ExternalInitialUrlPolicy.sanitize(intent.dataString)
+        val launchTarget = WebAppLaunchUri.parse(intent.data) ?: return null
+        return launchTarget.copy(pageUrl = ExternalInitialUrlPolicy.sanitize(launchTarget.pageUrl))
+    }
+
+    /**
+     * exported な Activity は他アプリから任意のプロファイル ID を渡され得るうえ、削除済みプロファイルのアプリも残るため、
+     * 登録済みでないプロファイルはデフォルトプロファイルにフォールバックさせる。
+     */
+    private suspend fun resolveRegisteredProfileId(profileId: ProfileId): ProfileId {
+        if (profileId == ProfileId.DEFAULT) return profileId
+        val isRegistered = profileRepository.observeProfiles().first().any { it.id == profileId }
+        return if (isRegistered) profileId else ProfileId.DEFAULT
     }
 
     /**
