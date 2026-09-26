@@ -14,8 +14,23 @@ internal object SemanticSearchRanker {
         query: String,
         candidates: List<PageTranslationWebExtension.Segment>,
         config: SemanticSearchConfig,
+        onBatchStart: (current: Int, total: Int) -> Unit,
     ): List<String> {
         if (candidates.isEmpty()) return listOf()
+        val batches = candidates.chunked(batchSize(config.provider))
+        val matchedIds = linkedSetOf<String>()
+        batches.forEachIndexed { index, batch ->
+            onBatchStart(index + 1, batches.size)
+            matchedIds.addAll(rankBatch(query, batch, config))
+        }
+        return candidates.map { it.id }.filter { matchedIds.contains(it) }
+    }
+
+    private suspend fun rankBatch(
+        query: String,
+        candidates: List<PageTranslationWebExtension.Segment>,
+        config: SemanticSearchConfig,
+    ): List<String> {
         return when (config.provider) {
             SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO -> {
                 GeminiNanoSemanticSearch(config.geminiNanoModelKey).rankMatchingSegmentIds(
@@ -43,4 +58,19 @@ internal object SemanticSearchRanker {
             }
         }
     }
+
+    private fun batchSize(provider: SemanticSearchProvider): Int {
+        return when (provider) {
+            SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO -> NANO_BATCH_SIZE
+
+            SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LATEST,
+            SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST,
+            -> CLOUD_BATCH_SIZE
+
+            SemanticSearchProvider.UNRECOGNIZED -> NANO_BATCH_SIZE
+        }
+    }
+
+    private const val NANO_BATCH_SIZE = 12
+    private const val CLOUD_BATCH_SIZE = 30
 }

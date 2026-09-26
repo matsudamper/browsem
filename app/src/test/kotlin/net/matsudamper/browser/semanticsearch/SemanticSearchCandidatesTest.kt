@@ -37,4 +37,13 @@ class SemanticSearchCandidatesTest {
         )
         assertTrue(parsed.isEmpty())
     }
+
+    @Test
+    fun parseSegmentIdsKeepsIdsWhenNoneWordIsAlsoPresent() {
+        val parsed = parseSemanticSearchSegmentIds(
+            modelOutput = "t2\nNONE は除外",
+            allowedIds = setOf("t1", "t2"),
+        )
+        assertEquals(listOf("t2"), parsed)
+    }
 }

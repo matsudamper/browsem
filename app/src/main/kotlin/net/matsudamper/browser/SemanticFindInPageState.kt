@@ -28,6 +28,7 @@ internal class SemanticFindInPageState(
 ) {
     private var modeOpen by mutableStateOf(false)
     private var searchJob: Job? = null
+    private var searchGeneration = 0
 
     private var cachedSnapshot: PageTranslationWebExtension.PageSnapshot? = null
     private var cachedUrlKey: String? = null
@@ -130,6 +131,7 @@ internal class SemanticFindInPageState(
         val trimmedQuery = query.trim()
         if (trimmedQuery.isEmpty()) return
         searchJob?.cancel()
+        val generation = ++searchGeneration
         val job = coroutineScope.launch {
             isSearching = true
             queryError = null
@@ -139,8 +141,6 @@ internal class SemanticFindInPageState(
                 val config = semanticSearchConfig()
                 val snapshot = loadSnapshot()
                 val maxCandidates = maxCandidatesFor(config.provider)
-                searchProgressMessage = "AI に渡す候補を準備しています"
-                searchProgressDetail = "最大 $maxCandidates セグメント"
                 val candidates = SemanticSearchCandidates.selectForInference(
                     segments = snapshot.segments,
                     maxCandidates = maxCandidates,
@@ -149,16 +149,20 @@ internal class SemanticFindInPageState(
                     applyMatches(listOf())
                     return@launch
                 }
-                val inferenceDetail = inferenceProgressDetail(
-                    provider = config.provider,
-                    candidateCount = candidates.size,
-                )
-                searchProgressMessage = inferenceProgressMessage(config.provider)
-                searchProgressDetail = inferenceDetail
                 val rankedIds = SemanticSearchRanker.rankMatchingSegmentIds(
                     query = trimmedQuery,
                     candidates = candidates,
                     config = config,
+                    onBatchStart = { current, total ->
+                        searchProgressMessage = inferenceProgressMessage(config.provider)
+                        searchProgressDetail = inferenceProgressDetail(
+                            provider = config.provider,
+                            batchCurrent = current,
+                            batchTotal = total,
+                            coveredCount = candidates.size,
+                            pageSegmentCount = snapshot.segments.size,
+                        )
+                    },
                 )
                 applyMatches(rankedIds)
             } catch (error: CancellationException) {
@@ -171,9 +175,11 @@ internal class SemanticFindInPageState(
                 matchedTexts = listOf()
                 clearPageHighlights()
             } finally {
-                isSearching = false
-                searchProgressMessage = null
-                searchProgressDetail = null
+                if (generation == searchGeneration) {
+                    isSearching = false
+                    searchProgressMessage = null
+                    searchProgressDetail = null
+                }
             }
         }
         searchJob = job
@@ -254,17 +260,22 @@ internal class SemanticFindInPageState(
 
     private fun inferenceProgressDetail(
         provider: SemanticSearchProvider,
-        candidateCount: Int,
+        batchCurrent: Int,
+        batchTotal: Int,
+        coveredCount: Int,
+        pageSegmentCount: Int,
     ): String {
+        val coverage = "対象 $coveredCount/$pageSegmentCount セグメント"
         return when (provider) {
             SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO ->
-                "候補 $candidateCount 件・ネットワーク送信なし"
+                "推論 $batchCurrent/$batchTotal・$coverage・ネットワーク送信なし"
 
             SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LATEST,
             SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST,
-            -> "候補 $candidateCount 件・API 呼び出し 1/1"
+            -> "API 呼び出し $batchCurrent/$batchTotal・$coverage"
 
-            SemanticSearchProvider.UNRECOGNIZED -> "候補 $candidateCount 件"
+            SemanticSearchProvider.UNRECOGNIZED ->
+                "推論 $batchCurrent/$batchTotal・$coverage"
         }
     }
 
@@ -281,8 +292,8 @@ internal class SemanticFindInPageState(
     }
 
     companion object {
-        private const val MAX_NANO_CANDIDATES = 16
-        private const val MAX_CLOUD_CANDIDATES = 24
+        private const val MAX_NANO_CANDIDATES = 48
+        private const val MAX_CLOUD_CANDIDATES = 180
         private const val FIND_IN_PAGE_MAX_QUERY_LENGTH = 500
     }
 }

@@ -20,7 +20,6 @@ internal fun parseSemanticSearchSegmentIds(
     modelOutput: String,
     allowedIds: Set<String>,
 ): List<String> {
-    if (modelOutput.contains("NONE", ignoreCase = true)) return listOf()
     val pattern = Regex("""[ta]\d+""")
     val ordered = linkedSetOf<String>()
     pattern.findAll(modelOutput).forEach { match ->
