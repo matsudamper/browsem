@@ -329,6 +329,20 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
+            SettingSection(title = "意味検索 (Gemini Nano)") {
+                Column(Modifier.selectableGroup()) {
+                    uiState.geminiNanoModels.forEach { model ->
+                        SettingsRadioOption(
+                            label = model.label,
+                            selected = uiState.selectedGeminiNanoSemanticSearchModelKey == model.key,
+                            onClick = { uiState.callbacks.selectGeminiNanoSemanticSearchModel(model.key) },
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
             SettingSection(title = "位置情報") {
                 Column {
                     Text(
@@ -791,6 +805,7 @@ private fun SettingsScreenPreviewContent(
                     override fun setThemeMode(mode: ThemeMode) = Unit
                     override fun setTranslationProvider(provider: TranslationProvider) = Unit
                     override fun selectGeminiNanoModel(modelKey: String) = Unit
+                    override fun selectGeminiNanoSemanticSearchModel(modelKey: String) = Unit
                     override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
                     override fun setInputAutoZoomEnabled(enabled: Boolean) = Unit
@@ -814,6 +829,7 @@ private fun SettingsScreenPreviewContent(
                 translationProvider = translationProvider,
                 geminiNanoModels = geminiNanoModels,
                 selectedGeminiNanoModelKey = geminiNanoModels.firstOrNull()?.key.orEmpty(),
+                selectedGeminiNanoSemanticSearchModelKey = geminiNanoModels.firstOrNull()?.key.orEmpty(),
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
                 inputAutoZoomEnabled = true,

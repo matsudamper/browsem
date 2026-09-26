@@ -55,6 +55,7 @@ internal data class BrowserAppUiState(
     val searchTemplate: String,
     val translationProvider: TranslationProvider,
     val geminiNanoModelKey: String,
+    val geminiNanoSemanticSearchModelKey: String,
 )
 
 private data class BrowserLogicSettings(
@@ -63,6 +64,7 @@ private data class BrowserLogicSettings(
     val searchTemplate: String,
     val translationProvider: TranslationProvider,
     val geminiNanoModelKey: String,
+    val geminiNanoSemanticSearchModelKey: String,
     val enableThirdPartyCa: Boolean,
 )
 
@@ -580,6 +582,7 @@ private fun BrowserLogicSettings.toBrowserAppUiState(): BrowserAppUiState = Brow
     searchTemplate = searchTemplate,
     translationProvider = translationProvider,
     geminiNanoModelKey = geminiNanoModelKey,
+    geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
 )
 
 private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = BrowserLogicSettings(
@@ -588,6 +591,7 @@ private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = Br
     searchTemplate = searchTemplate,
     translationProvider = translationProvider,
     geminiNanoModelKey = geminiNanoModelKey,
+    geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
     enableThirdPartyCa = enableThirdPartyCa,
 )
 

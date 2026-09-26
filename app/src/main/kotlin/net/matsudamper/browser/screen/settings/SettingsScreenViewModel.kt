@@ -89,6 +89,13 @@ internal class SettingsScreenViewModel(
             }
         }
 
+        override fun selectGeminiNanoSemanticSearchModel(modelKey: String) {
+            if (viewModelStateFlow.value.geminiNanoModels.none { it.key == modelKey }) return
+            viewModelScope.launch {
+                settingsRepository.setGeminiNanoSemanticSearchModelKey(modelKey)
+            }
+        }
+
         override fun setEnableThirdPartyCa(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setEnableThirdPartyCa(enabled) }
         }
@@ -227,23 +234,31 @@ internal class SettingsScreenViewModel(
                         mockLocationInputInitialized = true
                         return@collectLatest
                     }
-                    if (
-                        state.geminiNanoModelsLoaded &&
-                        settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO
-                    ) {
+                    if (state.geminiNanoModelsLoaded) {
                         if (state.geminiNanoModels.isEmpty()) {
-                            settingsRepository.setTranslationProvider(
-                                TranslationProvider.TRANSLATION_PROVIDER_GECKO,
-                            )
+                            if (settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO) {
+                                settingsRepository.setTranslationProvider(
+                                    TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                                )
+                            }
                             return@collectLatest
                         }
-                        val resolvedModelKey = GeminiNanoModel.resolveKey(
+                        if (settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO) {
+                            val resolvedModelKey = GeminiNanoModel.resolveKey(
+                                models = state.geminiNanoModels,
+                                savedKey = settings.geminiNanoModelKey,
+                            )
+                            if (resolvedModelKey != settings.geminiNanoModelKey) {
+                                settingsRepository.setGeminiNanoModelKey(resolvedModelKey)
+                                return@collectLatest
+                            }
+                        }
+                        val resolvedSemanticKey = GeminiNanoModel.resolveKey(
                             models = state.geminiNanoModels,
-                            savedKey = settings.geminiNanoModelKey,
+                            savedKey = settings.geminiNanoSemanticSearchModelKey,
                         )
-                        // 一覧にないキーのままだと、設定画面でどの候補も選択されていない状態になる
-                        if (resolvedModelKey != settings.geminiNanoModelKey) {
-                            settingsRepository.setGeminiNanoModelKey(resolvedModelKey)
+                        if (resolvedSemanticKey != settings.geminiNanoSemanticSearchModelKey) {
+                            settingsRepository.setGeminiNanoSemanticSearchModelKey(resolvedSemanticKey)
                             return@collectLatest
                         }
                     }
@@ -352,6 +367,7 @@ private fun BrowserSettings.toUiState(
         translationProvider = translationProvider,
         geminiNanoModels = geminiNanoModels,
         selectedGeminiNanoModelKey = geminiNanoModelKey,
+        selectedGeminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),
