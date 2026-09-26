@@ -314,15 +314,7 @@ internal class DownloadWorker(
             resolver.update(uri, completeValues, null, null)
             partialResultUri = null
             // IS_PENDING=0 更新後にMediaStoreが重複を避けてリネームした場合に備え、実際のファイル名を取得する
-            val actualFileName = resolver.query(
-                uri,
-                arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else null
-            }
+            val actualFileName = queryDisplayName(uri)
             return Pair(uri, actualFileName ?: fileName)
         } finally {
             response.close()
@@ -373,8 +365,14 @@ internal class DownloadWorker(
             val totalFileSize = DownloadMetadata.parseTotalFromContentRange(contentRangeHeader)
                 ?: (rangeStart + DownloadMetadata.parseContentLength(response.header("Content-Length")))
             val contentLength = totalFileSize
-            val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
-            val fileName = DownloadFileName.resolve(urlString, response.header("Content-Disposition"), mimeType)
+            // 206 レスポンスは Content-Type 等を省略することがあり、再計算すると保存済みの名前と食い違うため、
+            // 初回に保存した名前を使う
+            val fileName = queryDisplayName(partialUri)
+                ?: DownloadFileName.resolve(
+                    urlString,
+                    response.header("Content-Disposition"),
+                    DownloadMetadata.parseMimeType(response.header("Content-Type")),
+                )
 
             setForeground(
                 createForegroundInfo(
@@ -431,6 +429,18 @@ internal class DownloadWorker(
             return Pair(partialUri, fileName)
         } finally {
             response.close()
+        }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return context.contentResolver.query(
+            uri,
+            arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
         }
     }
 
