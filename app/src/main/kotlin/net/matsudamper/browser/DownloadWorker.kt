@@ -72,7 +72,6 @@ internal class DownloadWorker(
 
         val enqueuedAt = System.currentTimeMillis()
 
-
         ensureNotificationChannel(context)
         setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L, stableWorkerId))
 
