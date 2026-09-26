@@ -22,6 +22,42 @@ class DownloadFileNameTest {
     }
 
     @Test
+    fun extendedContentDispositionFileNameIsDecoded() {
+        assertEquals(
+            "報告 書+1.pdf",
+            DownloadFileName.resolve(
+                urlString = "https://example.com/download.php?id=1",
+                contentDisposition = "attachment; filename*=UTF-8''%E5%A0%B1%E5%91%8A%20%E6%9B%B8+1.pdf",
+                mimeType = "application/octet-stream",
+            ),
+        )
+    }
+
+    @Test
+    fun extendedContentDispositionFileNameIsPreferredOverPlainFileName() {
+        assertEquals(
+            "report.pdf",
+            DownloadFileName.resolve(
+                urlString = "https://example.com/download.php?id=1",
+                contentDisposition = "attachment; filename=\"fallback.pdf\"; filename*=UTF-8''report.pdf",
+                mimeType = "application/pdf",
+            ),
+        )
+    }
+
+    @Test
+    fun inlineContentDispositionFileNameIsKept() {
+        assertEquals(
+            "report.pdf",
+            DownloadFileName.resolve(
+                urlString = "https://example.com/download.php?id=1",
+                contentDisposition = "inline; filename=report.pdf",
+                mimeType = "application/pdf",
+            ),
+        )
+    }
+
+    @Test
     fun genericMimeTypeDoesNotReplaceKnownFileName() {
         assertEquals(
             "tab_volume_controller-1.0.2.zip",
