@@ -11,8 +11,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
-import net.matsudamper.browser.semanticsearch.SemanticSearchConfig
 import net.matsudamper.browser.semanticsearch.SemanticSearchCandidates
+import net.matsudamper.browser.semanticsearch.SemanticSearchConfig
 import net.matsudamper.browser.semanticsearch.SemanticSearchRanker
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.mozilla.geckoview.GeckoSession
