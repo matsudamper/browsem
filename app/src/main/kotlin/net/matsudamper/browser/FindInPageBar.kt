@@ -17,9 +17,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,8 +39,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 
 internal enum class FindInPageBarKind {
     Text,
@@ -54,6 +59,8 @@ internal fun FindInPageBar(
     kind: FindInPageBarKind,
     isRegex: Boolean,
     isSearching: Boolean,
+    searchProgressMessage: String?,
+    searchProgressDetail: String?,
     queryError: String?,
     onQueryChange: (String) -> Unit,
     onNext: () -> Unit,
@@ -135,7 +142,7 @@ internal fun FindInPageBar(
                             if (query.isEmpty()) {
                                 Text(
                                     text = when (kind) {
-                                        FindInPageBarKind.Semantic -> "意味で検索..."
+                                        FindInPageBarKind.Semantic -> "質問を入力し、Enter で検索"
 
                                         FindInPageBarKind.Text ->
                                             if (isRegex) "正規表現で検索..." else "ページ内を検索..."
@@ -149,11 +156,12 @@ internal fun FindInPageBar(
                     },
                 )
                 if (kind == FindInPageBarKind.Semantic && isSearching) {
-                    Text(
-                        text = "検索中",
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .size(20.dp)
+                            .testTag(FindInPageBarTestTags.SearchProgress.testTag),
+                        strokeWidth = 2.dp,
                     )
                 } else if (query.isNotEmpty() && queryError == null) {
                     Text(
@@ -188,6 +196,27 @@ internal fun FindInPageBar(
                     )
                 }
             }
+            if (kind == FindInPageBarKind.Semantic && isSearching) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                if (searchProgressMessage != null) {
+                    Text(
+                        text = searchProgressMessage,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 2.dp)
+                            .testTag(FindInPageBarTestTags.SearchProgressMessage.testTag),
+                    )
+                }
+                if (searchProgressDetail != null) {
+                    Text(
+                        text = searchProgressDetail,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                    )
+                }
+            }
             if (queryError != null) {
                 Text(
                     text = queryError,
@@ -206,5 +235,37 @@ sealed interface FindInPageBarTestTags {
 
     object SearchInput : FindInPageBarTestTags {
         override val id = "search_input"
+    }
+
+    object SearchProgress : FindInPageBarTestTags {
+        override val id = "search_progress"
+    }
+
+    object SearchProgressMessage : FindInPageBarTestTags {
+        override val id = "search_progress_message"
+    }
+}
+
+@Preview(name = "SemanticFindInPageSearching", widthDp = 412)
+@Composable
+private fun PreviewSemanticFindInPageSearching() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        FindInPageBar(
+            query = "このページの主題は？",
+            matchCurrent = 0,
+            matchTotal = 0,
+            kind = FindInPageBarKind.Semantic,
+            isRegex = false,
+            isSearching = true,
+            searchProgressMessage = "Google API を呼び出しています",
+            searchProgressDetail = "候補 24 件・API 呼び出し 1/1",
+            queryError = null,
+            onQueryChange = {},
+            onNext = {},
+            onPrevious = {},
+            onClose = {},
+            onToggleRegex = {},
+            onSearchCommit = {},
+        )
     }
 }
