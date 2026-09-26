@@ -3,6 +3,7 @@ package net.matsudamper.browser.ui.settings
 import androidx.compose.runtime.Stable
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 
@@ -18,6 +19,8 @@ data class SettingsScreenUiState(
     val geminiNanoModels: List<GeminiNanoModel>,
     val selectedGeminiNanoModelKey: String,
     val selectedGeminiNanoSemanticSearchModelKey: String,
+    val semanticSearchProvider: SemanticSearchProvider,
+    val googleAiStudioApiKey: String,
     val enableThirdPartyCa: Boolean,
     val enableWebSuggestions: Boolean,
     val inputAutoZoomEnabled: Boolean,
@@ -49,6 +52,10 @@ data class SettingsScreenUiState(
         fun selectGeminiNanoModel(modelKey: String)
 
         fun selectGeminiNanoSemanticSearchModel(modelKey: String)
+
+        fun setSemanticSearchProvider(provider: SemanticSearchProvider)
+
+        fun setGoogleAiStudioApiKey(apiKey: String)
 
         fun setEnableThirdPartyCa(enabled: Boolean)
         fun setEnableWebSuggestions(enabled: Boolean)

@@ -47,6 +47,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
@@ -171,6 +172,8 @@ class CustomTabActivity : ComponentActivity() {
                                 translationProvider = browserSettings.translationProvider,
                                 geminiNanoModelKey = browserSettings.geminiNanoModelKey,
                                 geminiNanoSemanticSearchModelKey = browserSettings.geminiNanoSemanticSearchModelKey,
+                                semanticSearchProvider = browserSettings.semanticSearchProvider,
+                                googleAiStudioApiKey = browserSettings.googleAiStudioApiKey,
                                 browserTabController = browserTabController,
                                 browserSessionLifecycleController = browserSessionLifecycleController,
                                 themeColorExtension = themeColorExtension,
@@ -291,6 +294,8 @@ private fun CustomTabScreen(
     translationProvider: TranslationProvider,
     geminiNanoModelKey: String,
     geminiNanoSemanticSearchModelKey: String,
+    semanticSearchProvider: SemanticSearchProvider,
+    googleAiStudioApiKey: String,
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
     themeColorExtension: ThemeColorWebExtension,
@@ -389,6 +394,8 @@ private fun CustomTabScreen(
         translationProvider = translationProvider,
         geminiNanoModelKey = geminiNanoModelKey,
         geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
+        semanticSearchProvider = semanticSearchProvider,
+        googleAiStudioApiKey = googleAiStudioApiKey,
         themeColorExtension = themeColorExtension,
         mediaWebExtension = mediaWebExtension,
         browserSessionLifecycleController = browserSessionLifecycleController,

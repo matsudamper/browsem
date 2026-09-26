@@ -15,6 +15,7 @@ import net.matsudamper.browser.BrowserSessionRegistry
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
@@ -93,7 +94,16 @@ internal class SettingsScreenViewModel(
             if (viewModelStateFlow.value.geminiNanoModels.none { it.key == modelKey }) return
             viewModelScope.launch {
                 settingsRepository.setGeminiNanoSemanticSearchModelKey(modelKey)
+                settingsRepository.setSemanticSearchProvider(SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO)
             }
+        }
+
+        override fun setSemanticSearchProvider(provider: SemanticSearchProvider) {
+            viewModelScope.launch { settingsRepository.setSemanticSearchProvider(provider) }
+        }
+
+        override fun setGoogleAiStudioApiKey(apiKey: String) {
+            viewModelScope.launch { settingsRepository.setGoogleAiStudioApiKey(apiKey) }
         }
 
         override fun setEnableThirdPartyCa(enabled: Boolean) {
@@ -368,6 +378,8 @@ private fun BrowserSettings.toUiState(
         geminiNanoModels = geminiNanoModels,
         selectedGeminiNanoModelKey = geminiNanoModelKey,
         selectedGeminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
+        semanticSearchProvider = semanticSearchProvider,
+        googleAiStudioApiKey = googleAiStudioApiKey,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),

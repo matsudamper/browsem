@@ -87,6 +87,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.forminput.FormInputRepository
@@ -126,6 +127,8 @@ internal fun GeckoBrowserTab(
     translationProvider: TranslationProvider,
     geminiNanoModelKey: String,
     geminiNanoSemanticSearchModelKey: String,
+    semanticSearchProvider: SemanticSearchProvider,
+    googleAiStudioApiKey: String,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
@@ -1204,8 +1207,14 @@ internal fun GeckoBrowserTab(
     // webAppMode で戻る先が無い場合はバックを消費しない。
     // ハンドラを無効化してシステムに委ねることで、メインアプリと同様に予測型バック
     // （ホーム画面へ縮小していくアニメーション）を発生させ、そのまま Activity を終了させる。
-    LaunchedEffect(geminiNanoSemanticSearchModelKey) {
+    LaunchedEffect(
+        geminiNanoSemanticSearchModelKey,
+        semanticSearchProvider,
+        googleAiStudioApiKey,
+    ) {
         state.geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey
+        state.semanticSearchProvider = semanticSearchProvider
+        state.googleAiStudioApiKey = googleAiStudioApiKey
     }
 
     LaunchedEffect(state.currentPageUrl) {

@@ -10,8 +10,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.semanticsearch.GeminiNanoSemanticSearch
+import net.matsudamper.browser.data.SemanticSearchProvider
+import net.matsudamper.browser.semanticsearch.SemanticSearchConfig
 import net.matsudamper.browser.semanticsearch.SemanticSearchKeywordPrefilter
+import net.matsudamper.browser.semanticsearch.SemanticSearchRanker
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.mozilla.geckoview.GeckoSession
 
@@ -21,7 +23,7 @@ internal class SemanticFindInPageState(
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val session: () -> GeckoSession,
     private val currentPageUrl: () -> String,
-    private val geminiNanoModelKey: () -> String,
+    private val semanticSearchConfig: () -> SemanticSearchConfig,
 ) {
     private var modeOpen by mutableStateOf(false)
     private var searchJob: Job? = null
@@ -125,19 +127,22 @@ internal class SemanticFindInPageState(
             isSearching = true
             queryError = null
             try {
+                val config = semanticSearchConfig()
                 val snapshot = loadSnapshot()
+                val maxCandidates = maxCandidatesFor(config.provider)
                 val candidates = SemanticSearchKeywordPrefilter.selectCandidates(
                     segments = snapshot.segments,
                     query = trimmedQuery,
-                    maxCandidates = MAX_GEMINI_CANDIDATES,
+                    maxCandidates = maxCandidates,
                 )
                 if (candidates.isEmpty()) {
                     applyMatches(snapshot.documentId, listOf())
                     return@launch
                 }
-                val rankedIds = GeminiNanoSemanticSearch(geminiNanoModelKey()).rankMatchingSegmentIds(
+                val rankedIds = SemanticSearchRanker.rankMatchingSegmentIds(
                     query = trimmedQuery,
                     candidates = candidates,
+                    config = config,
                 )
                 applyMatches(snapshot.documentId, rankedIds)
             } catch (error: CancellationException) {
@@ -200,8 +205,21 @@ internal class SemanticFindInPageState(
         )
     }
 
+    private fun maxCandidatesFor(provider: SemanticSearchProvider): Int {
+        return when (provider) {
+            SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO -> MAX_NANO_CANDIDATES
+
+            SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LATEST,
+            SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST,
+            -> MAX_CLOUD_CANDIDATES
+
+            SemanticSearchProvider.UNRECOGNIZED -> MAX_NANO_CANDIDATES
+        }
+    }
+
     companion object {
         private const val QUERY_DEBOUNCE_MS = 450L
-        private const val MAX_GEMINI_CANDIDATES = 16
+        private const val MAX_NANO_CANDIDATES = 16
+        private const val MAX_CLOUD_CANDIDATES = 24
     }
 }

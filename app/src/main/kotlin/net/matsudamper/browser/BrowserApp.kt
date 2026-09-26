@@ -671,6 +671,8 @@ private fun MainBrowserContent(
                                     translationProvider = uiState.translationProvider,
                                     geminiNanoModelKey = uiState.geminiNanoModelKey,
                                     geminiNanoSemanticSearchModelKey = uiState.geminiNanoSemanticSearchModelKey,
+                                    semanticSearchProvider = uiState.semanticSearchProvider,
+                                    googleAiStudioApiKey = uiState.googleAiStudioApiKey,
                                     themeColorExtension = themeColorExtension,
                                     mediaWebExtension = mediaWebExtension,
                                     tabCount = tabCount,

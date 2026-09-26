@@ -149,6 +149,8 @@ class WebAppActivity : ComponentActivity() {
                                 translationProvider = browserSettings.translationProvider,
                                 geminiNanoModelKey = browserSettings.geminiNanoModelKey,
                                 geminiNanoSemanticSearchModelKey = browserSettings.geminiNanoSemanticSearchModelKey,
+                                semanticSearchProvider = browserSettings.semanticSearchProvider,
+                                googleAiStudioApiKey = browserSettings.googleAiStudioApiKey,
                                 themeColorExtension = themeColorExtension,
                                 mediaWebExtension = mediaWebExtension,
                                 browserSessionLifecycleController = browserSessionLifecycleController,
