@@ -149,6 +149,7 @@ internal fun ToolbarMenu(
     onTranslatePage: () -> Unit,
     onShare: () -> Unit,
     onFindInPage: () -> Unit,
+    onSemanticFindInPage: () -> Unit,
     onOpenSettings: () -> Unit,
     onAddToHomeScreen: () -> Unit,
     pageZoomPercent: Int,
@@ -206,6 +207,7 @@ internal fun ToolbarMenu(
             onTranslatePage = onTranslatePage,
             onShare = onShare,
             onFindInPage = onFindInPage,
+            onSemanticFindInPage = onSemanticFindInPage,
             onOpenSettings = onOpenSettings,
             onAddToHomeScreen = onAddToHomeScreen,
             pageZoomPercent = pageZoomPercent,
@@ -275,6 +277,7 @@ private fun ToolbarMenuContent(
     onTranslatePage: () -> Unit,
     onShare: () -> Unit,
     onFindInPage: () -> Unit,
+    onSemanticFindInPage: () -> Unit,
     onOpenSettings: () -> Unit,
     onAddToHomeScreen: () -> Unit,
     pageZoomPercent: Int,
@@ -635,6 +638,22 @@ private fun ToolbarMenuContent(
             },
         )
         DropdownMenuItem(
+            modifier = Modifier.testTag(BrowserToolbarMenuTestTags.SemanticFindInPageButton.testTag),
+            text = {
+                Text(text = "意味検索")
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = ResourcesR.drawable.ic_search_24dp),
+                    contentDescription = null,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onSemanticFindInPage()
+            },
+        )
+        DropdownMenuItem(
             text = {
                 Text(text = "翻訳")
             },
@@ -792,6 +811,7 @@ private fun ToolbarMenuContentPreview(
         onTranslatePage = {},
         onShare = {},
         onFindInPage = {},
+        onSemanticFindInPage = {},
         onOpenSettings = {},
         onAddToHomeScreen = {},
         pageZoomPercent = 100,
@@ -971,6 +991,9 @@ sealed interface BrowserToolbarMenuTestTags {
     }
     object FindInPageButton : BrowserToolbarMenuTestTags {
         override val id = "find_in_page_button"
+    }
+    object SemanticFindInPageButton : BrowserToolbarMenuTestTags {
+        override val id = "semantic_find_in_page_button"
     }
     object SiteSettingsButton : BrowserToolbarMenuTestTags {
         override val id = "site_settings_button"

@@ -226,7 +226,12 @@ internal fun BrowserContentHost(
                 swipeRefreshLayout.isEnabled = !state.isFullScreen
                 swipeRefreshLayout.isRefreshing = state.isRefreshing
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
-                if (!state.isUrlInputFocused && !state.findInPage.isVisible && !geckoView.isFocused) {
+                if (
+                    !state.isUrlInputFocused &&
+                    !state.findInPage.isVisible &&
+                    !state.semanticFindInPage.isVisible &&
+                    !geckoView.isFocused
+                ) {
                     geckoView.requestFocus()
                 }
             },
@@ -285,7 +290,7 @@ internal fun BrowserTabOverlayLayer(
 
         if (
             shouldShowUrlSuggestions(
-                showFindInPage = state.findInPage.isVisible,
+                showFindInPage = state.findInPage.isVisible || state.semanticFindInPage.isVisible,
                 isUrlInputFocused = state.isUrlInputFocused,
                 suggestionCount = urlBarSuggestionCount(
                     historySuggestionCount = urlBarSuggestions.historySuggestions.size,

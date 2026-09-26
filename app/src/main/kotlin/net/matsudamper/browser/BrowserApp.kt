@@ -670,6 +670,7 @@ private fun MainBrowserContent(
                                     searchTemplate = uiState.searchTemplate,
                                     translationProvider = uiState.translationProvider,
                                     geminiNanoModelKey = uiState.geminiNanoModelKey,
+                                    geminiNanoSemanticSearchModelKey = uiState.geminiNanoSemanticSearchModelKey,
                                     themeColorExtension = themeColorExtension,
                                     mediaWebExtension = mediaWebExtension,
                                     tabCount = tabCount,

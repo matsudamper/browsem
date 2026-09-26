@@ -27,7 +27,14 @@
     'TEXTAREA',
   ]);
 
+  const SEMANTIC_HIGHLIGHT_CLASS = '__semantic_search_highlight';
+  const SEMANTIC_CURRENT_CLASS = '__semantic_search_current';
+  const SEMANTIC_HIGHLIGHT_STYLE = 'background: #b3e5fc; color: #000000; border-radius: 2px; padding: 0;';
+  const SEMANTIC_CURRENT_STYLE = 'background: #0288d1; color: #ffffff; border-radius: 2px; padding: 0;';
+
   const documentId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  let semanticHighlights = [];
+  let semanticFocusIndex = -1;
 
   let port = null;
   let observer = null;
@@ -442,11 +449,68 @@
     }
   }
 
-  function startTranslation(requestId) {
-    stopObserver();
-    restoreAll();
-    resetEntries();
+  function clearSemanticHighlights() {
+    document.querySelectorAll('.' + SEMANTIC_HIGHLIGHT_CLASS).forEach(function (el) {
+      const parent = el.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(el.textContent || ''), el);
+      parent.normalize();
+    });
+    semanticHighlights = [];
+    semanticFocusIndex = -1;
+  }
 
+  function focusSemanticHighlight(index) {
+    if (semanticHighlights.length === 0) return;
+    semanticHighlights.forEach(function (el, i) {
+      el.className = SEMANTIC_HIGHLIGHT_CLASS;
+      el.setAttribute('style', SEMANTIC_HIGHLIGHT_STYLE);
+    });
+    const current = semanticHighlights[index];
+    if (!current) return;
+    current.className = SEMANTIC_HIGHLIGHT_CLASS + ' ' + SEMANTIC_CURRENT_CLASS;
+    current.setAttribute('style', SEMANTIC_CURRENT_STYLE);
+    current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function highlightSegmentIds(segmentIds, focusIndex) {
+    clearSemanticHighlights();
+    if (!Array.isArray(segmentIds) || segmentIds.length === 0) return;
+
+    segmentIds.forEach(function (id) {
+      const entry = entries.get(id);
+      if (!entry || entry.kind !== 'text' || !entry.node) return;
+      const node = entry.node;
+      if (node.nodeType !== 3) return;
+      const parent = node.parentNode;
+      if (!parent) return;
+      try {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const mark = document.createElement('mark');
+        mark.className = SEMANTIC_HIGHLIGHT_CLASS;
+        mark.setAttribute('style', SEMANTIC_HIGHLIGHT_STYLE);
+        range.surroundContents(mark);
+        semanticHighlights.push(mark);
+      } catch (error) {
+        // surroundContents が失敗する場合は親要素を目立たせる
+        if (parent.nodeType === 1) {
+          parent.setAttribute('data-semantic-search-wrap', '1');
+          parent.style.outline = '2px solid #0288d1';
+          parent.style.outlineOffset = '1px';
+          semanticHighlights.push(parent);
+        }
+      }
+    });
+
+    if (semanticHighlights.length > 0) {
+      const safeIndex = Math.max(0, Math.min(focusIndex, semanticHighlights.length - 1));
+      semanticFocusIndex = safeIndex;
+      focusSemanticHighlight(safeIndex);
+    }
+  }
+
+  function runSegmentScan(requestId) {
     postMessage({
       action: 'scanStart',
       requestId: requestId,
@@ -460,14 +524,13 @@
       collectRoot(document.body, segments);
       segments = sortByViewportDistance(segments);
     } catch (error) {
-      // 収集が途中で落ちると scanComplete が送られず、アプリ側は待ち続けてしまう
       postMessage({
         action: 'scanFailed',
         requestId: requestId,
         documentId: documentId,
         reason: String((error && error.message) || error),
       });
-      return;
+      return null;
     }
     sendSegmentBatches('scanSegments', requestId, segments);
     postMessage({
@@ -476,8 +539,28 @@
       documentId: documentId,
       segmentCount: segments.length,
     });
+    return segments;
+  }
+
+  function startTranslation(requestId) {
+    stopObserver();
+    restoreAll();
+    clearSemanticHighlights();
+    resetEntries();
+
+    const segments = runSegmentScan(requestId);
+    if (segments === null) return;
     translationActive = true;
     startObserver();
+  }
+
+  function startSemanticScan(requestId) {
+    stopObserver();
+    clearSemanticHighlights();
+    resetEntries();
+    const segments = runSegmentScan(requestId);
+    if (segments === null) return;
+    translationActive = false;
   }
 
   /** 反映済みと一致しないテキストだけが textSegment から返るため、再走査で未同期分を拾える */
@@ -496,6 +579,21 @@
     if (!message) return;
     if (message.action === 'start') {
       startTranslation(message.requestId || '');
+      return;
+    }
+    if (message.action === 'semanticScan') {
+      startSemanticScan(message.requestId || '');
+      return;
+    }
+    if (message.action === 'semanticHighlight') {
+      if (message.documentId !== documentId) return;
+      const ids = Array.isArray(message.segmentIds) ? message.segmentIds : [];
+      const focusIndex = typeof message.focusIndex === 'number' ? message.focusIndex : 0;
+      highlightSegmentIds(ids, focusIndex);
+      return;
+    }
+    if (message.action === 'semanticClear') {
+      clearSemanticHighlights();
       return;
     }
     if (message.action === 'apply') {
