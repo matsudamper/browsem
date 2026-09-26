@@ -139,7 +139,9 @@ internal class GeminiApiSemanticSearch(
 
     companion object {
         private const val SEMANTIC_SEARCH_SYSTEM_INSTRUCTION =
-            "You select segment IDs that answer the user's question. Output only comma-separated IDs or NONE."
+            "You select segment IDs that semantically answer the user's question, " +
+                "even when the exact query words are absent (e.g. question 価格 → segment 900円). " +
+                "Do not match query words only literally. Output only comma-separated IDs or NONE."
         private const val MAX_SEGMENT_CHARS_IN_PROMPT = 200
         private const val MAX_OUTPUT_TOKENS = 96
         private const val CONNECT_TIMEOUT_MS = 15_000

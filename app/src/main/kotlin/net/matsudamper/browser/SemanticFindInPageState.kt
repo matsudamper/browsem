@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.semanticsearch.SemanticSearchConfig
-import net.matsudamper.browser.semanticsearch.SemanticSearchKeywordPrefilter
+import net.matsudamper.browser.semanticsearch.SemanticSearchCandidates
 import net.matsudamper.browser.semanticsearch.SemanticSearchRanker
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.mozilla.geckoview.GeckoSession
@@ -139,11 +139,10 @@ internal class SemanticFindInPageState(
                 val config = semanticSearchConfig()
                 val snapshot = loadSnapshot()
                 val maxCandidates = maxCandidatesFor(config.provider)
-                searchProgressMessage = "候補を絞り込んでいます"
-                searchProgressDetail = "最大 $maxCandidates 件まで"
-                val candidates = SemanticSearchKeywordPrefilter.selectCandidates(
+                searchProgressMessage = "AI に渡す候補を準備しています"
+                searchProgressDetail = "最大 $maxCandidates セグメント"
+                val candidates = SemanticSearchCandidates.selectForInference(
                     segments = snapshot.segments,
-                    query = trimmedQuery,
                     maxCandidates = maxCandidates,
                 )
                 if (candidates.isEmpty()) {

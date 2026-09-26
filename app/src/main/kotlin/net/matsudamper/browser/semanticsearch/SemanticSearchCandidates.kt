@@ -2,33 +2,17 @@ package net.matsudamper.browser.semanticsearch
 
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 
-internal object SemanticSearchKeywordPrefilter {
-    fun selectCandidates(
+internal object SemanticSearchCandidates {
+    /**
+     * 推論コストの上限のため、スキャン済みセグメントの先頭から渡す。
+     * スキャン側で画面に近い順に並んでいる。クエリによる絞り込みは行わない。
+     */
+    fun selectForInference(
         segments: List<PageTranslationWebExtension.Segment>,
-        query: String,
         maxCandidates: Int,
     ): List<PageTranslationWebExtension.Segment> {
         if (segments.isEmpty() || maxCandidates <= 0) return listOf()
-        val terms = query
-            .lowercase()
-            .split(Regex("\\s+"))
-            .map { it.trim() }
-            .filter { it.length >= 2 }
-        if (terms.isEmpty()) {
-            return segments.take(maxCandidates)
-        }
-        return segments
-            .map { segment ->
-                val lowered = segment.text.lowercase()
-                val score = terms.count { term -> lowered.contains(term) }
-                segment to score
-            }
-            .sortedWith(
-                compareByDescending<Pair<PageTranslationWebExtension.Segment, Int>> { it.second }
-                    .thenBy { it.first.text.length },
-            )
-            .take(maxCandidates)
-            .map { it.first }
+        return segments.take(maxCandidates)
     }
 }
 
@@ -37,7 +21,7 @@ internal fun parseSemanticSearchSegmentIds(
     allowedIds: Set<String>,
 ): List<String> {
     if (modelOutput.contains("NONE", ignoreCase = true)) return listOf()
-    val pattern = Regex("""t\d+""")
+    val pattern = Regex("""[ta]\d+""")
     val ordered = linkedSetOf<String>()
     pattern.findAll(modelOutput).forEach { match ->
         val id = match.value
@@ -55,6 +39,8 @@ internal fun buildSemanticSearchPrompt(
 ): String {
     return buildString {
         appendLine("ページ内意味検索。ユーザーの質問に意味的に合うセグメントIDだけを選ぶ。")
+        appendLine("質問の語が本文に無くても、意図が合うセグメントを選ぶ（例: 質問「価格」→「900円」「1,200円」など）。")
+        appendLine("質問語の単純な文字列一致だけを選ばない。")
         appendLine("出力はマッチしたIDをカンマ区切りのみ。該当なしは NONE のみ。")
         appendLine()
         appendLine("質問: ${query.trim()}")

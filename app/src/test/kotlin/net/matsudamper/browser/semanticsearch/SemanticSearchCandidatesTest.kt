@@ -5,21 +5,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class SemanticSearchKeywordPrefilterTest {
+class SemanticSearchCandidatesTest {
     @Test
-    fun prefilterPrefersSegmentsContainingQueryTerms() {
+    fun selectForInferenceTakesLeadingSegmentsWithoutQueryFilter() {
         val segments = listOf(
-            PageTranslationWebExtension.Segment(id = "t1", text = "今日の天気は晴れです"),
-            PageTranslationWebExtension.Segment(id = "t2", text = "株価の動向について"),
-            PageTranslationWebExtension.Segment(id = "t3", text = "明日の天気予報"),
+            PageTranslationWebExtension.Segment(id = "t1", text = "商品名"),
+            PageTranslationWebExtension.Segment(id = "t2", text = "900円"),
+            PageTranslationWebExtension.Segment(id = "t3", text = "価格の説明"),
         )
-        val selected = SemanticSearchKeywordPrefilter.selectCandidates(
+        val selected = SemanticSearchCandidates.selectForInference(
             segments = segments,
-            query = "天気",
             maxCandidates = 2,
         )
-        assertEquals(2, selected.size)
-        assertTrue(selected.all { it.text.contains("天気") })
+        assertEquals(listOf("t1", "t2"), selected.map { it.id })
     }
 
     @Test
