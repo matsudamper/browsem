@@ -22,6 +22,18 @@ class DownloadFileNameTest {
     }
 
     @Test
+    fun contentDispositionFileNameWithoutExtensionIsCompletedFromMimeType() {
+        assertEquals(
+            "report.pdf",
+            DownloadFileName.resolve(
+                urlString = "https://example.com/download.php?id=1",
+                contentDisposition = "attachment; filename=report",
+                mimeType = "application/pdf",
+            ),
+        )
+    }
+
+    @Test
     fun extendedContentDispositionFileNameIsDecoded() {
         assertEquals(
             "報告 書+1.pdf",

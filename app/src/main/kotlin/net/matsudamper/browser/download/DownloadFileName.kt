@@ -31,14 +31,17 @@ object DownloadFileName {
     fun resolve(urlString: String, contentDisposition: String?, mimeType: String): String {
         val dispositionFileName = contentDisposition?.let { parseContentDispositionFileName(it) }
         if (dispositionFileName != null) {
-            return dispositionFileName
+            if (dispositionFileName.contains('.')) {
+                return dispositionFileName
+            }
+            return correctExtension(dispositionFileName, isBinExtensionGenerated = false, mimeType)
         }
 
         // URLUtil.guessFileName は mimeType を渡さないと、拡張子の無い名前に機械的に ".bin" を補う
         val urlFileName = URLUtil.guessFileName(urlString, null, null)
         val isBinExtensionGenerated = Uri.parse(urlString).lastPathSegment
             ?.endsWith(".bin", ignoreCase = true) != true
-        return correctUrlDerivedExtension(urlFileName, isBinExtensionGenerated, mimeType)
+        return correctExtension(urlFileName, isBinExtensionGenerated, mimeType)
             .ifBlank { fallbackFileName() }
     }
 
@@ -73,7 +76,7 @@ object DownloadFileName {
         }
     }
 
-    private fun correctUrlDerivedExtension(fileName: String, isBinExtensionGenerated: Boolean, mimeType: String): String {
+    private fun correctExtension(fileName: String, isBinExtensionGenerated: Boolean, mimeType: String): String {
         val normalizedMimeType = mimeType.lowercase(Locale.US)
         if (normalizedMimeType in genericMimeTypes) {
             return fileName
