@@ -15,13 +15,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.AddToHomeScreenTarget
-import net.matsudamper.browser.requestPinRegisteredWebAppToHome
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.data.ProfileData
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.WebAppData
 import net.matsudamper.browser.data.WebAppRepository
+import net.matsudamper.browser.requestPinRegisteredWebAppToHome
 import net.matsudamper.browser.ui.settings.webapp.WebAppsScreenUiState
 
 internal class WebAppsScreenViewModel(
