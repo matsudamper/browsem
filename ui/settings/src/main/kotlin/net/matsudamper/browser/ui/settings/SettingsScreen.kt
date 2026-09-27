@@ -53,10 +53,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.resources.R as ResourcesR
@@ -324,6 +326,75 @@ fun SettingsScreen(
                                 uiState.selectedGeminiNanoModelKey == model.key,
                             onClick = { uiState.callbacks.selectGeminiNanoModel(model.key) },
                         )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "意味検索") {
+                Column {
+                    Text(
+                        text = "Google AI Studio の API キー（端末内に保存。クラウド推論で使用）",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = uiState.googleAiStudioApiKey,
+                        onValueChange = uiState.callbacks::setGoogleAiStudioApiKey,
+                        label = { Text("API キー") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Column(Modifier.selectableGroup()) {
+                        SettingsRadioOption(
+                            label = "Gemini Flash (latest)",
+                            selected = uiState.semanticSearchProvider ==
+                                SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LATEST,
+                            onClick = {
+                                uiState.callbacks.setSemanticSearchProvider(
+                                    SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LATEST,
+                                )
+                            },
+                        )
+                        SettingsRadioOption(
+                            label = "Gemini Flash Lite (latest)",
+                            selected = uiState.semanticSearchProvider ==
+                                SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST,
+                            onClick = {
+                                uiState.callbacks.setSemanticSearchProvider(
+                                    SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST,
+                                )
+                            },
+                        )
+                        SettingsRadioOption(
+                            label = "Gemini Nano（端末内）",
+                            selected = uiState.semanticSearchProvider ==
+                                SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO,
+                            onClick = {
+                                uiState.callbacks.setSemanticSearchProvider(
+                                    SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO,
+                                )
+                            },
+                        )
+                    }
+                    if (uiState.semanticSearchProvider == SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO) {
+                        Spacer(Modifier.height(8.dp))
+                        Column(Modifier.selectableGroup()) {
+                            uiState.geminiNanoModels.forEach { model ->
+                                SettingsRadioOption(
+                                    label = model.label,
+                                    selected = uiState.selectedGeminiNanoSemanticSearchModelKey == model.key,
+                                    onClick = {
+                                        uiState.callbacks.selectGeminiNanoSemanticSearchModel(model.key)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -803,6 +874,9 @@ private fun SettingsScreenPreviewContent(
                     override fun setThemeMode(mode: ThemeMode) = Unit
                     override fun setTranslationProvider(provider: TranslationProvider) = Unit
                     override fun selectGeminiNanoModel(modelKey: String) = Unit
+                    override fun selectGeminiNanoSemanticSearchModel(modelKey: String) = Unit
+                    override fun setSemanticSearchProvider(provider: SemanticSearchProvider) = Unit
+                    override fun setGoogleAiStudioApiKey(apiKey: String) = Unit
                     override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
                     override fun setInputAutoZoomEnabled(enabled: Boolean) = Unit
@@ -826,6 +900,9 @@ private fun SettingsScreenPreviewContent(
                 translationProvider = translationProvider,
                 geminiNanoModels = geminiNanoModels,
                 selectedGeminiNanoModelKey = geminiNanoModels.firstOrNull()?.key.orEmpty(),
+                selectedGeminiNanoSemanticSearchModelKey = geminiNanoModels.firstOrNull()?.key.orEmpty(),
+                semanticSearchProvider = SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST,
+                googleAiStudioApiKey = "",
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
                 inputAutoZoomEnabled = true,
