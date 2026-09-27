@@ -41,9 +41,15 @@ internal class WebAppShortcutManager(
         ShortcutManagerCompat.requestPinShortcut(context, info, null)
     }
 
-    /** 旧形式の起動 URI を持つピン留めショートカットを探す */
+    /**
+     * 旧形式の起動 URI を持つピン留めショートカットを探す。
+     * 同じ URL を通常のショートカット（DeepLinkActivity 向け）としても追加していると data URI が一致するため、起動先でも絞る。
+     */
     fun findPinnedLegacyShortcut(legacyLaunchUri: String): PinnedLegacyShortcut? {
-        val shortcut = pinnedShortcuts().firstOrNull { it.intent.data?.toString() == legacyLaunchUri }
+        val shortcut = pinnedShortcuts().firstOrNull {
+            it.intent.component?.className == WebAppActivity::class.java.name &&
+                it.intent.data?.toString() == legacyLaunchUri
+        }
         return if (shortcut == null) {
             null
         } else {
