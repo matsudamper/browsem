@@ -121,18 +121,28 @@ internal class AddToHomeScreenDialogController(
     }
 }
 
-internal fun requestPinRegisteredWebAppToHome(
+internal suspend fun requestPinRegisteredWebAppToHome(
     webAppShortcutManager: WebAppShortcutManager,
     target: AddToHomeScreenTarget.RegisteredWebApp,
+    fallbackFavicon: Bitmap?,
 ): Boolean {
-    return webAppShortcutManager.requestPinRegisteredWebApp(
+    if (!webAppShortcutManager.isPinSupported()) return false
+    // ホームから外されたショートカットはランチャーにアイコンが残らないため、毎回アイコンを渡す
+    val favicon = fetchAddToHomeScreenIcon(
+        pageUrl = target.url,
+        webAppManifestJson = null,
+        fallbackFavicon = fallbackFavicon,
+    )
+    webAppShortcutManager.requestPin(
         launchInfo = WebAppLaunchInfo(
             webAppId = target.webAppId,
             startUrl = target.url,
             profileId = target.profileId,
         ),
-        label = target.title,
+        label = target.title.ifBlank { target.url },
+        favicon = favicon,
     )
+    return true
 }
 
 internal suspend fun pinWebAppToHome(

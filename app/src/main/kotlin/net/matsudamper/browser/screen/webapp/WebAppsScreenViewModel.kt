@@ -159,12 +159,15 @@ internal class WebAppsScreenViewModel(
                         title = webApp.title,
                         profileId = webApp.profileId,
                     )
-                    val isPinned = requestPinRegisteredWebAppToHome(
-                        webAppShortcutManager = webAppShortcutManager,
-                        target = target,
-                    )
-                    if (!isPinned) {
-                        eventHandler.trySend { it.onPinNotSupported() }
+                    viewModelScope.launch {
+                        val isPinned = requestPinRegisteredWebAppToHome(
+                            webAppShortcutManager = webAppShortcutManager,
+                            target = target,
+                            fallbackFavicon = null,
+                        )
+                        if (!isPinned) {
+                            eventHandler.trySend { it.onPinNotSupported() }
+                        }
                     }
                 }
 

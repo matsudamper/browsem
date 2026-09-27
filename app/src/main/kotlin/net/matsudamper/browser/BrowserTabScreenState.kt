@@ -767,12 +767,16 @@ internal class BrowserTabScreenState(
             title = title,
             profileId = launchInfo.profileId,
         )
-        val isPinned = requestPinRegisteredWebAppToHome(
-            webAppShortcutManager = webAppShortcutManager,
-            target = target,
-        )
-        if (!isPinned) {
-            Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
+        val fallbackFavicon = browserTab.faviconBitmap
+        coroutineScope.launch {
+            val isPinned = requestPinRegisteredWebAppToHome(
+                webAppShortcutManager = webAppShortcutManager,
+                target = target,
+                fallbackFavicon = fallbackFavicon,
+            )
+            if (!isPinned) {
+                Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

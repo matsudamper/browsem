@@ -18,19 +18,6 @@ internal class WebAppShortcutManager(
 ) {
     fun isPinSupported(): Boolean = ShortcutManagerCompat.isRequestPinShortcutSupported(context)
 
-    // 登録済みウェブアプリをホームへ再ピン留めする。アイコンは指定せずランチャーが既存のものを引き継ぐ。
-    fun requestPinRegisteredWebApp(launchInfo: WebAppLaunchInfo, label: String): Boolean {
-        if (!isPinSupported()) return false
-        val resolvedLabel = label.ifBlank { launchInfo.startUrl }
-        val info = ShortcutInfoCompat.Builder(context, launchInfo.webAppId.toShortcutId())
-            .setShortLabel(resolvedLabel.take(25))
-            .setLongLabel(resolvedLabel)
-            .setIntent(WebAppLaunchUri.createIntent(context, launchInfo))
-            .build()
-        ShortcutManagerCompat.requestPinShortcut(context, info, null)
-        return true
-    }
-
     /**
      * 登録済みのウェブアプリをホームにピン留めする。
      * 専用の WebAppActivity で開き、ドキュメントタスクとして独立したRecentsエントリを持つ。
