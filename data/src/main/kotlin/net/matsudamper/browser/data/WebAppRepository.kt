@@ -5,6 +5,8 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.tab.TabDatabase
 import net.matsudamper.browser.data.tab.WebAppEntity
@@ -14,6 +16,9 @@ class WebAppRepository(context: Context) {
 
     // GeckoView の sessionState は CursorWindow 上限を超え得るため、タブと同様に DB ではなくファイルへ保存する
     private val sessionStateDir = File(context.filesDir, "web_app_session_states")
+
+    // 登録の確認からファイル書き込みまでの間に削除が割り込むと、削除済みのファイルを作り直して孤立させるため排他する
+    private val sessionStateMutex = Mutex()
 
     fun observeWebApps(): Flow<List<WebAppData>> {
         return dao.observeWebApps().map { entities -> entities.map { it.toWebAppData() } }
@@ -38,9 +43,11 @@ class WebAppRepository(context: Context) {
     }
 
     suspend fun deleteWebApp(webAppId: WebAppId) {
-        dao.deleteWebApp(webAppId.value)
-        withContext(Dispatchers.IO) {
-            sessionStateFile(webAppId).delete()
+        sessionStateMutex.withLock {
+            dao.deleteWebApp(webAppId.value)
+            withContext(Dispatchers.IO) {
+                sessionStateFile(webAppId).delete()
+            }
         }
     }
 
@@ -64,14 +71,16 @@ class WebAppRepository(context: Context) {
      * 削除済みのアプリのタスクが残っていても、ファイルを作り直して孤立させないよう登録が無ければ保存しない。
      */
     suspend fun saveSessionState(webAppId: WebAppId, sessionState: String) {
-        if (dao.getWebApp(webAppId.value) == null) return
-        withContext(Dispatchers.IO) {
-            val file = sessionStateFile(webAppId)
-            if (sessionState.isBlank()) {
-                file.delete()
-            } else {
-                sessionStateDir.mkdirs()
-                file.writeText(sessionState)
+        sessionStateMutex.withLock {
+            if (dao.getWebApp(webAppId.value) == null) return
+            withContext(Dispatchers.IO) {
+                val file = sessionStateFile(webAppId)
+                if (sessionState.isBlank()) {
+                    file.delete()
+                } else {
+                    sessionStateDir.mkdirs()
+                    file.writeText(sessionState)
+                }
             }
         }
     }
