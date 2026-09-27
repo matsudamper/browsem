@@ -64,13 +64,14 @@ internal class WebAppShortcutManager(
      * 旧形式のショートカットを、ウェブアプリ ID で起動する新形式へ書き換える。
      * ピン留めショートカットはショートカット ID を変えられないため、ID は旧形式のまま Intent だけを差し替える。
      * アイコンは指定しなければ既存のものが残る。
+     * @return ランチャーがショートカットを書き換えたか。レート制限などで拒否されると false
      */
-    fun migrateLegacyShortcut(shortcut: PinnedLegacyShortcut, webAppId: WebAppId) {
+    fun migrateLegacyShortcut(shortcut: PinnedLegacyShortcut, webAppId: WebAppId): Boolean {
         val info = ShortcutInfoCompat.Builder(context, shortcut.shortcutId)
             .setShortLabel(shortcut.shortLabel)
             .setIntent(WebAppLaunchUri.createIntent(context, webAppId))
             .build()
-        ShortcutManagerCompat.updateShortcuts(context, listOf(info))
+        return ShortcutManagerCompat.updateShortcuts(context, listOf(info))
     }
 
     /** ホームにピン留めされたままのウェブアプリ。まだ移行していない旧形式のアプリは含まない */

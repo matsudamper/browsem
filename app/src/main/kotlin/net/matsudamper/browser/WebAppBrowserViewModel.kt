@@ -157,7 +157,11 @@ internal class WebAppBrowserViewModel(
             startUrl = pageUrl,
             title = shortcut.label,
         )
-        webAppShortcutManager.migrateLegacyShortcut(shortcut, webAppId)
+        // アイコンが旧形式のままだと次回の起動でまた別の登録を作ってしまうため、書き換えられなければ登録を取り消す
+        if (!webAppShortcutManager.migrateLegacyShortcut(shortcut, webAppId)) {
+            webAppRepository.deleteWebApp(webAppId)
+            return null
+        }
         return webAppId
     }
 
