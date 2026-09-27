@@ -158,7 +158,10 @@ internal class WebAppBrowserViewModel(
             title = shortcut.label,
         )
         // アイコンが旧形式のままだと次回の起動でまた別の登録を作ってしまうため、書き換えられなければ登録を取り消す
-        if (!webAppShortcutManager.migrateLegacyShortcut(shortcut, webAppId)) {
+        val isMigrated = withContext(Dispatchers.IO) {
+            webAppShortcutManager.migrateLegacyShortcut(shortcut, webAppId)
+        }
+        if (!isMigrated) {
             webAppRepository.deleteWebApp(webAppId)
             return null
         }

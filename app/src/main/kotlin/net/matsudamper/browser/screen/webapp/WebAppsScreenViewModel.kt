@@ -34,8 +34,12 @@ internal class WebAppsScreenViewModel(
         override fun onConfirm() {
             val target = viewModelStateFlow.value.deleteTarget ?: return
             viewModelStateFlow.update { it.copy(deleteTarget = null) }
-            webAppShortcutManager.disableShortcut(webAppId = target.id, title = target.title)
-            viewModelScope.launch { webAppRepository.deleteWebApp(target.id) }
+            viewModelScope.launch {
+                withContext(Dispatchers.IO) {
+                    webAppShortcutManager.disableShortcut(webAppId = target.id, title = target.title)
+                }
+                webAppRepository.deleteWebApp(target.id)
+            }
         }
 
         override fun onDismiss() {
@@ -49,7 +53,10 @@ internal class WebAppsScreenViewModel(
             viewModelStateFlow.update { it.copy(renameTarget = null) }
             viewModelScope.launch {
                 // 一覧の名前とホームのアイコンの名前を食い違わせないよう、アイコンを書き換えられたときだけ名前を変える
-                if (webAppShortcutManager.updateLabel(webAppId = target.id, label = title)) {
+                val isLabelUpdated = withContext(Dispatchers.IO) {
+                    webAppShortcutManager.updateLabel(webAppId = target.id, label = title)
+                }
+                if (isLabelUpdated) {
                     webAppRepository.renameWebApp(target.id, title)
                 } else {
                     eventHandler.trySend { it.onRenameFailed() }
