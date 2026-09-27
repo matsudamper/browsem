@@ -152,6 +152,7 @@ internal fun GeckoBrowserTab(
     webAppMode: Boolean,
     webAppPinnedHost: String?,
     webAppLaunchInfo: WebAppLaunchInfo?,
+    webAppRegisteredTitle: String?,
     onWebAppCrossDomainNavigation: ((String) -> Unit)?,
     onCloseCustomTab: (() -> Unit)?,
     onOpenInBrowser: ((String) -> Unit)?,
@@ -1368,7 +1369,8 @@ internal fun GeckoBrowserTab(
                     },
                     onAddToHomeScreen = {
                         if (webAppLaunchInfo != null) {
-                            state.requestAddRegisteredWebAppToHomeScreen(webAppLaunchInfo)
+                            val title = webAppRegisteredTitle ?: webAppLaunchInfo.startUrl
+                            state.requestAddRegisteredWebAppToHomeScreen(webAppLaunchInfo, title)
                         } else {
                             state.requestAddToHomeScreen()
                         }

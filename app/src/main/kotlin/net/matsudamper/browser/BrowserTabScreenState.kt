@@ -93,6 +93,7 @@ internal fun rememberBrowserTabScreenState(
     val webExtensionActionController: WebExtensionActionController = koinInject()
     val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
     val crashLogRepository: CrashLogRepository = koinInject()
+    val webAppShortcutManager: WebAppShortcutManager = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -110,6 +111,7 @@ internal fun rememberBrowserTabScreenState(
             webExtensionActionController = webExtensionActionController,
             pageTranslationWebExtension = pageTranslationWebExtension,
             crashLogRepository = crashLogRepository,
+            webAppShortcutManager = webAppShortcutManager,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -152,6 +154,7 @@ internal class BrowserTabScreenState(
     private val webExtensionActionController: WebExtensionActionController,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val crashLogRepository: CrashLogRepository,
+    private val webAppShortcutManager: WebAppShortcutManager,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
@@ -757,13 +760,20 @@ internal class BrowserTabScreenState(
         )
     }
 
-    fun requestAddRegisteredWebAppToHomeScreen(launchInfo: WebAppLaunchInfo) {
-        addToHomeScreenDialogController.requestFromRegisteredWebApp(
+    fun requestAddRegisteredWebAppToHomeScreen(launchInfo: WebAppLaunchInfo, title: String) {
+        val target = AddToHomeScreenTarget.RegisteredWebApp(
             webAppId = launchInfo.webAppId,
-            startUrl = launchInfo.startUrl,
-            title = currentPageTitle.ifBlank { launchInfo.startUrl },
+            url = launchInfo.startUrl,
+            title = title,
             profileId = launchInfo.profileId,
         )
+        val isPinned = requestPinRegisteredWebAppToHome(
+            webAppShortcutManager = webAppShortcutManager,
+            target = target,
+        )
+        if (!isPinned) {
+            Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun dismissAddToHomeScreen() {

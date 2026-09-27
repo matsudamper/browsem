@@ -167,6 +167,7 @@ class WebAppActivity : ComponentActivity() {
                                 webAppMode = true,
                                 webAppPinnedHost = webAppPinnedHost,
                                 webAppLaunchInfo = currentWebAppTab.launchInfo,
+                                webAppRegisteredTitle = currentWebAppTab.registeredTitle,
                                 onWebAppCrossDomainNavigation = ::openInCustomTab,
                                 onCloseCustomTab = null,
                                 onOpenInBrowser = ::openInMainBrowser,

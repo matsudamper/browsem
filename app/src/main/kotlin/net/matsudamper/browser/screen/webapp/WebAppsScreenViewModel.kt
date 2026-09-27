@@ -14,8 +14,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import net.matsudamper.browser.AddToHomeScreenDialogController
 import net.matsudamper.browser.AddToHomeScreenTarget
+import net.matsudamper.browser.requestPinRegisteredWebAppToHome
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.data.ProfileData
 import net.matsudamper.browser.data.ProfileId
@@ -29,8 +29,6 @@ internal class WebAppsScreenViewModel(
     private val profileRepository: ProfileRepository,
     private val webAppShortcutManager: WebAppShortcutManager,
 ) : ViewModel() {
-    val addToHomeScreenDialogController = AddToHomeScreenDialogController(viewModelScope)
-
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -155,14 +153,19 @@ internal class WebAppsScreenViewModel(
                 }
 
                 override fun onClickAddToHome() {
-                    addToHomeScreenDialogController.request(
-                        target = AddToHomeScreenTarget.RegisteredWebApp(
-                            webAppId = webApp.id,
-                            url = webApp.startUrl,
-                            title = webApp.title,
-                            profileId = webApp.profileId,
-                        ),
+                    val target = AddToHomeScreenTarget.RegisteredWebApp(
+                        webAppId = webApp.id,
+                        url = webApp.startUrl,
+                        title = webApp.title,
+                        profileId = webApp.profileId,
                     )
+                    val isPinned = requestPinRegisteredWebAppToHome(
+                        webAppShortcutManager = webAppShortcutManager,
+                        target = target,
+                    )
+                    if (!isPinned) {
+                        eventHandler.trySend { it.onPinNotSupported() }
+                    }
                 }
 
                 override fun onClickDelete() {
@@ -172,16 +175,9 @@ internal class WebAppsScreenViewModel(
         )
     }
 
-    suspend fun registerWebApp(url: String, title: String, profileId: String): String {
-        return webAppRepository.addWebApp(
-            profileId = ProfileId(profileId),
-            startUrl = url,
-            title = title,
-        ).value
-    }
-
     interface Event {
-        /** ランチャーがアイコンの書き換えを拒否した（レート制限など） */
+        /** ランチャーがピン留めに対応していない */
+        fun onPinNotSupported()
         fun onRenameFailed()
 
         /** ランチャーがアイコンの書き換えを拒否したため、削除を中止した（レート制限など） */

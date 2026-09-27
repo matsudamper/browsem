@@ -121,6 +121,20 @@ internal class AddToHomeScreenDialogController(
     }
 }
 
+internal fun requestPinRegisteredWebAppToHome(
+    webAppShortcutManager: WebAppShortcutManager,
+    target: AddToHomeScreenTarget.RegisteredWebApp,
+): Boolean {
+    return webAppShortcutManager.requestPinRegisteredWebApp(
+        launchInfo = WebAppLaunchInfo(
+            webAppId = target.webAppId,
+            startUrl = target.url,
+            profileId = target.profileId,
+        ),
+        label = target.title,
+    )
+}
+
 internal suspend fun pinWebAppToHome(
     webAppShortcutManager: WebAppShortcutManager,
     target: AddToHomeScreenTarget,

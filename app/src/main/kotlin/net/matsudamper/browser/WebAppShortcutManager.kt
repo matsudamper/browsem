@@ -23,6 +23,22 @@ internal class WebAppShortcutManager(
      * 専用の WebAppActivity で開き、ドキュメントタスクとして独立したRecentsエントリを持つ。
      * ピン留めがキャンセルされて残った登録は、ウェブアプリ一覧を開いたときに [pinnedWebAppIds] との突き合わせで消える。
      */
+    /**
+     * 登録済みウェブアプリをホームへ再ピン留めする。
+     * アイコンは指定しない。ランチャーが既存のピン留めショートカットのアイコンを引き継ぐ。
+     */
+    fun requestPinRegisteredWebApp(launchInfo: WebAppLaunchInfo, label: String): Boolean {
+        if (!isPinSupported()) return false
+        val resolvedLabel = label.ifBlank { launchInfo.startUrl }
+        val info = ShortcutInfoCompat.Builder(context, launchInfo.webAppId.toShortcutId())
+            .setShortLabel(resolvedLabel.take(25))
+            .setLongLabel(resolvedLabel)
+            .setIntent(WebAppLaunchUri.createIntent(context, launchInfo))
+            .build()
+        ShortcutManagerCompat.requestPinShortcut(context, info, null)
+        return true
+    }
+
     fun requestPin(launchInfo: WebAppLaunchInfo, label: String, favicon: Bitmap?) {
         // documentLaunchMode のアプリピンは、ランチャーがアイコンの透過部分を黒で塗りつぶし、
         // 暗い favicon と合わさって真っ黒に見える。透過を不透明な白背景で埋めてから渡す。

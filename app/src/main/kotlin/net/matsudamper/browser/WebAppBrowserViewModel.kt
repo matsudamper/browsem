@@ -104,9 +104,10 @@ internal class WebAppBrowserViewModel(
                 }
             }
         }
-        val launchInfo = webAppId?.let { id ->
+        val registeredWebApp = webAppId?.let { id -> webAppRepository.getWebApp(id) }
+        val launchInfo = registeredWebApp?.let { webApp ->
             WebAppLaunchInfo(
-                webAppId = id,
+                webAppId = webApp.id,
                 startUrl = startUrl,
                 profileId = destination.profileId,
             )
@@ -115,6 +116,7 @@ internal class WebAppBrowserViewModel(
             browserTab = tab,
             startUrl = startUrl,
             launchInfo = launchInfo,
+            registeredTitle = registeredWebApp?.title,
         )
     }
 
@@ -247,4 +249,5 @@ internal data class WebAppTab(
     val browserTab: BrowserTab,
     val startUrl: String,
     val launchInfo: WebAppLaunchInfo?,
+    val registeredTitle: String?,
 )
