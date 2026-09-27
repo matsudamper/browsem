@@ -224,6 +224,7 @@ val appModule = module {
             webAppRepository = get(),
             settingsRepository = get(),
             profileRepository = get(),
+            webAppShortcutManager = get(),
             runtime = get(),
             mediaWebExtension = get(),
             pageTranslationWebExtension = get(),

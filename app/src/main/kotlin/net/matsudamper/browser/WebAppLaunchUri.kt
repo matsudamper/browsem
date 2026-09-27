@@ -34,7 +34,11 @@ internal object WebAppLaunchUri {
     fun parse(uri: Uri?): WebAppLaunchTarget? {
         if (uri == null) return null
         if (uri.scheme != SCHEME) {
-            return WebAppLaunchTarget.Legacy(pageUrl = uri.toString(), profileId = ProfileId.DEFAULT)
+            return WebAppLaunchTarget.Legacy(
+                launchUri = uri.toString(),
+                pageUrl = uri.toString(),
+                profileId = ProfileId.DEFAULT,
+            )
         }
         val webAppIdValue = uri.getQueryParameter(QUERY_WEB_APP_ID)
         if (!webAppIdValue.isNullOrEmpty()) {
@@ -42,6 +46,7 @@ internal object WebAppLaunchUri {
         }
         val profileIdValue = uri.authority
         return WebAppLaunchTarget.Legacy(
+            launchUri = uri.toString(),
             pageUrl = uri.getQueryParameter(QUERY_PAGE_URL),
             profileId = if (profileIdValue.isNullOrEmpty()) ProfileId.DEFAULT else ProfileId(profileIdValue),
         )
@@ -51,7 +56,11 @@ internal object WebAppLaunchUri {
 internal sealed interface WebAppLaunchTarget {
     data class Registered(val webAppId: WebAppId) : WebAppLaunchTarget
 
+    /**
+     * @param launchUri 起動時に DB へ移行するため、ピン留めショートカットの照合に使う元の URI
+     */
     data class Legacy(
+        val launchUri: String,
         val pageUrl: String?,
         val profileId: ProfileId,
     ) : WebAppLaunchTarget

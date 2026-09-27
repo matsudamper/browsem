@@ -4,11 +4,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
@@ -26,6 +28,7 @@ internal class WebAppBrowserViewModel(
     private val webAppRepository: WebAppRepository,
     private val settingsRepository: SettingsRepository,
     private val profileRepository: ProfileRepository,
+    private val webAppShortcutManager: WebAppShortcutManager,
     runtime: GeckoRuntime,
     private val mediaWebExtension: MediaWebExtension,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
@@ -104,12 +107,15 @@ internal class WebAppBrowserViewModel(
         return when (val target = launchRequest.target) {
             null -> LaunchDestination.homepage()
 
-            is WebAppLaunchTarget.Legacy -> LaunchDestination(
-                pageUrl = ExternalInitialUrlPolicy.sanitize(target.pageUrl),
-                profileId = target.profileId,
-                webAppId = null,
-                restoredSessionState = null,
-            )
+            is WebAppLaunchTarget.Legacy -> {
+                val pageUrl = ExternalInitialUrlPolicy.sanitize(target.pageUrl)
+                LaunchDestination(
+                    pageUrl = pageUrl,
+                    profileId = target.profileId,
+                    webAppId = if (pageUrl == null) null else migrateLegacyShortcut(target, pageUrl),
+                    restoredSessionState = null,
+                )
+            }
 
             is WebAppLaunchTarget.Registered -> {
                 val webApp = webAppRepository.getWebApp(target.webAppId)
@@ -129,6 +135,23 @@ internal class WebAppBrowserViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * 旧形式のアイコンから起動したとき、DB に登録してアイコンを新形式へ書き換える。
+     * ピン留めされたアイコン以外（他アプリからの Intent 等）から起動したときは登録しない。
+     */
+    private suspend fun migrateLegacyShortcut(target: WebAppLaunchTarget.Legacy, pageUrl: String): WebAppId? {
+        val shortcut = withContext(Dispatchers.IO) {
+            webAppShortcutManager.findPinnedLegacyShortcut(target.launchUri)
+        } ?: return null
+        val webAppId = webAppRepository.addWebApp(
+            profileId = target.profileId,
+            startUrl = pageUrl,
+            title = shortcut.label,
+        )
+        webAppShortcutManager.migrateLegacyShortcut(shortcut, webAppId)
+        return webAppId
     }
 
     /**
