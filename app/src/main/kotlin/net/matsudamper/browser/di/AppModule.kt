@@ -66,6 +66,7 @@ import net.matsudamper.browser.screen.sitesettings.SiteSettingsListScreenViewMod
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenParams
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
+import net.matsudamper.browser.screen.webapp.WebAppsScreenViewModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
@@ -179,6 +180,13 @@ val appModule = module {
         AddressEditScreenViewModel(addressRepository = get(), addressId = addressId)
     }
     viewModel { CrashLogsScreenViewModel(get()) }
+    viewModel {
+        WebAppsScreenViewModel(
+            webAppRepository = get(),
+            profileRepository = get(),
+            webAppShortcutManager = get(),
+        )
+    }
     viewModel { (crashLogId: Long) ->
         CrashLogDetailScreenViewModel(crashLogRepository = get(), crashLogId = crashLogId)
     }

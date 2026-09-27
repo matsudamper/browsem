@@ -82,6 +82,7 @@ fun SettingsScreen(
     onOpenHistory: () -> Unit,
     onOpenAddresses: () -> Unit,
     onOpenSiteSettings: () -> Unit,
+    onOpenWebApps: () -> Unit,
     onOpenCrashLogs: () -> Unit,
     onOpenReleases: () -> Unit,
     onBack: () -> Unit,
@@ -533,6 +534,17 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
+            SettingSection(title = "ホームに追加したアプリ") {
+                TextButton(
+                    onClick = onOpenWebApps,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("アプリを管理")
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
             SettingSection(title = "履歴") {
                 TextButton(
                     onClick = onOpenHistory,
@@ -829,6 +841,7 @@ private fun SettingsScreenPreviewContent(
             onOpenHistory = {},
             onOpenAddresses = {},
             onOpenSiteSettings = {},
+            onOpenWebApps = {},
             onOpenCrashLogs = {},
             onOpenReleases = {},
             onBack = {},

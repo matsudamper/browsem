@@ -85,6 +85,7 @@ import net.matsudamper.browser.navigation.SiteFormInputPathNavContent
 import net.matsudamper.browser.navigation.SiteFormInputPathsNavContent
 import net.matsudamper.browser.navigation.SiteSettingsListNavContent
 import net.matsudamper.browser.navigation.SiteSettingsNavContent
+import net.matsudamper.browser.navigation.WebAppsNavContent
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
@@ -320,6 +321,10 @@ internal fun BrowserAppShell(
 
                 AppDestination.CrashLogs -> navEntry(key) {
                     CrashLogsNavContent(navActions = outerNavActions)
+                }
+
+                AppDestination.WebApps -> navEntry(key) {
+                    WebAppsNavContent(navActions = outerNavActions)
                 }
 
                 is AppDestination.CrashLogDetail -> navEntry(key) {

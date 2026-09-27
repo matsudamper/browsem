@@ -35,9 +35,11 @@ import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewMode
 import net.matsudamper.browser.screen.extensions.ExtensionSettingsScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.webapp.WebAppsScreenViewModel
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.settings.webapp.WebAppsRoute
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -116,6 +118,7 @@ internal fun SettingsNavContent(navActions: OuterNavActions) {
             onOpenHistory = { navActions.add(AppDestination.History) },
             onOpenAddresses = { navActions.add(AppDestination.Addresses) },
             onOpenSiteSettings = { navActions.add(AppDestination.SiteSettingsList) },
+            onOpenWebApps = { navActions.add(AppDestination.WebApps) },
             onOpenCrashLogs = { navActions.add(AppDestination.CrashLogs) },
             onOpenReleases = {
                 context.startActivity(
@@ -304,3 +307,13 @@ internal class PendingDownloadsOpenRequest(
     val requestId: MutableState<String?>,
     val consumeByWorkerIdEntries: MutableState<List<Pair<String, String>>>,
 )
+
+@Composable
+internal fun WebAppsNavContent(navActions: OuterNavActions) {
+    val webAppsViewModel: WebAppsScreenViewModel = koinViewModel()
+    val webAppsUiState by webAppsViewModel.uiState.collectAsState()
+    WebAppsRoute(
+        uiState = webAppsUiState,
+        onBack = { navActions.pop() },
+    )
+}

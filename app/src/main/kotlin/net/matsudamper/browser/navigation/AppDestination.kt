@@ -73,6 +73,9 @@ sealed interface AppDestination : NavKey, JavaSerializable {
     data object CrashLogs : AppDestination, JavaSerializable
 
     @Serializable
+    data object WebApps : AppDestination, JavaSerializable
+
+    @Serializable
     data class CrashLogDetail(val crashLogId: Long) : AppDestination, JavaSerializable
 
     @Serializable
