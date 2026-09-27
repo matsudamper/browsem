@@ -1618,7 +1618,11 @@ internal fun GeckoBrowserTab(
                     webAppRegistrationScope.launch {
                         val webAppId = onRegisterWebApp(addToHomeScreenState.url, label, profileId.value)
                         webAppShortcutManager.requestPin(
-                            webAppId = WebAppId(webAppId),
+                            launchInfo = WebAppLaunchInfo(
+                                webAppId = WebAppId(webAppId),
+                                startUrl = addToHomeScreenState.url,
+                                profileId = profileId,
+                            ),
                             label = label,
                             favicon = favicon,
                         )

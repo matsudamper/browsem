@@ -44,6 +44,19 @@ class WebAppRepository(context: Context) {
         return webAppId
     }
 
+    /** バックアップの復元などで DB から消えた登録を、ホームのアイコンが持つ情報から同じ ID で作り直す */
+    suspend fun restoreWebApp(webAppId: WebAppId, profileId: ProfileId, startUrl: String, title: String): WebAppData {
+        val entity = WebAppEntity(
+            webAppId = webAppId.value,
+            profileId = profileId.value,
+            startUrl = startUrl,
+            title = title,
+            createdAt = System.currentTimeMillis(),
+        )
+        dao.upsertWebApp(entity)
+        return entity.toWebAppData()
+    }
+
     suspend fun renameWebApp(webAppId: WebAppId, title: String) {
         dao.updateTitle(webAppId.value, title)
     }

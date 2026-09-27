@@ -23,7 +23,7 @@ internal class WebAppShortcutManager(
      * 専用の WebAppActivity で開き、ドキュメントタスクとして独立したRecentsエントリを持つ。
      * ピン留めがキャンセルされて残った登録は、ウェブアプリ一覧を開いたときに [pinnedWebAppIds] との突き合わせで消える。
      */
-    fun requestPin(webAppId: WebAppId, label: String, favicon: Bitmap?) {
+    fun requestPin(launchInfo: WebAppLaunchInfo, label: String, favicon: Bitmap?) {
         // documentLaunchMode のアプリピンは、ランチャーがアイコンの透過部分を黒で塗りつぶし、
         // 暗い favicon と合わさって真っ黒に見える。透過を不透明な白背景で埋めてから渡す。
         val icon = if (favicon != null) {
@@ -31,28 +31,28 @@ internal class WebAppShortcutManager(
         } else {
             IconCompat.createWithResource(context, R.mipmap.ic_launcher)
         }
-        val info = ShortcutInfoCompat.Builder(context, webAppId.toShortcutId())
+        val info = ShortcutInfoCompat.Builder(context, launchInfo.webAppId.toShortcutId())
             .setShortLabel(label.take(25))
             .setLongLabel(label)
             .setIcon(icon)
-            .setIntent(WebAppLaunchUri.createIntent(context, webAppId))
+            .setIntent(WebAppLaunchUri.createIntent(context, launchInfo))
             .build()
         ShortcutManagerCompat.requestPinShortcut(context, info, null)
     }
 
     /**
-     * 旧形式の起動 URI を持つピン留めショートカットを探す。
-     * 同じ URL を通常のショートカット（DeepLinkActivity 向け）としても追加していると data URI が一致するため、起動先でも絞る。
+     * 起動 URI が一致するピン留めショートカットを探す。
+     * 同じ URL を通常のショートカット（DeepLinkActivity 向け）としても追加していると旧形式の data URI が一致するため、起動先でも絞る。
      */
-    fun findPinnedLegacyShortcut(legacyLaunchUri: String): PinnedLegacyShortcut? {
+    fun findPinnedShortcut(launchUri: String): PinnedWebAppShortcut? {
         val shortcut = pinnedShortcuts().firstOrNull {
             it.intent.component?.className == WebAppActivity::class.java.name &&
-                it.intent.data?.toString() == legacyLaunchUri
+                it.intent.data?.toString() == launchUri
         }
         return if (shortcut == null) {
             null
         } else {
-            PinnedLegacyShortcut(
+            PinnedWebAppShortcut(
                 shortcutId = shortcut.id,
                 shortLabel = shortcut.shortLabel.toString(),
                 label = (shortcut.longLabel ?: shortcut.shortLabel).toString(),
@@ -66,10 +66,10 @@ internal class WebAppShortcutManager(
      * アイコンは指定しなければ既存のものが残る。
      * @return ランチャーがショートカットを書き換えたか。レート制限などで拒否されると false
      */
-    fun migrateLegacyShortcut(shortcut: PinnedLegacyShortcut, webAppId: WebAppId): Boolean {
+    fun migrateLegacyShortcut(shortcut: PinnedWebAppShortcut, launchInfo: WebAppLaunchInfo): Boolean {
         val info = ShortcutInfoCompat.Builder(context, shortcut.shortcutId)
             .setShortLabel(shortcut.shortLabel)
-            .setIntent(WebAppLaunchUri.createIntent(context, webAppId))
+            .setIntent(WebAppLaunchUri.createIntent(context, launchInfo))
             .build()
         return ShortcutManagerCompat.updateShortcuts(context, listOf(info))
     }
@@ -85,13 +85,13 @@ internal class WebAppShortcutManager(
      * @return ラベルの変更がレート制限などで拒否されると、元の名前のまま起動できなくなるのを避けるため無効化せず false を返す
      */
     fun disableShortcut(webAppId: WebAppId, title: String): Boolean {
-        val shortcutIds = pinnedShortcutIds(webAppId)
-        if (!updateLabel(shortcutIds = shortcutIds, webAppId = webAppId, label = "(削除済み) $title")) {
+        val shortcuts = pinnedShortcuts(webAppId)
+        if (!updateLabel(shortcuts = shortcuts, label = "(削除済み) $title")) {
             return false
         }
         ShortcutManagerCompat.disableShortcuts(
             context,
-            shortcutIds,
+            shortcuts.map { it.id },
             "削除されたアプリです。アイコンを長押ししてホームから削除してください",
         )
         return true
@@ -99,23 +99,21 @@ internal class WebAppShortcutManager(
 
     /** ホームのアイコンのラベルを変える。レート制限などでランチャーに拒否されると false */
     fun updateLabel(webAppId: WebAppId, label: String): Boolean {
-        return updateLabel(shortcutIds = pinnedShortcutIds(webAppId), webAppId = webAppId, label = label)
+        return updateLabel(shortcuts = pinnedShortcuts(webAppId), label = label)
     }
 
     // 旧形式から移行したショートカットは ID が旧形式のままなので、ID ではなく Intent から探す
-    private fun pinnedShortcutIds(webAppId: WebAppId): List<String> {
-        return pinnedShortcuts()
-            .filter { it.webAppIdOrNull() == webAppId }
-            .map { it.id }
+    private fun pinnedShortcuts(webAppId: WebAppId): List<ShortcutInfoCompat> {
+        return pinnedShortcuts().filter { it.webAppIdOrNull() == webAppId }
     }
 
-    /** アイコンは指定しなければ既存のものが残る */
-    private fun updateLabel(shortcutIds: List<String>, webAppId: WebAppId, label: String): Boolean {
-        val infos = shortcutIds.map { shortcutId ->
-            ShortcutInfoCompat.Builder(context, shortcutId)
+    /** Intent はそのまま引き継ぐ。アイコンは指定しなければ既存のものが残る */
+    private fun updateLabel(shortcuts: List<ShortcutInfoCompat>, label: String): Boolean {
+        val infos = shortcuts.map { shortcut ->
+            ShortcutInfoCompat.Builder(context, shortcut.id)
                 .setShortLabel(label.take(25))
                 .setLongLabel(label)
-                .setIntent(WebAppLaunchUri.createIntent(context, webAppId))
+                .setIntent(shortcut.intent)
                 .build()
         }
         return ShortcutManagerCompat.updateShortcuts(context, infos)
@@ -139,7 +137,7 @@ internal class WebAppShortcutManager(
     }
 }
 
-internal data class PinnedLegacyShortcut(
+internal data class PinnedWebAppShortcut(
     val shortcutId: String,
     val shortLabel: String,
     val label: String,

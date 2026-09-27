@@ -16,6 +16,7 @@ import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
+import net.matsudamper.browser.data.WebAppData
 import net.matsudamper.browser.data.WebAppId
 import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
@@ -70,11 +71,11 @@ internal class WebAppBrowserViewModel(
         // Activity再生成（フォルダブル開閉等）では ViewModel ごとタブが残るため、タブの作成はここで一度だけ行う。
         // タブの破棄は onCleared() で行う。
         viewModelScope.launch {
-            val migratedWebAppId = migrateLegacyShortcut(launchRequest.target)
-            if (migratedWebAppId == null) {
+            val migratedLaunchInfo = migrateLegacyShortcut(launchRequest.target)
+            if (migratedLaunchInfo == null) {
                 webAppTabFlow.value = createWebAppTab(launchRequest)
             } else {
-                eventHandler.trySend { it.relaunch(migratedWebAppId) }
+                eventHandler.trySend { it.relaunch(migratedLaunchInfo) }
             }
         }
     }
@@ -110,6 +111,7 @@ internal class WebAppBrowserViewModel(
      * 起動するページとプロファイルを解決する。
      * ページ URL は http/https の場合のみ採用し、それ以外は null にしてホームページにフォールバックさせる。
      * 削除済みのウェブアプリもホームページにフォールバックさせる。
+     * バックアップの復元などで登録だけ消えたアプリは、ホームのアイコンが残っていれば作り直す。
      */
     private suspend fun resolveLaunchDestination(launchRequest: WebAppLaunchRequest): LaunchDestination {
         return when (val target = launchRequest.target) {
@@ -123,7 +125,7 @@ internal class WebAppBrowserViewModel(
             )
 
             is WebAppLaunchTarget.Registered -> {
-                val webApp = webAppRepository.getWebApp(target.webAppId)
+                val webApp = webAppRepository.getWebApp(target.webAppId) ?: restoreFromPinnedShortcut(target)
                 if (webApp == null) {
                     LaunchDestination.homepage()
                 } else {
@@ -143,29 +145,47 @@ internal class WebAppBrowserViewModel(
     }
 
     /**
-     * 旧形式のアイコンから起動したとき、DB に登録してアイコンを新形式へ書き換え、移行後の ID を返す。
+     * 登録の無い ID で起動されたとき、同じ起動 URI のアイコンがホームにあれば、その情報から同じ ID で登録を作り直す。
+     * ピン留めされたアイコン以外（他アプリからの Intent 等）から起動したときは作らない。
+     */
+    private suspend fun restoreFromPinnedShortcut(target: WebAppLaunchTarget.Registered): WebAppData? {
+        val pageUrl = ExternalInitialUrlPolicy.sanitize(target.pageUrl) ?: return null
+        val shortcut = withContext(Dispatchers.IO) {
+            webAppShortcutManager.findPinnedShortcut(target.launchUri)
+        } ?: return null
+        return webAppRepository.restoreWebApp(
+            webAppId = target.webAppId,
+            profileId = target.profileId,
+            startUrl = pageUrl,
+            title = shortcut.label,
+        )
+    }
+
+    /**
+     * 旧形式のアイコンから起動したとき、DB に登録してアイコンを新形式へ書き換え、移行後の起動情報を返す。
      * ピン留めされたアイコン以外（他アプリからの Intent 等）から起動したときは登録しない。
      */
-    private suspend fun migrateLegacyShortcut(target: WebAppLaunchTarget?): WebAppId? {
+    private suspend fun migrateLegacyShortcut(target: WebAppLaunchTarget?): WebAppLaunchInfo? {
         if (target !is WebAppLaunchTarget.Legacy) return null
         val pageUrl = ExternalInitialUrlPolicy.sanitize(target.pageUrl) ?: return null
         val shortcut = withContext(Dispatchers.IO) {
-            webAppShortcutManager.findPinnedLegacyShortcut(target.launchUri)
+            webAppShortcutManager.findPinnedShortcut(target.launchUri)
         } ?: return null
         val webAppId = webAppRepository.addWebApp(
             profileId = target.profileId,
             startUrl = pageUrl,
             title = shortcut.label,
         )
+        val launchInfo = WebAppLaunchInfo(webAppId = webAppId, startUrl = pageUrl, profileId = target.profileId)
         // アイコンが旧形式のままだと次回の起動でまた別の登録を作ってしまうため、書き換えられなければ登録を取り消す
         val isMigrated = withContext(Dispatchers.IO) {
-            webAppShortcutManager.migrateLegacyShortcut(shortcut, webAppId)
+            webAppShortcutManager.migrateLegacyShortcut(shortcut, launchInfo)
         }
         if (!isMigrated) {
             webAppRepository.deleteWebApp(webAppId)
             return null
         }
-        return webAppId
+        return launchInfo
     }
 
     /**
@@ -184,7 +204,7 @@ internal class WebAppBrowserViewModel(
          * documentLaunchMode はタスクを起動 URI で照合するため、旧 URI のタスクのままだと
          * 書き換え後のアイコンから開いたときに同じアプリのタスクがもう一つできる。
          */
-        fun relaunch(webAppId: WebAppId)
+        fun relaunch(launchInfo: WebAppLaunchInfo)
     }
 
     private data class LaunchDestination(

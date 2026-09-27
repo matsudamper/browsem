@@ -29,7 +29,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.data.WebAppId
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
@@ -98,8 +97,8 @@ class WebAppActivity : ComponentActivity() {
                     LaunchedEffect(browserViewModel) {
                         browserViewModel.eventHandler.receiveAsFlow().collect { handler ->
                             handler(object : WebAppBrowserViewModel.Event {
-                                override fun relaunch(webAppId: WebAppId) {
-                                    startActivity(WebAppLaunchUri.createIntent(this@WebAppActivity, webAppId))
+                                override fun relaunch(launchInfo: WebAppLaunchInfo) {
+                                    startActivity(WebAppLaunchUri.createIntent(this@WebAppActivity, launchInfo))
                                     finishAndRemoveTask()
                                 }
                             })
