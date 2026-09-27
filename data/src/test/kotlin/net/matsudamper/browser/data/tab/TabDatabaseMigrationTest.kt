@@ -217,6 +217,35 @@ class TabDatabaseMigrationTest {
         }
     }
 
+    /** v6→v7: web_app テーブル追加。既存タブが保持されることを確認 */
+    @Test
+    fun migrate6To7() {
+        helper.createDatabase(TEST_DB, 6).apply {
+            execSQL(
+                "INSERT INTO tab_state " +
+                    "(tabId, url, title, openerTabId, themeColor, sortOrder, isSelected, groupId, pageZoomPercent, profileId) " +
+                    "VALUES ('t1', 'https://example.com', 'Example', '', NULL, 0, 1, 'g1', 100, 'default')",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB,
+            7,
+            true,
+            *TabDatabase.allMigrations(sessionStateDir()),
+        )
+
+        db.query("SELECT count(*) FROM tab_state").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(1, cursor.getInt(0))
+        }
+        db.query("SELECT count(*) FROM web_app").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+    }
+
     /** v1 から最新バージョンまで全マイグレーションを連続適用できることを確認 */
     @Test
     fun migrateAllFrom1() {

@@ -62,6 +62,7 @@ import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
+import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.data.history.HistoryRepository
@@ -85,6 +86,7 @@ import net.matsudamper.browser.navigation.SiteFormInputPathNavContent
 import net.matsudamper.browser.navigation.SiteFormInputPathsNavContent
 import net.matsudamper.browser.navigation.SiteSettingsListNavContent
 import net.matsudamper.browser.navigation.SiteSettingsNavContent
+import net.matsudamper.browser.navigation.WebAppsNavContent
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
@@ -322,6 +324,10 @@ internal fun BrowserAppShell(
                     CrashLogsNavContent(navActions = outerNavActions)
                 }
 
+                AppDestination.WebApps -> navEntry(key) {
+                    WebAppsNavContent(navActions = outerNavActions)
+                }
+
                 is AppDestination.CrashLogDetail -> navEntry(key) {
                     CrashLogDetailNavContent(key = key, navActions = outerNavActions)
                 }
@@ -441,6 +447,7 @@ private fun MainBrowserContent(
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
     val webSuggestionRepository: WebSuggestionRepository = koinInject()
+    val webAppRepository: WebAppRepository = koinInject()
     val tabGroupRepository: TabGroupRepository = koinInject()
     val profileRepository: ProfileRepository = koinInject()
 
@@ -582,6 +589,7 @@ private fun MainBrowserContent(
                             historyRepository = historyRepository,
                             settingsRepository = settingsRepository,
                             webSuggestionRepository = webSuggestionRepository,
+                            webAppRepository = webAppRepository,
                             tabGroupRepository = tabGroupRepository,
                             profileRepository = profileRepository,
                             browserTabsFlow = browserTabsFlow,
@@ -741,6 +749,7 @@ private fun MainBrowserContent(
                                     externalTabInitialUrl = browserScreenUiState.externalTabInitialUrl,
                                     onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
                                     onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
+                                    onRegisterWebApp = browserScreenUiState.callbacks::onRegisterWebApp,
                                     urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
                                     onUrlInputChanged = browserScreenUiState.callbacks::onUrlInputChanged,
                                     onReevaluateOpenerRetention = {

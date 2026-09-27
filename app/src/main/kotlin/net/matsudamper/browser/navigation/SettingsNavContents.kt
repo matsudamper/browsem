@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -35,9 +36,11 @@ import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewMode
 import net.matsudamper.browser.screen.extensions.ExtensionSettingsScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.webapp.WebAppsScreenViewModel
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.settings.webapp.WebAppsRoute
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -116,6 +119,7 @@ internal fun SettingsNavContent(navActions: OuterNavActions) {
             onOpenHistory = { navActions.add(AppDestination.History) },
             onOpenAddresses = { navActions.add(AppDestination.Addresses) },
             onOpenSiteSettings = { navActions.add(AppDestination.SiteSettingsList) },
+            onOpenWebApps = { navActions.add(AppDestination.WebApps) },
             onOpenCrashLogs = { navActions.add(AppDestination.CrashLogs) },
             onOpenReleases = {
                 context.startActivity(
@@ -304,3 +308,27 @@ internal class PendingDownloadsOpenRequest(
     val requestId: MutableState<String?>,
     val consumeByWorkerIdEntries: MutableState<List<Pair<String, String>>>,
 )
+
+@Composable
+internal fun WebAppsNavContent(navActions: OuterNavActions) {
+    val context = LocalContext.current
+    val webAppsViewModel: WebAppsScreenViewModel = koinViewModel()
+    val webAppsUiState by webAppsViewModel.uiState.collectAsState()
+    LaunchedEffect(webAppsViewModel) {
+        webAppsViewModel.eventHandler.receiveAsFlow().collect { handler ->
+            handler(object : WebAppsScreenViewModel.Event {
+                override fun onRenameFailed() {
+                    Toast.makeText(context, "ホームのアイコンの名前を変更できませんでした。時間をおいて再度お試しください", Toast.LENGTH_SHORT).show()
+                }
+
+                override fun onDeleteFailed() {
+                    Toast.makeText(context, "ホームのアイコンを更新できなかったため削除を中止しました。時間をおいて再度お試しください", Toast.LENGTH_SHORT).show()
+                }
+            })
+        }
+    }
+    WebAppsRoute(
+        uiState = webAppsUiState,
+        onBack = { navActions.pop() },
+    )
+}

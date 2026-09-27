@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
@@ -20,12 +21,14 @@ class CustomTabScreenViewModel(
     historyRepository: HistoryRepository,
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
+    webAppRepository: WebAppRepository,
 ) : ViewModel() {
     private val urlBarSuggestionsStateOwner = UrlBarSuggestionsStateOwner(
         scope = viewModelScope,
         historyRepository = historyRepository,
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
+        webAppRepository = webAppRepository,
         // カスタムタブ・WebApp のセッションは contextId を持たないデフォルトプロファイルで開く
         activeProfileIdFlow = flowOf(ProfileId.DEFAULT),
     )

@@ -116,6 +116,7 @@ class BrowserScreenViewModelTest {
             historyRepository = historyRepository,
             settingsRepository = settingsRepository,
             webSuggestionRepository = webSuggestionRepository,
+            webAppRepository = mockk(relaxed = true),
             tabGroupRepository = tabGroupRepository,
             profileRepository = profileRepository,
             browserTabsFlow = browserTabsFlow,

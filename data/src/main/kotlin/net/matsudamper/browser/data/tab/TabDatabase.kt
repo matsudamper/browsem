@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
 
 @Database(
-    entities = [TabStateEntity::class, TabGroupEntity::class, ProfileEntity::class],
+    entities = [TabStateEntity::class, TabGroupEntity::class, ProfileEntity::class, WebAppEntity::class],
     version = TabDatabase.SCHEMA_VERSION,
     exportSchema = true,
 )
@@ -17,10 +17,11 @@ abstract class TabDatabase : RoomDatabase() {
     abstract fun tabDao(): TabDao
     abstract fun tabGroupDao(): TabGroupDao
     abstract fun profileDao(): ProfileDao
+    abstract fun webAppDao(): WebAppDao
 
     companion object {
         /** Room の @Database version と連動。バックアップ互換性チェックでも参照する */
-        const val SCHEMA_VERSION: Int = 6
+        const val SCHEMA_VERSION: Int = 7
 
         @Volatile
         private var instance: TabDatabase? = null
@@ -126,6 +127,17 @@ abstract class TabDatabase : RoomDatabase() {
             }
         }
 
+        /** v6→v7: web_app テーブル追加 */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `web_app` (`webAppId` TEXT NOT NULL, `profileId` TEXT NOT NULL, " +
+                        "`startUrl` TEXT NOT NULL, `title` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`webAppId`))",
+                )
+            }
+        }
+
         /** 全マイグレーション。getInstance とマイグレーションテストで共用する */
         internal fun allMigrations(sessionStateDir: File): Array<Migration> = arrayOf(
             MIGRATION_1_2,
@@ -133,6 +145,7 @@ abstract class TabDatabase : RoomDatabase() {
             createMigration3To4(sessionStateDir),
             MIGRATION_4_5,
             MIGRATION_5_6,
+            MIGRATION_6_7,
         )
 
         fun getInstance(context: Context): TabDatabase {

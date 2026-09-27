@@ -22,6 +22,7 @@ import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupRepository
+import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
@@ -33,6 +34,7 @@ class BrowserScreenViewModel(
     historyRepository: HistoryRepository,
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
+    webAppRepository: WebAppRepository,
     tabGroupRepository: TabGroupRepository,
     profileRepository: ProfileRepository,
     browserTabsFlow: Flow<List<BrowserTab>>,
@@ -47,6 +49,7 @@ class BrowserScreenViewModel(
         historyRepository = historyRepository,
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
+        webAppRepository = webAppRepository,
         activeProfileIdFlow = profileRepository.observeProfiles().map { profiles ->
             profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
         },

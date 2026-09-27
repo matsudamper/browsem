@@ -18,7 +18,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
@@ -27,13 +26,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.net.URI
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.ProfileId
-import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.history.HistoryRepository
-import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
@@ -43,6 +39,7 @@ import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import org.mozilla.geckoview.GeckoRuntime
 
 /**
@@ -56,7 +53,6 @@ class WebAppActivity : ComponentActivity() {
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
-    private val profileRepository: ProfileRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -80,9 +76,12 @@ class WebAppActivity : ComponentActivity() {
             geckoRuntime = initialized
         }
 
-        val launchTarget = resolveLaunchTarget()
-        val initialUrl = launchTarget?.pageUrl
-        val profileId = launchTarget?.profileId ?: ProfileId.DEFAULT
+        // savedInstanceState があるのは、プロセス終了後に Recents から Activity が再生成されたとき。
+        // このときだけ前回のページ状態を復元し、アイコンから新しく起動したときは起動ページから開く。
+        val launchRequest = WebAppLaunchRequest(
+            target = if (intent.action == Intent.ACTION_VIEW) WebAppLaunchUri.parse(intent.data) else null,
+            restoresSession = savedInstanceState != null,
+        )
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
@@ -94,7 +93,17 @@ class WebAppActivity : ComponentActivity() {
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
                 WebAuthnCompatStartupGate(runtime = runtime) {
-                    val browserViewModel: WebAppBrowserViewModel = koinViewModel()
+                    val browserViewModel: WebAppBrowserViewModel = koinViewModel { parametersOf(launchRequest) }
+                    LaunchedEffect(browserViewModel) {
+                        browserViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                            handler(object : WebAppBrowserViewModel.Event {
+                                override fun relaunch(launchInfo: WebAppLaunchInfo) {
+                                    startActivity(WebAppLaunchUri.createIntent(this@WebAppActivity, launchInfo))
+                                    finishAndRemoveTask()
+                                }
+                            })
+                        }
+                    }
                     val browserTabController = browserViewModel.browserTabController
                     val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
                     val reevaluateOpenerRetention: () -> Unit = {
@@ -105,8 +114,6 @@ class WebAppActivity : ComponentActivity() {
                             )
                         }
                     }
-                    val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
-                    val webAppPinnedHost = runCatching { URI(resolvedInitialUrl).host }.getOrNull()
                     val webAppScreenViewModel: WebAppScreenViewModel = koinViewModel()
                     val uiState by webAppScreenViewModel.uiState.collectAsState()
 
@@ -115,23 +122,14 @@ class WebAppActivity : ComponentActivity() {
                         browserSessionLifecycleController = browserSessionLifecycleController,
                         runtime = runtime,
                     ) { outerNavActions ->
-                        val browserTab by produceState<BrowserTab?>(
-                            initialValue = null,
-                            key1 = browserTabController,
-                            key2 = resolvedInitialUrl,
-                        ) {
-                            // Activity再生成（フォルダブル開閉等）時はViewModelのcontrollerに既存タブが残っているため再利用する。
-                            // タブの破棄はViewModelの onCleared() で行う。
-                            value = browserTabController.tabs.firstOrNull()
-                                ?: browserTabController.createAndAppendTab(
-                                    initialUrl = resolvedInitialUrl,
-                                    profileId = resolveRegisteredProfileId(profileId),
-                                )
-                        }
-                        val activeTab = browserTab
-                        if (activeTab == null) {
+                        val webAppTab by browserViewModel.webAppTab.collectAsState()
+                        val currentWebAppTab = webAppTab
+                        if (currentWebAppTab == null) {
                             BrowserContentLoadingIndicator()
                         } else {
+                            val activeTab = currentWebAppTab.browserTab
+                            val startUrl = currentWebAppTab.startUrl
+                            val webAppPinnedHost = runCatching { URI(startUrl).host }.getOrNull()
                             val taskTitle = activeTab.title
                             val taskFavicon = activeTab.faviconBitmap
                             LaunchedEffect(taskTitle, taskFavicon) {
@@ -144,7 +142,7 @@ class WebAppActivity : ComponentActivity() {
                             GeckoBrowserTab(
                                 modifier = Modifier.fillMaxSize(),
                                 browserTab = activeTab,
-                                homepageUrl = resolvedInitialUrl,
+                                homepageUrl = startUrl,
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
                                 translationProvider = browserSettings.translationProvider,
                                 geminiNanoModelKey = browserSettings.geminiNanoModelKey,
@@ -189,6 +187,7 @@ class WebAppActivity : ComponentActivity() {
                                 onToolbarDragEnd = {},
                                 onHistoryRecord = uiState.callbacks::onHistoryRecord,
                                 onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
+                                onRegisterWebApp = uiState.callbacks::onRegisterWebApp,
                                 urlBarSuggestions = uiState.urlBarSuggestions,
                                 onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
                                 onReevaluateOpenerRetention = reevaluateOpenerRetention,
@@ -279,26 +278,6 @@ class WebAppActivity : ComponentActivity() {
         if (browserTab.currentUrl == pageUrl && browserTab.faviconBitmap == null) {
             browserTab.faviconBitmap = fetched
         }
-    }
-
-    /**
-     * Intentのデータから起動するページとプロファイルを取り出す。
-     * ページ URL は http/https の場合のみ採用し、それ以外は null にしてホームページにフォールバックさせる。
-     */
-    private fun resolveLaunchTarget(): WebAppLaunchTarget? {
-        if (intent.action != Intent.ACTION_VIEW) return null
-        val launchTarget = WebAppLaunchUri.parse(intent.data) ?: return null
-        return launchTarget.copy(pageUrl = ExternalInitialUrlPolicy.sanitize(launchTarget.pageUrl))
-    }
-
-    /**
-     * exported な Activity は他アプリから任意のプロファイル ID を渡され得るうえ、削除済みプロファイルのアプリも残るため、
-     * 登録済みでないプロファイルはデフォルトプロファイルにフォールバックさせる。
-     */
-    private suspend fun resolveRegisteredProfileId(profileId: ProfileId): ProfileId {
-        if (profileId == ProfileId.DEFAULT) return profileId
-        val isRegistered = profileRepository.observeProfiles().first().any { it.id == profileId }
-        return if (isRegistered) profileId else ProfileId.DEFAULT
     }
 
     /**
