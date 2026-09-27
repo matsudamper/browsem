@@ -59,8 +59,12 @@ class WebAppRepository(context: Context) {
         }
     }
 
-    /** 空の sessionState はファイルを削除する */
+    /**
+     * 空の sessionState はファイルを削除する。
+     * 削除済みのアプリのタスクが残っていても、ファイルを作り直して孤立させないよう登録が無ければ保存しない。
+     */
     suspend fun saveSessionState(webAppId: WebAppId, sessionState: String) {
+        if (dao.getWebApp(webAppId.value) == null) return
         withContext(Dispatchers.IO) {
             val file = sessionStateFile(webAppId)
             if (sessionState.isBlank()) {
