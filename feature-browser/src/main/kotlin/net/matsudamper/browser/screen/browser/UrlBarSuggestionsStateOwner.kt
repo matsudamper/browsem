@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
@@ -30,6 +31,7 @@ internal class UrlBarSuggestionsStateOwner(
     private val historyRepository: HistoryRepository,
     private val settingsRepository: SettingsRepository,
     private val webSuggestionRepository: WebSuggestionRepository,
+    private val webAppRepository: WebAppRepository,
     /** サジェストに使う履歴のプロファイル。表示中プロファイルの履歴だけを候補に出す */
     private val activeProfileIdFlow: Flow<ProfileId>,
 ) {
@@ -48,6 +50,14 @@ internal class UrlBarSuggestionsStateOwner(
 
         override fun onUrlInputChanged(query: String) {
             suggestionQuery.value = query
+        }
+
+        override suspend fun onRegisterWebApp(url: String, title: String, profileId: String): String {
+            return webAppRepository.addWebApp(
+                profileId = ProfileId(profileId),
+                startUrl = url,
+                title = title,
+            ).value
         }
     }
 

@@ -5,61 +5,46 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.widget.Toast
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import kotlin.math.max
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.WebAppId
-import net.matsudamper.browser.data.WebAppRepository
 
 /**
  * ホームに「アプリとして追加」したウェブアプリのピン留めショートカットを管理する。
  */
 internal class WebAppShortcutManager(
     private val context: Context,
-    private val webAppRepository: WebAppRepository,
-    private val applicationScope: CoroutineScope,
 ) {
+    fun isPinSupported(): Boolean = ShortcutManagerCompat.isRequestPinShortcutSupported(context)
+
     /**
-     * ウェブアプリを登録してホームにピン留めする。
+     * 登録済みのウェブアプリをホームにピン留めする。
      * 専用の WebAppActivity で開き、ドキュメントタスクとして独立したRecentsエントリを持つ。
      * ピン留めがキャンセルされて残った登録は、ウェブアプリ一覧を開いたときに [pinnedWebAppIds] との突き合わせで消える。
      */
-    fun isPinSupported(): Boolean = ShortcutManagerCompat.isRequestPinShortcutSupported(context)
-
-    fun addToHome(url: String, title: String, favicon: Bitmap?, profileId: ProfileId) {
-        if (!isPinSupported()) {
-            Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
-            return
+    fun requestPin(webAppId: WebAppId, label: String, favicon: Bitmap?) {
+        // 独立した Recents エントリは WebAppActivity の documentLaunchMode="intoExisting"
+        // (= FLAG_ACTIVITY_NEW_DOCUMENT 相当) が保証するため、ピン Intent 側にフラグは不要。
+        val intent = Intent(context, WebAppActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = WebAppLaunchUri.create(webAppId)
         }
-        applicationScope.launch {
-            val label = title.ifBlank { url }
-            val webAppId = webAppRepository.addWebApp(profileId = profileId, startUrl = url, title = label)
-            // 独立した Recents エントリは WebAppActivity の documentLaunchMode="intoExisting"
-            // (= FLAG_ACTIVITY_NEW_DOCUMENT 相当) が保証するため、ピン Intent 側にフラグは不要。
-            val intent = Intent(context, WebAppActivity::class.java).apply {
-                action = Intent.ACTION_VIEW
-                data = WebAppLaunchUri.create(webAppId)
-            }
-            // documentLaunchMode のアプリピンは、ランチャーがアイコンの透過部分を黒で塗りつぶし、
-            // 暗い favicon と合わさって真っ黒に見える。透過を不透明な白背景で埋めてから渡す。
-            val icon = if (favicon != null) {
-                IconCompat.createWithBitmap(favicon.toOpaqueSquareIcon())
-            } else {
-                IconCompat.createWithResource(context, R.mipmap.ic_launcher)
-            }
-            val info = ShortcutInfoCompat.Builder(context, webAppId.toShortcutId())
-                .setShortLabel(label.take(25))
-                .setLongLabel(label)
-                .setIcon(icon)
-                .setIntent(intent)
-                .build()
-            ShortcutManagerCompat.requestPinShortcut(context, info, null)
+        // documentLaunchMode のアプリピンは、ランチャーがアイコンの透過部分を黒で塗りつぶし、
+        // 暗い favicon と合わさって真っ黒に見える。透過を不透明な白背景で埋めてから渡す。
+        val icon = if (favicon != null) {
+            IconCompat.createWithBitmap(favicon.toOpaqueSquareIcon())
+        } else {
+            IconCompat.createWithResource(context, R.mipmap.ic_launcher)
         }
+        val info = ShortcutInfoCompat.Builder(context, webAppId.toShortcutId())
+            .setShortLabel(label.take(25))
+            .setLongLabel(label)
+            .setIcon(icon)
+            .setIntent(intent)
+            .build()
+        ShortcutManagerCompat.requestPinShortcut(context, info, null)
     }
 
     /** ホームにピン留めされたままのウェブアプリ。DB 管理導入前に追加されたアプリは含まない */

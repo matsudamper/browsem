@@ -45,5 +45,8 @@ data class BrowserScreenUiState(
         suspend fun onHistoryRecord(url: String, title: String, profileId: String): Long
         suspend fun onHistoryTitleUpdate(id: Long, title: String)
         fun onUrlInputChanged(query: String)
+
+        /** ホームに「アプリとして追加」するウェブアプリを登録し、ショートカットに持たせる ID を返す */
+        suspend fun onRegisterWebApp(url: String, title: String, profileId: String): String
     }
 }

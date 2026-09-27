@@ -16,6 +16,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewTreeObserver
+import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -57,6 +58,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -85,9 +87,11 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.WebAppId
 import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
@@ -153,6 +157,7 @@ internal fun GeckoBrowserTab(
     onToolbarDragEnd: () -> Unit,
     onHistoryRecord: (suspend (url: String, title: String, profileId: String) -> Long)?,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)?,
+    onRegisterWebApp: suspend (url: String, title: String, profileId: String) -> String,
     urlBarSuggestions: UrlBarSuggestionsUiState,
     onUrlInputChanged: ((String) -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
@@ -163,6 +168,7 @@ internal fun GeckoBrowserTab(
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val addressRepository: AddressRepository = koinInject()
     val webAppShortcutManager: WebAppShortcutManager = koinInject()
+    val webAppRegistrationScope = rememberCoroutineScope()
     val formInputRepository: FormInputRepository = koinInject()
     val addressAutofillCoordinator: AddressAutofillCoordinator = koinInject()
     val formInputAutofillCoordinator: FormInputAutofillCoordinator = koinInject()
@@ -1543,12 +1549,21 @@ internal fun GeckoBrowserTab(
             favicon = addToHomeScreenState.favicon,
             isIconLoading = addToHomeScreenState.isIconLoading,
             onAddWebApp = { title ->
-                webAppShortcutManager.addToHome(
-                    url = addToHomeScreenState.url,
-                    title = title,
-                    favicon = addToHomeScreenState.favicon,
-                    profileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId),
-                )
+                if (webAppShortcutManager.isPinSupported()) {
+                    val label = title.ifBlank { addToHomeScreenState.url }
+                    val favicon = addToHomeScreenState.favicon
+                    val profileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId)
+                    webAppRegistrationScope.launch {
+                        val webAppId = onRegisterWebApp(addToHomeScreenState.url, label, profileId.value)
+                        webAppShortcutManager.requestPin(
+                            webAppId = WebAppId(webAppId),
+                            label = label,
+                            favicon = favicon,
+                        )
+                    }
+                } else {
+                    Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
+                }
             },
             onDismiss = state::dismissAddToHomeScreen,
         )

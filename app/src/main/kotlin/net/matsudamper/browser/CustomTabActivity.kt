@@ -419,6 +419,7 @@ private fun CustomTabScreen(
         onToolbarDragEnd = {},
         onHistoryRecord = uiState.callbacks::onHistoryRecord,
         onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
+        onRegisterWebApp = uiState.callbacks::onRegisterWebApp,
         urlBarSuggestions = uiState.urlBarSuggestions,
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
         onReevaluateOpenerRetention = reevaluateOpenerRetention,

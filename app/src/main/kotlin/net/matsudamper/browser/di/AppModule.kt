@@ -137,7 +137,7 @@ val appModule = module {
     single { ExtensionRuntimeCoordinator(get()) }
     // eTLD+1 (基底ドメイン) の算出に使用する Public Suffix List。初回ロードを共有するため single
     single { PublicSuffixList(androidContext()) }
-    single { WebAppShortcutManager(context = androidContext(), webAppRepository = get(), applicationScope = get()) }
+    single { WebAppShortcutManager(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }
     viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     // 画面の ViewModel は生成を Koin に集約し、画面側は koinViewModel() で解決する
@@ -216,7 +216,7 @@ val appModule = module {
             playingTabIds = get<MediaWebExtension>().playingTabIds,
         )
     }
-    viewModel { CustomTabScreenViewModel(get(), get(), get()) }
+    viewModel { CustomTabScreenViewModel(get(), get(), get(), get()) }
     viewModel { (launchRequest: WebAppLaunchRequest) ->
         WebAppBrowserViewModel(
             launchRequest = launchRequest,
@@ -230,6 +230,6 @@ val appModule = module {
             applicationScope = get(),
         )
     }
-    viewModel { WebAppScreenViewModel(get(), get(), get()) }
+    viewModel { WebAppScreenViewModel(get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }
