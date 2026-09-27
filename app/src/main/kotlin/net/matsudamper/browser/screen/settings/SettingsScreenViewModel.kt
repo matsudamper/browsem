@@ -15,6 +15,7 @@ import net.matsudamper.browser.BrowserSessionRegistry
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
@@ -87,6 +88,22 @@ internal class SettingsScreenViewModel(
                     TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
                 )
             }
+        }
+
+        override fun selectGeminiNanoSemanticSearchModel(modelKey: String) {
+            if (viewModelStateFlow.value.geminiNanoModels.none { it.key == modelKey }) return
+            viewModelScope.launch {
+                settingsRepository.setGeminiNanoSemanticSearchModelKey(modelKey)
+                settingsRepository.setSemanticSearchProvider(SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO)
+            }
+        }
+
+        override fun setSemanticSearchProvider(provider: SemanticSearchProvider) {
+            viewModelScope.launch { settingsRepository.setSemanticSearchProvider(provider) }
+        }
+
+        override fun setGoogleAiStudioApiKey(apiKey: String) {
+            viewModelScope.launch { settingsRepository.setGoogleAiStudioApiKey(apiKey) }
         }
 
         override fun setEnableThirdPartyCa(enabled: Boolean) {
@@ -227,24 +244,39 @@ internal class SettingsScreenViewModel(
                         mockLocationInputInitialized = true
                         return@collectLatest
                     }
-                    if (
-                        state.geminiNanoModelsLoaded &&
-                        settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO
-                    ) {
+                    if (state.geminiNanoModelsLoaded) {
                         if (state.geminiNanoModels.isEmpty()) {
-                            settingsRepository.setTranslationProvider(
-                                TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                            if (settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO) {
+                                settingsRepository.setTranslationProvider(
+                                    TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                                )
+                                return@collectLatest
+                            }
+                            if (settings.semanticSearchProvider == SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO) {
+                                settingsRepository.setSemanticSearchProvider(
+                                    SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST,
+                                )
+                                return@collectLatest
+                            }
+                        } else {
+                            if (settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO) {
+                                val resolvedModelKey = GeminiNanoModel.resolveKey(
+                                    models = state.geminiNanoModels,
+                                    savedKey = settings.geminiNanoModelKey,
+                                )
+                                if (resolvedModelKey != settings.geminiNanoModelKey) {
+                                    settingsRepository.setGeminiNanoModelKey(resolvedModelKey)
+                                    return@collectLatest
+                                }
+                            }
+                            val resolvedSemanticKey = GeminiNanoModel.resolveKey(
+                                models = state.geminiNanoModels,
+                                savedKey = settings.geminiNanoSemanticSearchModelKey,
                             )
-                            return@collectLatest
-                        }
-                        val resolvedModelKey = GeminiNanoModel.resolveKey(
-                            models = state.geminiNanoModels,
-                            savedKey = settings.geminiNanoModelKey,
-                        )
-                        // 一覧にないキーのままだと、設定画面でどの候補も選択されていない状態になる
-                        if (resolvedModelKey != settings.geminiNanoModelKey) {
-                            settingsRepository.setGeminiNanoModelKey(resolvedModelKey)
-                            return@collectLatest
+                            if (resolvedSemanticKey != settings.geminiNanoSemanticSearchModelKey) {
+                                settingsRepository.setGeminiNanoSemanticSearchModelKey(resolvedSemanticKey)
+                                return@collectLatest
+                            }
                         }
                     }
                     uiStateFlow.update {
@@ -352,6 +384,9 @@ private fun BrowserSettings.toUiState(
         translationProvider = translationProvider,
         geminiNanoModels = geminiNanoModels,
         selectedGeminiNanoModelKey = geminiNanoModelKey,
+        selectedGeminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
+        semanticSearchProvider = semanticSearchProvider,
+        googleAiStudioApiKey = googleAiStudioApiKey,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),

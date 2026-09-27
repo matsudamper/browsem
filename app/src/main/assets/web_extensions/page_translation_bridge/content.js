@@ -27,7 +27,14 @@
     'TEXTAREA',
   ]);
 
+  const SEMANTIC_HIGHLIGHT_CLASS = '__semantic_search_highlight';
+  const SEMANTIC_CURRENT_CLASS = '__semantic_search_current';
+  const SEMANTIC_HIGHLIGHT_STYLE = 'background: #b3e5fc; color: #000000; border-radius: 2px; padding: 0;';
+  const SEMANTIC_CURRENT_STYLE = 'background: #0288d1; color: #ffffff; border-radius: 2px; padding: 0;';
+
   const documentId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  let semanticHighlights = [];
+  let semanticFocusIndex = -1;
 
   let port = null;
   let observer = null;
@@ -442,11 +449,152 @@
     }
   }
 
-  function startTranslation(requestId) {
-    stopObserver();
-    restoreAll();
-    resetEntries();
+  function toStringArray(value) {
+    if (Array.isArray(value)) {
+      return value.map(function (item) {
+        return String(item);
+      });
+    }
+    if (value && typeof value === 'object') {
+      return Object.keys(value)
+        .sort(function (a, b) {
+          return Number(a) - Number(b);
+        })
+        .map(function (key) {
+          return String(value[key]);
+        });
+    }
+    return [];
+  }
 
+  function clearSemanticHighlights() {
+    document.querySelectorAll('.' + SEMANTIC_HIGHLIGHT_CLASS).forEach(function (el) {
+      const parent = el.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(el.textContent || ''), el);
+      parent.normalize();
+    });
+    document.querySelectorAll('[data-semantic-search-wrap="1"]').forEach(function (el) {
+      el.removeAttribute('data-semantic-search-wrap');
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+    });
+    semanticHighlights = [];
+    semanticFocusIndex = -1;
+  }
+
+  function focusSemanticHighlight(index) {
+    if (semanticHighlights.length === 0) return;
+    semanticHighlights.forEach(function (el, i) {
+      el.className = SEMANTIC_HIGHLIGHT_CLASS;
+      el.setAttribute('style', SEMANTIC_HIGHLIGHT_STYLE);
+    });
+    const current = semanticHighlights[index];
+    if (!current) return;
+    current.className = SEMANTIC_HIGHLIGHT_CLASS + ' ' + SEMANTIC_CURRENT_CLASS;
+    current.setAttribute('style', SEMANTIC_CURRENT_STYLE);
+    current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function wrapTextNode(node) {
+    const parent = node.parentNode;
+    if (!parent) return null;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const mark = document.createElement('mark');
+      mark.className = SEMANTIC_HIGHLIGHT_CLASS;
+      mark.setAttribute('style', SEMANTIC_HIGHLIGHT_STYLE);
+      range.surroundContents(mark);
+      return mark;
+    } catch (error) {
+      if (parent.nodeType === 1) {
+        parent.setAttribute('data-semantic-search-wrap', '1');
+        parent.style.outline = '2px solid #0288d1';
+        parent.style.outlineOffset = '1px';
+        return parent;
+      }
+      return null;
+    }
+  }
+
+  function highlightEntryById(id) {
+    const entry = entries.get(id);
+    if (!entry) return false;
+    if (entry.kind === 'text' && entry.node && entry.node.isConnected) {
+      const mark = wrapTextNode(entry.node);
+      if (mark) {
+        semanticHighlights.push(mark);
+        return true;
+      }
+      return false;
+    }
+    if (entry.kind === 'attribute' && entry.element && entry.element.isConnected) {
+      entry.element.setAttribute('data-semantic-search-wrap', '1');
+      entry.element.style.outline = '2px solid #0288d1';
+      entry.element.style.outlineOffset = '1px';
+      semanticHighlights.push(entry.element);
+      return true;
+    }
+    return false;
+  }
+
+  function highlightBySnippet(snippet) {
+    const target = sourceText(snippet);
+    if (!target) return false;
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: function (node) {
+          const parent = node.parentElement;
+          if (!parent || isExcludedElement(parent)) return NodeFilter.FILTER_REJECT;
+          if (parent.closest && parent.closest('mark.' + SEMANTIC_HIGHLIGHT_CLASS)) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          const text = sourceText(node.nodeValue || '');
+          if (!text) return NodeFilter.FILTER_REJECT;
+          if (text !== target) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      },
+    );
+    let node = walker.nextNode();
+    while (node) {
+      if (node.isConnected) {
+        const mark = wrapTextNode(node);
+        if (mark) {
+          semanticHighlights.push(mark);
+          return true;
+        }
+      }
+      node = walker.nextNode();
+    }
+    return false;
+  }
+
+  function highlightSegmentMatches(segmentIds, segmentTexts, focusIndex) {
+    clearSemanticHighlights();
+    const ids = toStringArray(segmentIds);
+    const texts = toStringArray(segmentTexts);
+    const count = Math.max(ids.length, texts.length);
+    if (count === 0) return;
+
+    for (let index = 0; index < count; index += 1) {
+      const id = ids[index] || '';
+      const text = texts[index] || '';
+      if (id && highlightEntryById(id)) continue;
+      if (text && highlightBySnippet(text)) continue;
+    }
+
+    if (semanticHighlights.length > 0) {
+      const safeIndex = Math.max(0, Math.min(focusIndex, semanticHighlights.length - 1));
+      semanticFocusIndex = safeIndex;
+      focusSemanticHighlight(safeIndex);
+    }
+  }
+
+  function runSegmentScan(requestId) {
     postMessage({
       action: 'scanStart',
       requestId: requestId,
@@ -460,14 +608,13 @@
       collectRoot(document.body, segments);
       segments = sortByViewportDistance(segments);
     } catch (error) {
-      // 収集が途中で落ちると scanComplete が送られず、アプリ側は待ち続けてしまう
       postMessage({
         action: 'scanFailed',
         requestId: requestId,
         documentId: documentId,
         reason: String((error && error.message) || error),
       });
-      return;
+      return null;
     }
     sendSegmentBatches('scanSegments', requestId, segments);
     postMessage({
@@ -476,8 +623,28 @@
       documentId: documentId,
       segmentCount: segments.length,
     });
+    return segments;
+  }
+
+  function startTranslation(requestId) {
+    stopObserver();
+    restoreAll();
+    clearSemanticHighlights();
+    resetEntries();
+
+    const segments = runSegmentScan(requestId);
+    if (segments === null) return;
     translationActive = true;
     startObserver();
+  }
+
+  function startSemanticScan(requestId) {
+    stopObserver();
+    clearSemanticHighlights();
+    resetEntries();
+    const segments = runSegmentScan(requestId);
+    if (segments === null) return;
+    translationActive = false;
   }
 
   /** 反映済みと一致しないテキストだけが textSegment から返るため、再走査で未同期分を拾える */
@@ -496,6 +663,30 @@
     if (!message) return;
     if (message.action === 'start') {
       startTranslation(message.requestId || '');
+      return;
+    }
+    if (message.action === 'semanticScan') {
+      startSemanticScan(message.requestId || '');
+      return;
+    }
+    if (message.action === 'semanticHighlight') {
+      if (message.documentId && message.documentId !== documentId) return;
+      const ids = toStringArray(message.segmentIds);
+      const texts = toStringArray(message.segmentTexts);
+      const focusIndex = typeof message.focusIndex === 'number' ? message.focusIndex : 0;
+      highlightSegmentMatches(ids, texts, focusIndex);
+      return;
+    }
+    if (message.action === 'semanticFocus') {
+      const focusIndex = typeof message.focusIndex === 'number' ? message.focusIndex : 0;
+      if (semanticHighlights.length === 0) return;
+      const safeIndex = Math.max(0, Math.min(focusIndex, semanticHighlights.length - 1));
+      semanticFocusIndex = safeIndex;
+      focusSemanticHighlight(safeIndex);
+      return;
+    }
+    if (message.action === 'semanticClear') {
+      clearSemanticHighlights();
       return;
     }
     if (message.action === 'apply') {

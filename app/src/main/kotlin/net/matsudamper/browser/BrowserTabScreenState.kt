@@ -39,6 +39,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -46,6 +47,7 @@ import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
+import net.matsudamper.browser.semanticsearch.SemanticSearchConfig
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import org.json.JSONObject
@@ -217,6 +219,25 @@ internal class BrowserTabScreenState(
         findInPageWebExtension = findInPageWebExtension,
         session = { session },
     )
+
+    val semanticFindInPage = SemanticFindInPageState(
+        coroutineScope = coroutineScope,
+        pageTranslationWebExtension = pageTranslationWebExtension,
+        findInPageWebExtension = findInPageWebExtension,
+        session = { session },
+        currentPageUrl = { currentPageUrl },
+        semanticSearchConfig = {
+            SemanticSearchConfig(
+                provider = semanticSearchProvider,
+                geminiNanoModelKey = geminiNanoSemanticSearchModelKey,
+                googleAiStudioApiKey = googleAiStudioApiKey,
+            )
+        },
+    )
+
+    var geminiNanoSemanticSearchModelKey by mutableStateOf("")
+    var semanticSearchProvider by mutableStateOf(SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO)
+    var googleAiStudioApiKey by mutableStateOf("")
 
     var showDevTools by mutableStateOf(false)
         private set

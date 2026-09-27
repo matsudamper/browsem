@@ -27,6 +27,12 @@ enum TranslationProvider {
   TRANSLATION_PROVIDER_GEMINI_NANO = 2;
 }
 
+enum SemanticSearchProvider {
+  SEMANTIC_SEARCH_GEMINI_NANO = 0;
+  SEMANTIC_SEARCH_GEMINI_FLASH_LATEST = 1;
+  SEMANTIC_SEARCH_GEMINI_FLASH_LITE_LATEST = 2;
+}
+
 message BrowserSettings {
   HomepageType homepage_type = 1;
   string custom_homepage_url = 2;
@@ -53,4 +59,9 @@ message BrowserSettings {
   optional bool webauthn_platform_authenticator_available_override_enabled = 19;
   // 翻訳に使う Gemini Nano のモデル名 (ML Kit が返す表示モデル名)。空文字は自動選択
   string gemini_nano_model_key = 20;
+  // 意味検索に使う Gemini Nano のモデルキー。空文字は自動選択
+  string gemini_nano_semantic_search_model_key = 21;
+  SemanticSearchProvider semantic_search_provider = 22;
+  // Google AI Studio の API キー（端末内に保存。クラウド意味検索で使用）
+  string google_ai_studio_api_key = 23;
 }

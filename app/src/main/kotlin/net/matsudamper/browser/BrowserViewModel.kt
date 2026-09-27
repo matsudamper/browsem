@@ -32,6 +32,7 @@ import net.matsudamper.browser.data.ProfileIcon
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.ResolvedBrowserSettings
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -55,6 +56,9 @@ internal data class BrowserAppUiState(
     val searchTemplate: String,
     val translationProvider: TranslationProvider,
     val geminiNanoModelKey: String,
+    val geminiNanoSemanticSearchModelKey: String,
+    val semanticSearchProvider: SemanticSearchProvider,
+    val googleAiStudioApiKey: String,
 )
 
 private data class BrowserLogicSettings(
@@ -63,6 +67,9 @@ private data class BrowserLogicSettings(
     val searchTemplate: String,
     val translationProvider: TranslationProvider,
     val geminiNanoModelKey: String,
+    val geminiNanoSemanticSearchModelKey: String,
+    val semanticSearchProvider: SemanticSearchProvider,
+    val googleAiStudioApiKey: String,
     val enableThirdPartyCa: Boolean,
 )
 
@@ -580,6 +587,9 @@ private fun BrowserLogicSettings.toBrowserAppUiState(): BrowserAppUiState = Brow
     searchTemplate = searchTemplate,
     translationProvider = translationProvider,
     geminiNanoModelKey = geminiNanoModelKey,
+    geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
+    semanticSearchProvider = semanticSearchProvider,
+    googleAiStudioApiKey = googleAiStudioApiKey,
 )
 
 private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = BrowserLogicSettings(
@@ -588,6 +598,9 @@ private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = Br
     searchTemplate = searchTemplate,
     translationProvider = translationProvider,
     geminiNanoModelKey = geminiNanoModelKey,
+    geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
+    semanticSearchProvider = semanticSearchProvider,
+    googleAiStudioApiKey = googleAiStudioApiKey,
     enableThirdPartyCa = enableThirdPartyCa,
 )
 

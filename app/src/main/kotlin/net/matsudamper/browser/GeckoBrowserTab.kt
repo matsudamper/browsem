@@ -87,6 +87,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.forminput.FormInputRepository
@@ -125,6 +126,9 @@ internal fun GeckoBrowserTab(
     searchTemplate: String,
     translationProvider: TranslationProvider,
     geminiNanoModelKey: String,
+    geminiNanoSemanticSearchModelKey: String,
+    semanticSearchProvider: SemanticSearchProvider,
+    googleAiStudioApiKey: String,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
@@ -1203,12 +1207,33 @@ internal fun GeckoBrowserTab(
     // webAppMode で戻る先が無い場合はバックを消費しない。
     // ハンドラを無効化してシステムに委ねることで、メインアプリと同様に予測型バック
     // （ホーム画面へ縮小していくアニメーション）を発生させ、そのまま Activity を終了させる。
-    PredictiveBackHandler(enabled = state.isFullScreen || state.findInPage.isVisible || state.isUrlInputFocused || state.canGoBack) { progress ->
+    LaunchedEffect(
+        geminiNanoSemanticSearchModelKey,
+        semanticSearchProvider,
+        googleAiStudioApiKey,
+    ) {
+        state.geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey
+        state.semanticSearchProvider = semanticSearchProvider
+        state.googleAiStudioApiKey = googleAiStudioApiKey
+    }
+
+    LaunchedEffect(state.currentPageUrl) {
+        state.semanticFindInPage.invalidatePageCache()
+    }
+
+    PredictiveBackHandler(
+        enabled = state.isFullScreen ||
+            state.findInPage.isVisible ||
+            state.semanticFindInPage.isVisible ||
+            state.isUrlInputFocused ||
+            state.canGoBack,
+    ) { progress ->
         state.isBackGestureInProgress = true
         try {
             progress.collect {}
             when {
                 state.isFullScreen -> state.exitFullScreen()
+                state.semanticFindInPage.isVisible -> state.semanticFindInPage.close()
                 state.findInPage.isVisible -> state.findInPage.close()
                 state.isUrlInputFocused -> closeUrlInput(true)
                 state.canGoBack -> state.onGoBack()
@@ -1266,18 +1291,41 @@ internal fun GeckoBrowserTab(
     ) {
         if (state.isFullScreen) {
             // フルスクリーン中はツールバー・翻訳バー・検索バーを出さない
+        } else if (state.semanticFindInPage.isVisible) {
+            FindInPageBar(
+                query = state.semanticFindInPage.query,
+                matchCurrent = state.semanticFindInPage.matchCurrent,
+                matchTotal = state.semanticFindInPage.matchTotal,
+                kind = FindInPageBarKind.Semantic,
+                isRegex = false,
+                isSearching = state.semanticFindInPage.isSearching,
+                searchProgressMessage = state.semanticFindInPage.searchProgressMessage,
+                searchProgressDetail = state.semanticFindInPage.searchProgressDetail,
+                queryError = state.semanticFindInPage.queryError,
+                onQueryChange = state.semanticFindInPage::onQueryChange,
+                onNext = state.semanticFindInPage::findNext,
+                onPrevious = state.semanticFindInPage::findPrevious,
+                onClose = state.semanticFindInPage::close,
+                onToggleRegex = {},
+                onSearchCommit = state.semanticFindInPage::runSearchImmediately,
+            )
         } else if (state.findInPage.isVisible) {
             FindInPageBar(
                 query = state.findInPage.query,
                 matchCurrent = state.findInPage.matchCurrent,
                 matchTotal = state.findInPage.matchTotal,
+                kind = FindInPageBarKind.Text,
                 isRegex = state.findInPage.isRegex,
+                isSearching = false,
+                searchProgressMessage = null,
+                searchProgressDetail = null,
                 queryError = state.findInPage.queryError,
                 onQueryChange = state.findInPage::onQueryChange,
                 onNext = state.findInPage::findNext,
                 onPrevious = state.findInPage::findPrevious,
                 onClose = state.findInPage::close,
                 onToggleRegex = state.findInPage::toggleRegex,
+                onSearchCommit = {},
             )
         } else {
             if (customTabMode || webAppMode) {
@@ -1302,7 +1350,14 @@ internal fun GeckoBrowserTab(
                     onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
                     onTranslatePage = { state.translation.onTranslate(translationProvider, geminiNanoModelKey) },
                     onShare = state::sharePage,
-                    onFindInPage = state.findInPage::open,
+                    onFindInPage = {
+                        state.semanticFindInPage.close()
+                        state.findInPage.open()
+                    },
+                    onSemanticFindInPage = {
+                        state.findInPage.close()
+                        state.semanticFindInPage.open()
+                    },
                     onAddToHomeScreen = state::requestAddToHomeScreen,
                     showAddToHomeScreen = !webAppMode,
                     onOpenInBrowser = onOpenInBrowser?.let { callback ->
@@ -1379,7 +1434,14 @@ internal fun GeckoBrowserTab(
                     },
                     isPcMode = state.isPcMode,
                     onPcModeToggle = state::togglePcMode,
-                    onFindInPage = state.findInPage::open,
+                    onFindInPage = {
+                        state.semanticFindInPage.close()
+                        state.findInPage.open()
+                    },
+                    onSemanticFindInPage = {
+                        state.findInPage.close()
+                        state.semanticFindInPage.open()
+                    },
                     toolbarColor = state.toolbarColor,
                     onHome = state::onHome,
                     onForward = state::onGoForward,

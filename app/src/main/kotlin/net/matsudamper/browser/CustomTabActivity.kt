@@ -47,6 +47,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
@@ -170,6 +171,9 @@ class CustomTabActivity : ComponentActivity() {
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
                                 translationProvider = browserSettings.translationProvider,
                                 geminiNanoModelKey = browserSettings.geminiNanoModelKey,
+                                geminiNanoSemanticSearchModelKey = browserSettings.geminiNanoSemanticSearchModelKey,
+                                semanticSearchProvider = browserSettings.semanticSearchProvider,
+                                googleAiStudioApiKey = browserSettings.googleAiStudioApiKey,
                                 browserTabController = browserTabController,
                                 browserSessionLifecycleController = browserSessionLifecycleController,
                                 themeColorExtension = themeColorExtension,
@@ -289,6 +293,9 @@ private fun CustomTabScreen(
     searchTemplate: String,
     translationProvider: TranslationProvider,
     geminiNanoModelKey: String,
+    geminiNanoSemanticSearchModelKey: String,
+    semanticSearchProvider: SemanticSearchProvider,
+    googleAiStudioApiKey: String,
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
     themeColorExtension: ThemeColorWebExtension,
@@ -386,6 +393,9 @@ private fun CustomTabScreen(
         searchTemplate = searchTemplate,
         translationProvider = translationProvider,
         geminiNanoModelKey = geminiNanoModelKey,
+        geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
+        semanticSearchProvider = semanticSearchProvider,
+        googleAiStudioApiKey = googleAiStudioApiKey,
         themeColorExtension = themeColorExtension,
         mediaWebExtension = mediaWebExtension,
         browserSessionLifecycleController = browserSessionLifecycleController,
@@ -475,6 +485,7 @@ private fun PreviewCustomTabOpaqueShell() {
                 onTranslatePage = {},
                 onShare = {},
                 onFindInPage = {},
+                onSemanticFindInPage = {},
                 onAddToHomeScreen = {},
                 showAddToHomeScreen = true,
                 onOpenInBrowser = {},
