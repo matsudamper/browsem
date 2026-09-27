@@ -95,7 +95,7 @@ internal class WebAppBrowserViewModel(
                 }
             }
         }
-        return WebAppTab(browserTab = tab, startUrl = startUrl)
+        return WebAppTab(browserTab = tab, startUrl = startUrl, webAppId = webAppId)
     }
 
     /**
@@ -189,7 +189,11 @@ internal data class WebAppLaunchRequest(
     val restoresSession: Boolean,
 )
 
+/**
+ * @param webAppId 登録済みのウェブアプリの ID。旧形式から移行した場合は移行後の ID
+ */
 internal data class WebAppTab(
     val browserTab: BrowserTab,
     val startUrl: String,
+    val webAppId: WebAppId?,
 )

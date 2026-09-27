@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +29,7 @@ import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.WebAppId
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
@@ -57,6 +59,10 @@ class WebAppActivity : ComponentActivity() {
 
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
+    // 旧形式のアイコンから移行した直後は、タスクの Intent が旧形式の URI のまま残る。
+    // Recents からの再生成では元の Intent が使われるため、移行後の ID を保存状態で引き継ぐ。
+    private var launchedWebAppId: WebAppId? = null
+
     private val requestDownloadNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { _ ->
@@ -77,8 +83,13 @@ class WebAppActivity : ComponentActivity() {
 
         // savedInstanceState があるのは、プロセス終了後に Recents から Activity が再生成されたとき。
         // このときだけ前回のページ状態を復元し、アイコンから新しく起動したときは起動ページから開く。
+        val savedWebAppId = savedInstanceState?.getString(KEY_WEB_APP_ID)?.let(::WebAppId)
         val launchRequest = WebAppLaunchRequest(
-            target = if (intent.action == Intent.ACTION_VIEW) WebAppLaunchUri.parse(intent.data) else null,
+            target = when {
+                savedWebAppId != null -> WebAppLaunchTarget.Registered(savedWebAppId)
+                intent.action == Intent.ACTION_VIEW -> WebAppLaunchUri.parse(intent.data)
+                else -> null
+            },
             restoresSession = savedInstanceState != null,
         )
         setContent {
@@ -116,6 +127,9 @@ class WebAppActivity : ComponentActivity() {
                         if (currentWebAppTab == null) {
                             BrowserContentLoadingIndicator()
                         } else {
+                            SideEffect {
+                                launchedWebAppId = currentWebAppTab.webAppId
+                            }
                             val activeTab = currentWebAppTab.browserTab
                             val startUrl = currentWebAppTab.startUrl
                             val webAppPinnedHost = runCatching { URI(startUrl).host }.getOrNull()
@@ -198,6 +212,11 @@ class WebAppActivity : ComponentActivity() {
                 referrerUrl?.let { putExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL, it) }
             },
         )
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        launchedWebAppId?.let { outState.putString(KEY_WEB_APP_ID, it.value) }
     }
 
     override fun onDestroy() {
@@ -292,5 +311,9 @@ class WebAppActivity : ComponentActivity() {
         pendingDownloadNotificationPermissionDeferred = deferred
         requestDownloadNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         deferred.await()
+    }
+
+    private companion object {
+        private const val KEY_WEB_APP_ID = "web_app_id"
     }
 }
