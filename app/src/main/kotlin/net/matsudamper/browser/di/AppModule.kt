@@ -11,6 +11,7 @@ import net.matsudamper.browser.ExtensionRuntimeCoordinator
 import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.GeckoRuntimeInitializer
 import net.matsudamper.browser.WebAppBrowserViewModel
+import net.matsudamper.browser.WebAppLaunchRequest
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.WebExtensionActionController
 import net.matsudamper.browser.core.TabStore
@@ -216,7 +217,19 @@ val appModule = module {
         )
     }
     viewModel { CustomTabScreenViewModel(get(), get(), get()) }
-    viewModel { WebAppBrowserViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { (launchRequest: WebAppLaunchRequest) ->
+        WebAppBrowserViewModel(
+            launchRequest = launchRequest,
+            tabRepository = get(),
+            webAppRepository = get(),
+            settingsRepository = get(),
+            profileRepository = get(),
+            runtime = get(),
+            mediaWebExtension = get(),
+            pageTranslationWebExtension = get(),
+            applicationScope = get(),
+        )
+    }
     viewModel { WebAppScreenViewModel(get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }

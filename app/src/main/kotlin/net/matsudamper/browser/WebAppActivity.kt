@@ -18,7 +18,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
@@ -27,15 +26,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.net.URI
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.ProfileId
-import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.data.WebAppId
-import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.history.HistoryRepository
-import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
@@ -45,6 +38,7 @@ import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import org.mozilla.geckoview.GeckoRuntime
 
 /**
@@ -58,11 +52,8 @@ class WebAppActivity : ComponentActivity() {
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
-    private val profileRepository: ProfileRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
-    private val webAppRepository: WebAppRepository by inject()
-    private var launchConfig: WebAppLaunchConfig? by mutableStateOf(null)
 
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
@@ -86,15 +77,14 @@ class WebAppActivity : ComponentActivity() {
 
         // savedInstanceState があるのは、プロセス終了後に Recents から Activity が再生成されたとき。
         // このときだけ前回のページ状態を復元し、アイコンから新しく起動したときは起動ページから開く。
-        val restoresSession = savedInstanceState != null
-        lifecycleScope.launch {
-            launchConfig = resolveLaunchConfig(restoresSession = restoresSession)
-        }
+        val launchRequest = WebAppLaunchRequest(
+            target = if (intent.action == Intent.ACTION_VIEW) WebAppLaunchUri.parse(intent.data) else null,
+            restoresSession = savedInstanceState != null,
+        )
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
             val runtime = geckoRuntime ?: return@setContent
-            val config = launchConfig ?: return@setContent
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
                 runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
@@ -102,7 +92,7 @@ class WebAppActivity : ComponentActivity() {
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
                 WebAuthnCompatStartupGate(runtime = runtime) {
-                    val browserViewModel: WebAppBrowserViewModel = koinViewModel()
+                    val browserViewModel: WebAppBrowserViewModel = koinViewModel { parametersOf(launchRequest) }
                     val browserTabController = browserViewModel.browserTabController
                     val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
                     val reevaluateOpenerRetention: () -> Unit = {
@@ -113,8 +103,6 @@ class WebAppActivity : ComponentActivity() {
                             )
                         }
                     }
-                    val resolvedInitialUrl = config.pageUrl ?: browserSettings.resolvedHomepageUrl()
-                    val webAppPinnedHost = runCatching { URI(resolvedInitialUrl).host }.getOrNull()
                     val webAppScreenViewModel: WebAppScreenViewModel = koinViewModel()
                     val uiState by webAppScreenViewModel.uiState.collectAsState()
 
@@ -123,25 +111,14 @@ class WebAppActivity : ComponentActivity() {
                         browserSessionLifecycleController = browserSessionLifecycleController,
                         runtime = runtime,
                     ) { outerNavActions ->
-                        val browserTab by produceState<BrowserTab?>(
-                            initialValue = null,
-                            key1 = browserTabController,
-                            key2 = resolvedInitialUrl,
-                        ) {
-                            // Activity再生成（フォルダブル開閉等）時はViewModelのcontrollerに既存タブが残っているため再利用する。
-                            // タブの破棄はViewModelの onCleared() で行う。
-                            value = browserTabController.tabs.firstOrNull()
-                                ?: browserViewModel.createTab(
-                                    initialUrl = resolvedInitialUrl,
-                                    profileId = resolveRegisteredProfileId(config.profileId),
-                                    webAppId = config.webAppId,
-                                    restoredSessionState = config.restoredSessionState,
-                                )
-                        }
-                        val activeTab = browserTab
-                        if (activeTab == null) {
+                        val webAppTab by browserViewModel.webAppTab.collectAsState()
+                        val currentWebAppTab = webAppTab
+                        if (currentWebAppTab == null) {
                             BrowserContentLoadingIndicator()
                         } else {
+                            val activeTab = currentWebAppTab.browserTab
+                            val startUrl = currentWebAppTab.startUrl
+                            val webAppPinnedHost = runCatching { URI(startUrl).host }.getOrNull()
                             val taskTitle = activeTab.title
                             val taskFavicon = activeTab.faviconBitmap
                             LaunchedEffect(taskTitle, taskFavicon) {
@@ -154,7 +131,7 @@ class WebAppActivity : ComponentActivity() {
                             GeckoBrowserTab(
                                 modifier = Modifier.fillMaxSize(),
                                 browserTab = activeTab,
-                                homepageUrl = resolvedInitialUrl,
+                                homepageUrl = startUrl,
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
                                 translationProvider = browserSettings.translationProvider,
                                 geminiNanoModelKey = browserSettings.geminiNanoModelKey,
@@ -289,49 +266,6 @@ class WebAppActivity : ComponentActivity() {
     }
 
     /**
-     * Intentのデータから起動するページとプロファイルを解決する。
-     * ページ URL は http/https の場合のみ採用し、それ以外は null にしてホームページにフォールバックさせる。
-     * 削除済みのウェブアプリもホームページにフォールバックさせる。
-     */
-    private suspend fun resolveLaunchConfig(restoresSession: Boolean): WebAppLaunchConfig {
-        val launchTarget = if (intent.action == Intent.ACTION_VIEW) WebAppLaunchUri.parse(intent.data) else null
-        return when (launchTarget) {
-            null -> WebAppLaunchConfig.homepage()
-
-            is WebAppLaunchTarget.Legacy -> WebAppLaunchConfig(
-                pageUrl = ExternalInitialUrlPolicy.sanitize(launchTarget.pageUrl),
-                profileId = launchTarget.profileId,
-                webAppId = null,
-                restoredSessionState = null,
-            )
-
-            is WebAppLaunchTarget.Registered -> {
-                val webApp = webAppRepository.getWebApp(launchTarget.webAppId)
-                if (webApp == null) {
-                    WebAppLaunchConfig.homepage()
-                } else {
-                    WebAppLaunchConfig(
-                        pageUrl = ExternalInitialUrlPolicy.sanitize(webApp.startUrl),
-                        profileId = webApp.profileId,
-                        webAppId = webApp.id,
-                        restoredSessionState = if (restoresSession) webAppRepository.loadSessionState(webApp.id) else null,
-                    )
-                }
-            }
-        }
-    }
-
-    /**
-     * exported な Activity は他アプリから任意のプロファイル ID を渡され得るうえ、削除済みプロファイルのアプリも残るため、
-     * 登録済みでないプロファイルはデフォルトプロファイルにフォールバックさせる。
-     */
-    private suspend fun resolveRegisteredProfileId(profileId: ProfileId): ProfileId {
-        if (profileId == ProfileId.DEFAULT) return profileId
-        val isRegistered = profileRepository.observeProfiles().first().any { it.id == profileId }
-        return if (isRegistered) profileId else ProfileId.DEFAULT
-    }
-
-    /**
      * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
      * ユーザーが GRANT または DENY を選択するまで待機する。
      */
@@ -357,18 +291,3 @@ class WebAppActivity : ComponentActivity() {
     }
 }
 
-private data class WebAppLaunchConfig(
-    val pageUrl: String?,
-    val profileId: ProfileId,
-    val webAppId: WebAppId?,
-    val restoredSessionState: String?,
-) {
-    companion object {
-        fun homepage(): WebAppLaunchConfig = WebAppLaunchConfig(
-            pageUrl = null,
-            profileId = ProfileId.DEFAULT,
-            webAppId = null,
-            restoredSessionState = null,
-        )
-    }
-}
