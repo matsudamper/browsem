@@ -18,11 +18,13 @@ internal fun AddToHomeScreenDialogHost(
     val context = LocalContext.current
     val dialogState = controller.state ?: return
     val target = dialogState.target
+    val showShortcutOption = target is AddToHomeScreenTarget.NewPage
     AddToHomeScreenDialog(
         url = target.url,
         title = target.title,
         favicon = dialogState.favicon,
         isIconLoading = dialogState.isIconLoading,
+        showShortcutOption = showShortcutOption,
         onAddWebApp = { title ->
             pinWebAppScope.launch {
                 val isPinned = pinWebAppToHome(

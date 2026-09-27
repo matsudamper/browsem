@@ -34,6 +34,7 @@ internal fun AddToHomeScreenDialog(
     title: String,
     favicon: Bitmap?,
     isIconLoading: Boolean,
+    showShortcutOption: Boolean,
     onAddWebApp: (title: String) -> Unit,
     onAddShortcut: (title: String) -> Unit,
     onDismiss: () -> Unit,
@@ -67,13 +68,15 @@ internal fun AddToHomeScreenDialog(
         },
         confirmButton = {
             Row {
-                TextButton(
-                    onClick = {
-                        onAddShortcut(editedTitle)
-                    },
-                    enabled = !isIconLoading,
-                ) {
-                    Text("ショートカット")
+                if (showShortcutOption) {
+                    TextButton(
+                        onClick = {
+                            onAddShortcut(editedTitle)
+                        },
+                        enabled = !isIconLoading,
+                    ) {
+                        Text("ショートカット")
+                    }
                 }
                 TextButton(
                     onClick = {
@@ -82,7 +85,7 @@ internal fun AddToHomeScreenDialog(
                     },
                     enabled = !isIconLoading,
                 ) {
-                    Text("アプリ")
+                    Text(if (showShortcutOption) "アプリ" else "追加")
                 }
             }
         },
@@ -98,6 +101,24 @@ private fun PreviewWithFavicon() {
             title = "Example Site",
             favicon = null,
             isIconLoading = false,
+            showShortcutOption = true,
+            onAddWebApp = {},
+            onAddShortcut = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "登録済みウェブアプリ")
+@Composable
+private fun PreviewRegisteredWebApp() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        AddToHomeScreenDialog(
+            url = "https://example.com",
+            title = "Example",
+            favicon = null,
+            isIconLoading = false,
+            showShortcutOption = false,
             onAddWebApp = {},
             onAddShortcut = {},
             onDismiss = {},
@@ -114,6 +135,7 @@ private fun PreviewNoTitle() {
             title = "",
             favicon = null,
             isIconLoading = true,
+            showShortcutOption = true,
             onAddWebApp = {},
             onAddShortcut = {},
             onDismiss = {},
