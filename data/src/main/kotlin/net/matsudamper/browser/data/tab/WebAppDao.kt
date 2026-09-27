@@ -20,6 +20,9 @@ interface WebAppDao {
     @Query("SELECT * FROM web_app WHERE webAppId = :webAppId")
     suspend fun getWebApp(webAppId: String): WebAppEntity?
 
+    @Query("UPDATE web_app SET title = :title WHERE webAppId = :webAppId")
+    suspend fun updateTitle(webAppId: String, title: String)
+
     @Query("DELETE FROM web_app WHERE webAppId = :webAppId")
     suspend fun deleteWebApp(webAppId: String)
 }

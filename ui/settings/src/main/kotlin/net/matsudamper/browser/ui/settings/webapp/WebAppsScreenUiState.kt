@@ -7,6 +7,7 @@ data class WebAppsScreenUiState(
     val isLoading: Boolean,
     val entries: List<EntryItem>,
     val deleteConfirmDialog: DeleteConfirmDialog?,
+    val renameDialog: RenameDialog?,
 ) {
     @Stable
     data class EntryItem(
@@ -17,7 +18,20 @@ data class WebAppsScreenUiState(
     ) {
         @Stable
         interface Listener {
+            fun onClick()
             fun onClickDelete()
+        }
+    }
+
+    @Stable
+    data class RenameDialog(
+        val currentTitle: String,
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onConfirm(title: String)
+            fun onDismiss()
         }
     }
 

@@ -44,6 +44,10 @@ class WebAppRepository(context: Context) {
         return webAppId
     }
 
+    suspend fun renameWebApp(webAppId: WebAppId, title: String) {
+        dao.updateTitle(webAppId.value, title)
+    }
+
     suspend fun deleteWebApp(webAppId: WebAppId) {
         sessionStateMutex.withLock {
             dao.deleteWebApp(webAppId.value)

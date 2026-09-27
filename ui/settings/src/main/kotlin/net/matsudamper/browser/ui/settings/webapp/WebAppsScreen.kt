@@ -1,8 +1,10 @@
 package net.matsudamper.browser.ui.settings.webapp
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -13,11 +15,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -35,6 +42,14 @@ sealed interface WebAppsScreenTestTags {
 
     data object Root : WebAppsScreenTestTags {
         override val id = "root"
+    }
+
+    data class Entry(val index: Int) : WebAppsScreenTestTags {
+        override val id = "entry_$index"
+    }
+
+    data object RenameConfirmButton : WebAppsScreenTestTags {
+        override val id = "rename_confirm_button"
     }
 
     data class DeleteButton(val index: Int) : WebAppsScreenTestTags {
@@ -107,6 +122,11 @@ internal fun WebAppsScreen(
         }
     }
 
+    val renameDialog = uiState.renameDialog
+    if (renameDialog != null) {
+        WebAppRenameDialog(renameDialog = renameDialog)
+    }
+
     val deleteConfirmDialog = uiState.deleteConfirmDialog
     if (deleteConfirmDialog != null) {
         AlertDialog(
@@ -128,6 +148,39 @@ internal fun WebAppsScreen(
             },
         )
     }
+}
+
+@Composable
+private fun WebAppRenameDialog(renameDialog: WebAppsScreenUiState.RenameDialog) {
+    var text by remember(renameDialog.currentTitle) { mutableStateOf(renameDialog.currentTitle) }
+    AlertDialog(
+        onDismissRequest = renameDialog.listener::onDismiss,
+        title = { Text("名前を変更") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("名前") },
+                supportingText = { Text("ホームのアイコンの名前も変わります") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { renameDialog.listener.onConfirm(text.trim()) },
+                enabled = text.isNotBlank(),
+                modifier = Modifier.testTag(WebAppsScreenTestTags.RenameConfirmButton.testTag),
+            ) {
+                Text("変更")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = renameDialog.listener::onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
 }
 
 @Composable
@@ -171,11 +224,20 @@ private fun WebAppListItem(
                 )
             }
         },
+        modifier = Modifier
+            .testTag(WebAppsScreenTestTags.Entry(index).testTag)
+            .clickable(onClick = entry.listener::onClick),
     )
 }
 
 private object PreviewEntryListener : WebAppsScreenUiState.EntryItem.Listener {
+    override fun onClick() = Unit
     override fun onClickDelete() = Unit
+}
+
+private object PreviewRenameDialogListener : WebAppsScreenUiState.RenameDialog.Listener {
+    override fun onConfirm(title: String) = Unit
+    override fun onDismiss() = Unit
 }
 
 private object PreviewDeleteConfirmDialogListener : WebAppsScreenUiState.DeleteConfirmDialog.Listener {
@@ -206,6 +268,7 @@ private fun PreviewWebAppsScreen() {
             isLoading = false,
             entries = previewEntries,
             deleteConfirmDialog = null,
+            renameDialog = null,
         ),
         onBack = {},
     )
@@ -219,6 +282,7 @@ private fun PreviewWebAppsScreenEmpty() {
             isLoading = false,
             entries = listOf(),
             deleteConfirmDialog = null,
+            renameDialog = null,
         ),
         onBack = {},
     )
@@ -234,6 +298,24 @@ private fun PreviewWebAppsScreenDeleteConfirm() {
             deleteConfirmDialog = WebAppsScreenUiState.DeleteConfirmDialog(
                 title = "Example",
                 listener = PreviewDeleteConfirmDialogListener,
+            ),
+            renameDialog = null,
+        ),
+        onBack = {},
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewWebAppsScreenRename() {
+    WebAppsScreen(
+        uiState = WebAppsScreenUiState(
+            isLoading = false,
+            entries = previewEntries,
+            deleteConfirmDialog = null,
+            renameDialog = WebAppsScreenUiState.RenameDialog(
+                currentTitle = "Example",
+                listener = PreviewRenameDialogListener,
             ),
         ),
         onBack = {},

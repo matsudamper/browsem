@@ -93,6 +93,11 @@ internal class WebAppShortcutManager(
         )
     }
 
+    /** ホームのアイコンのラベルを変える。レート制限などでランチャーに拒否されると false */
+    fun updateLabel(webAppId: WebAppId, label: String): Boolean {
+        return updateLabel(shortcutIds = pinnedShortcutIds(webAppId), webAppId = webAppId, label = label)
+    }
+
     // 旧形式から移行したショートカットは ID が旧形式のままなので、ID ではなく Intent から探す
     private fun pinnedShortcutIds(webAppId: WebAppId): List<String> {
         return pinnedShortcuts()

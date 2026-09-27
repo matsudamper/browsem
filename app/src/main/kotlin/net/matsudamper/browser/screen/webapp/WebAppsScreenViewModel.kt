@@ -40,11 +40,27 @@ internal class WebAppsScreenViewModel(
         }
     }
 
+    private val renameDialogListener = object : WebAppsScreenUiState.RenameDialog.Listener {
+        override fun onConfirm(title: String) {
+            val target = viewModelStateFlow.value.renameTarget ?: return
+            viewModelStateFlow.update { it.copy(renameTarget = null) }
+            viewModelScope.launch {
+                webAppRepository.renameWebApp(target.id, title)
+                webAppShortcutManager.updateLabel(webAppId = target.id, label = title)
+            }
+        }
+
+        override fun onDismiss() {
+            viewModelStateFlow.update { it.copy(renameTarget = null) }
+        }
+    }
+
     val uiState: StateFlow<WebAppsScreenUiState> = MutableStateFlow(
         WebAppsScreenUiState(
             isLoading = true,
             entries = listOf(),
             deleteConfirmDialog = null,
+            renameDialog = null,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -57,6 +73,12 @@ internal class WebAppsScreenViewModel(
                             WebAppsScreenUiState.DeleteConfirmDialog(
                                 title = target.title,
                                 listener = deleteConfirmDialogListener,
+                            )
+                        },
+                        renameDialog = state.renameTarget?.let { target ->
+                            WebAppsScreenUiState.RenameDialog(
+                                currentTitle = target.title,
+                                listener = renameDialogListener,
                             )
                         },
                     )
@@ -103,6 +125,10 @@ internal class WebAppsScreenViewModel(
             startUrl = webApp.startUrl,
             profileName = profile?.name.orEmpty(),
             listener = object : WebAppsScreenUiState.EntryItem.Listener {
+                override fun onClick() {
+                    viewModelStateFlow.update { it.copy(renameTarget = webApp) }
+                }
+
                 override fun onClickDelete() {
                     viewModelStateFlow.update { it.copy(deleteTarget = webApp) }
                 }
@@ -115,6 +141,7 @@ internal class WebAppsScreenViewModel(
         val webApps: List<WebAppData> = listOf(),
         val profiles: List<ProfileData> = listOf(),
         val deleteTarget: WebAppData? = null,
+        val renameTarget: WebAppData? = null,
     )
 
     private companion object {
