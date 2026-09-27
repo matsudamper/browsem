@@ -413,6 +413,7 @@ private fun CustomTabScreen(
         customTabMode = true,
         webAppMode = false,
         webAppPinnedHost = null,
+        webAppLaunchInfo = null,
         onWebAppCrossDomainNavigation = null,
         onCloseCustomTab = onClose,
         onOpenInBrowser = { url -> requestedOpenInBrowserUrl = url },

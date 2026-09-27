@@ -301,16 +301,7 @@ internal class BrowserTabScreenState(
         data class LinkWithImage(val url: String, val imageSrcUrl: String) : ContextMenuState
     }
 
-    var addToHomeScreenState by mutableStateOf<AddToHomeScreenState?>(null)
-        private set
-    private var addToHomeIconJob: Job? = null
-
-    data class AddToHomeScreenState(
-        val url: String,
-        val title: String,
-        val favicon: Bitmap?,
-        val isIconLoading: Boolean,
-    )
+    val addToHomeScreenDialogController = AddToHomeScreenDialogController(coroutineScope)
 
     val promptDialogState = PromptDialogState(coroutineScope)
 
@@ -751,54 +742,32 @@ internal class BrowserTabScreenState(
         val pageTitle = currentPageTitle
         val manifestJson = webAppManifestJson
         val fallbackFavicon = browserTab.faviconBitmap
-        addToHomeIconJob?.cancel()
-        addToHomeScreenState = AddToHomeScreenState(
-            url = pageUrl,
-            title = pageTitle,
-            favicon = null,
-            isIconLoading = true,
-        )
-        addToHomeIconJob = coroutineScope.launch {
-            // CancellationException は runCatching で握りつぶさずに呼び出し側へ伝播させる。
-            // 同一URLで requestAddToHomeScreen() を再送した際、旧ジョブの cancel() 後に
-            // このコルーチンが継続して新リクエストの isIconLoading=false を書き戻すのを防ぐ。
-            val fetchedIcon = try {
-                HomeScreenIconFetcher.fetchIcon(
-                    pageUrl = pageUrl,
-                    webAppManifestJson = manifestJson,
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                null
-            }
-            try {
-                val current = addToHomeScreenState ?: return@launch
-                if (current.url != pageUrl) return@launch
-                addToHomeScreenState = current.copy(
-                    favicon = fetchedIcon ?: fallbackFavicon,
-                    isIconLoading = false,
-                )
+        val profileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId)
+        addToHomeScreenDialogController.requestFromPage(
+            pageUrl = pageUrl,
+            pageTitle = pageTitle,
+            profileId = profileId,
+            webAppManifestJson = manifestJson,
+            fallbackFavicon = fallbackFavicon,
+            onIconLoaded = { fetchedIcon ->
                 if (fetchedIcon != null && currentPageUrl == pageUrl) {
                     browserTab.faviconBitmap = fetchedIcon
                 }
-            } finally {
-                // 予期せぬ例外でもスピナー表示が残らないようロード中状態を必ず解除する
-                val current = addToHomeScreenState
-                if (current != null && current.url == pageUrl && current.isIconLoading) {
-                    addToHomeScreenState = current.copy(
-                        favicon = current.favicon ?: fallbackFavicon,
-                        isIconLoading = false,
-                    )
-                }
-            }
-        }
+            },
+        )
+    }
+
+    fun requestAddRegisteredWebAppToHomeScreen(launchInfo: WebAppLaunchInfo) {
+        addToHomeScreenDialogController.requestFromRegisteredWebApp(
+            webAppId = launchInfo.webAppId,
+            startUrl = launchInfo.startUrl,
+            title = currentPageTitle.ifBlank { launchInfo.startUrl },
+            profileId = launchInfo.profileId,
+        )
     }
 
     fun dismissAddToHomeScreen() {
-        addToHomeIconJob?.cancel()
-        addToHomeIconJob = null
-        addToHomeScreenState = null
+        addToHomeScreenDialogController.dismiss()
     }
 
     fun copyCurrentPageUrl() {

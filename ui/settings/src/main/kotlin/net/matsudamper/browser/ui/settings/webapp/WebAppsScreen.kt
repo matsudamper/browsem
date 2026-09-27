@@ -59,6 +59,10 @@ sealed interface WebAppsScreenTestTags {
     data object ConfirmDeleteButton : WebAppsScreenTestTags {
         override val id = "confirm_delete_button"
     }
+
+    data class AddToHomeButton(val index: Int) : WebAppsScreenTestTags {
+        override val id = "add_to_home_button_$index"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -215,6 +219,15 @@ private fun WebAppListItem(
         },
         trailingContent = {
             IconButton(
+                onClick = entry.listener::onClickAddToHome,
+                modifier = Modifier.testTag(WebAppsScreenTestTags.AddToHomeButton(index).testTag),
+            ) {
+                Icon(
+                    painter = painterResource(ResourcesR.drawable.ic_add_to_home_screen_24dp),
+                    contentDescription = "ホームにアイコンを追加",
+                )
+            }
+            IconButton(
                 onClick = entry.listener::onClickDelete,
                 modifier = Modifier.testTag(WebAppsScreenTestTags.DeleteButton(index).testTag),
             ) {
@@ -232,6 +245,7 @@ private fun WebAppListItem(
 
 private object PreviewEntryListener : WebAppsScreenUiState.EntryItem.Listener {
     override fun onClick() = Unit
+    override fun onClickAddToHome() = Unit
     override fun onClickDelete() = Unit
 }
 

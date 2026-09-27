@@ -151,6 +151,7 @@ internal fun GeckoBrowserTab(
     customTabMode: Boolean,
     webAppMode: Boolean,
     webAppPinnedHost: String?,
+    webAppLaunchInfo: WebAppLaunchInfo?,
     onWebAppCrossDomainNavigation: ((String) -> Unit)?,
     onCloseCustomTab: (() -> Unit)?,
     onOpenInBrowser: ((String) -> Unit)?,
@@ -1365,8 +1366,14 @@ internal fun GeckoBrowserTab(
                         state.findInPage.close()
                         state.semanticFindInPage.open()
                     },
-                    onAddToHomeScreen = state::requestAddToHomeScreen,
-                    showAddToHomeScreen = !webAppMode,
+                    onAddToHomeScreen = {
+                        if (webAppLaunchInfo != null) {
+                            state.requestAddRegisteredWebAppToHomeScreen(webAppLaunchInfo)
+                        } else {
+                            state.requestAddToHomeScreen()
+                        }
+                    },
+                    showAddToHomeScreen = !webAppMode || webAppLaunchInfo != null,
                     onOpenInBrowser = onOpenInBrowser?.let { callback ->
                         { callback(state.currentPageUrl) }
                     },
@@ -1604,36 +1611,12 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    state.addToHomeScreenState?.let { addToHomeScreenState ->
-        AddToHomeScreenDialog(
-            url = addToHomeScreenState.url,
-            title = addToHomeScreenState.title,
-            favicon = addToHomeScreenState.favicon,
-            isIconLoading = addToHomeScreenState.isIconLoading,
-            onAddWebApp = { title ->
-                if (webAppShortcutManager.isPinSupported()) {
-                    val label = title.ifBlank { addToHomeScreenState.url }
-                    val favicon = addToHomeScreenState.favicon
-                    val profileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId)
-                    webAppRegistrationScope.launch {
-                        val webAppId = onRegisterWebApp(addToHomeScreenState.url, label, profileId.value)
-                        webAppShortcutManager.requestPin(
-                            launchInfo = WebAppLaunchInfo(
-                                webAppId = WebAppId(webAppId),
-                                startUrl = addToHomeScreenState.url,
-                                profileId = profileId,
-                            ),
-                            label = label,
-                            favicon = favicon,
-                        )
-                    }
-                } else {
-                    Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
-                }
-            },
-            onDismiss = state::dismissAddToHomeScreen,
-        )
-    }
+    AddToHomeScreenDialogHost(
+        controller = state.addToHomeScreenDialogController,
+        webAppShortcutManager = webAppShortcutManager,
+        pinWebAppScope = webAppRegistrationScope,
+        onRegisterWebApp = onRegisterWebApp,
+    )
 
     state.extensionActionPopup?.let { popup ->
         ExtensionActionPopupDialog(

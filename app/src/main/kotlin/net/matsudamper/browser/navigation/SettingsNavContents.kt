@@ -27,11 +27,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.UUID
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.AddToHomeScreenDialogHost
 import net.matsudamper.browser.CustomTabActivity
 import net.matsudamper.browser.DefaultBrowserChecker
 import net.matsudamper.browser.ExtensionSettingsScreen
 import net.matsudamper.browser.GITHUB_RELEASES_URL
 import net.matsudamper.browser.OuterNavActions
+import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionSettingsScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
@@ -42,6 +44,7 @@ import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
 import net.matsudamper.browser.ui.settings.webapp.WebAppsRoute
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 @Composable
@@ -312,6 +315,8 @@ internal class PendingDownloadsOpenRequest(
 @Composable
 internal fun WebAppsNavContent(navActions: OuterNavActions) {
     val context = LocalContext.current
+    val webAppShortcutManager: WebAppShortcutManager = koinInject()
+    val pinWebAppScope = rememberCoroutineScope()
     val webAppsViewModel: WebAppsScreenViewModel = koinViewModel()
     val webAppsUiState by webAppsViewModel.uiState.collectAsState()
     LaunchedEffect(webAppsViewModel) {
@@ -330,5 +335,11 @@ internal fun WebAppsNavContent(navActions: OuterNavActions) {
     WebAppsRoute(
         uiState = webAppsUiState,
         onBack = { navActions.pop() },
+    )
+    AddToHomeScreenDialogHost(
+        controller = webAppsViewModel.addToHomeScreenDialogController,
+        webAppShortcutManager = webAppShortcutManager,
+        pinWebAppScope = pinWebAppScope,
+        onRegisterWebApp = webAppsViewModel::registerWebApp,
     )
 }
