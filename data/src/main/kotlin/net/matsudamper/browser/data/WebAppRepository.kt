@@ -53,9 +53,10 @@ class WebAppRepository(context: Context) {
         }
     }
 
-    /** [keepWebAppIds] に含まれないウェブアプリを削除する */
-    suspend fun deleteWebAppsExcept(keepWebAppIds: Set<WebAppId>) {
+    /** [createdBefore] より前に登録され、[keepWebAppIds] に含まれないウェブアプリを削除する */
+    suspend fun deleteWebAppsExcept(keepWebAppIds: Set<WebAppId>, createdBefore: Long) {
         dao.getAllWebApps()
+            .filter { it.createdAt < createdBefore }
             .map { WebAppId(it.webAppId) }
             .filterNot { it in keepWebAppIds }
             .forEach { deleteWebApp(it) }

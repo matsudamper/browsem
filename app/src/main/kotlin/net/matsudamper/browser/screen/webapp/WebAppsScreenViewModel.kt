@@ -2,6 +2,7 @@ package net.matsudamper.browser.screen.webapp
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -82,11 +83,15 @@ internal class WebAppsScreenViewModel(
     /**
      * ホームからアイコンを消されてもアプリには通知されないため、一覧を開いたときにピン留めと突き合わせて消す。
      * ピン留めに対応していないランチャーではピン留め一覧が常に空になり全件消えてしまうため、突き合わせない。
+     *
+     * 登録はピン留めの確認ダイアログを出す前に行うため、作成直後の登録はまだピン留めされていないことがある。
+     * 確認中や、別ウィンドウで追加している最中の登録を消さないよう、作成から一定時間経ったものだけを対象にする。
      */
     private suspend fun removeUnpinnedWebApps() {
         if (!webAppShortcutManager.isPinSupported()) return
+        val createdBefore = System.currentTimeMillis() - PIN_CONFIRMATION_GRACE_MILLIS
         val pinnedWebAppIds = withContext(Dispatchers.IO) { webAppShortcutManager.pinnedWebAppIds() }
-        webAppRepository.deleteWebAppsExcept(pinnedWebAppIds)
+        webAppRepository.deleteWebAppsExcept(keepWebAppIds = pinnedWebAppIds, createdBefore = createdBefore)
     }
 
     private fun toEntryItem(webApp: WebAppData, profiles: List<ProfileData>): WebAppsScreenUiState.EntryItem {
@@ -111,4 +116,8 @@ internal class WebAppsScreenViewModel(
         val profiles: List<ProfileData> = listOf(),
         val deleteTarget: WebAppData? = null,
     )
+
+    private companion object {
+        private val PIN_CONFIRMATION_GRACE_MILLIS = TimeUnit.MINUTES.toMillis(10)
+    }
 }
