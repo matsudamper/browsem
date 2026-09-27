@@ -2,6 +2,7 @@ package net.matsudamper.browser.data
 
 import android.content.Context
 import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -46,7 +47,7 @@ class WebAppRepository(context: Context) {
         sessionStateMutex.withLock {
             dao.deleteWebApp(webAppId.value)
             withContext(Dispatchers.IO) {
-                sessionStateFile(webAppId).delete()
+                sessionStateFile(webAppId)?.delete()
             }
         }
     }
@@ -62,7 +63,7 @@ class WebAppRepository(context: Context) {
     suspend fun loadSessionState(webAppId: WebAppId): String? {
         return withContext(Dispatchers.IO) {
             val file = sessionStateFile(webAppId)
-            if (file.exists()) file.readText().ifBlank { null } else null
+            if (file != null && file.exists()) file.readText().ifBlank { null } else null
         }
     }
 
@@ -74,7 +75,7 @@ class WebAppRepository(context: Context) {
         sessionStateMutex.withLock {
             if (dao.getWebApp(webAppId.value) == null) return
             withContext(Dispatchers.IO) {
-                val file = sessionStateFile(webAppId)
+                val file = sessionStateFile(webAppId) ?: return@withContext
                 if (sessionState.isBlank()) {
                     file.delete()
                 } else {
@@ -85,7 +86,14 @@ class WebAppRepository(context: Context) {
         }
     }
 
-    private fun sessionStateFile(webAppId: WebAppId) = File(sessionStateDir, webAppId.value)
+    /**
+     * ID はファイル名に使うため、UUID 形式でなければ null を返す。
+     * バックアップから復元した DB などで `../` を含む ID が入ると、保存先ディレクトリの外のファイルを書き換えてしまう。
+     */
+    private fun sessionStateFile(webAppId: WebAppId): File? {
+        val isUuid = runCatching { UUID.fromString(webAppId.value).toString() == webAppId.value }.getOrDefault(false)
+        return if (isUuid) File(sessionStateDir, webAppId.value) else null
+    }
 
     private fun WebAppEntity.toWebAppData(): WebAppData {
         return WebAppData(
