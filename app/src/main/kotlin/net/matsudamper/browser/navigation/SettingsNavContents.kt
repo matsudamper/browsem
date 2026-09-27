@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -310,8 +311,18 @@ internal class PendingDownloadsOpenRequest(
 
 @Composable
 internal fun WebAppsNavContent(navActions: OuterNavActions) {
+    val context = LocalContext.current
     val webAppsViewModel: WebAppsScreenViewModel = koinViewModel()
     val webAppsUiState by webAppsViewModel.uiState.collectAsState()
+    LaunchedEffect(webAppsViewModel) {
+        webAppsViewModel.eventHandler.receiveAsFlow().collect { handler ->
+            handler(object : WebAppsScreenViewModel.Event {
+                override fun onRenameFailed() {
+                    Toast.makeText(context, "ホームのアイコンの名前を変更できませんでした。時間をおいて再度お試しください", Toast.LENGTH_SHORT).show()
+                }
+            })
+        }
+    }
     WebAppsRoute(
         uiState = webAppsUiState,
         onBack = { navActions.pop() },

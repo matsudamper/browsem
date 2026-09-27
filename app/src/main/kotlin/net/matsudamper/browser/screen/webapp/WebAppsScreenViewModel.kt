@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +26,8 @@ internal class WebAppsScreenViewModel(
     private val profileRepository: ProfileRepository,
     private val webAppShortcutManager: WebAppShortcutManager,
 ) : ViewModel() {
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
 
     private val deleteConfirmDialogListener = object : WebAppsScreenUiState.DeleteConfirmDialog.Listener {
@@ -45,8 +48,12 @@ internal class WebAppsScreenViewModel(
             val target = viewModelStateFlow.value.renameTarget ?: return
             viewModelStateFlow.update { it.copy(renameTarget = null) }
             viewModelScope.launch {
-                webAppRepository.renameWebApp(target.id, title)
-                webAppShortcutManager.updateLabel(webAppId = target.id, label = title)
+                // 一覧の名前とホームのアイコンの名前を食い違わせないよう、アイコンを書き換えられたときだけ名前を変える
+                if (webAppShortcutManager.updateLabel(webAppId = target.id, label = title)) {
+                    webAppRepository.renameWebApp(target.id, title)
+                } else {
+                    eventHandler.trySend { it.onRenameFailed() }
+                }
             }
         }
 
@@ -134,6 +141,11 @@ internal class WebAppsScreenViewModel(
                 }
             },
         )
+    }
+
+    interface Event {
+        /** ランチャーがアイコンの書き換えを拒否した（レート制限など） */
+        fun onRenameFailed()
     }
 
     data class ViewModelState(
