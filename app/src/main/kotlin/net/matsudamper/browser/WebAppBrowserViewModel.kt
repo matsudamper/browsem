@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,6 +49,8 @@ internal class WebAppBrowserViewModel(
     /** ウェブアプリの唯一のタブ。起動先の解決とタブ作成が終わるまでは null */
     val webAppTab: StateFlow<WebAppTab?> = webAppTabFlow.asStateFlow()
 
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
     init {
         browserTabController.onTabListChanged = {
             browserSessionLifecycleController.retainOpenersOfLivePopups(
@@ -67,7 +70,12 @@ internal class WebAppBrowserViewModel(
         // Activity再生成（フォルダブル開閉等）では ViewModel ごとタブが残るため、タブの作成はここで一度だけ行う。
         // タブの破棄は onCleared() で行う。
         viewModelScope.launch {
-            webAppTabFlow.value = createWebAppTab(launchRequest)
+            val migratedWebAppId = migrateLegacyShortcut(launchRequest.target)
+            if (migratedWebAppId == null) {
+                webAppTabFlow.value = createWebAppTab(launchRequest)
+            } else {
+                eventHandler.trySend { it.relaunch(migratedWebAppId) }
+            }
         }
     }
 
@@ -95,7 +103,7 @@ internal class WebAppBrowserViewModel(
                 }
             }
         }
-        return WebAppTab(browserTab = tab, startUrl = startUrl, webAppId = webAppId)
+        return WebAppTab(browserTab = tab, startUrl = startUrl)
     }
 
     /**
@@ -107,15 +115,12 @@ internal class WebAppBrowserViewModel(
         return when (val target = launchRequest.target) {
             null -> LaunchDestination.homepage()
 
-            is WebAppLaunchTarget.Legacy -> {
-                val pageUrl = ExternalInitialUrlPolicy.sanitize(target.pageUrl)
-                LaunchDestination(
-                    pageUrl = pageUrl,
-                    profileId = target.profileId,
-                    webAppId = if (pageUrl == null) null else migrateLegacyShortcut(target, pageUrl),
-                    restoredSessionState = null,
-                )
-            }
+            is WebAppLaunchTarget.Legacy -> LaunchDestination(
+                pageUrl = ExternalInitialUrlPolicy.sanitize(target.pageUrl),
+                profileId = target.profileId,
+                webAppId = null,
+                restoredSessionState = null,
+            )
 
             is WebAppLaunchTarget.Registered -> {
                 val webApp = webAppRepository.getWebApp(target.webAppId)
@@ -138,10 +143,12 @@ internal class WebAppBrowserViewModel(
     }
 
     /**
-     * 旧形式のアイコンから起動したとき、DB に登録してアイコンを新形式へ書き換える。
+     * 旧形式のアイコンから起動したとき、DB に登録してアイコンを新形式へ書き換え、移行後の ID を返す。
      * ピン留めされたアイコン以外（他アプリからの Intent 等）から起動したときは登録しない。
      */
-    private suspend fun migrateLegacyShortcut(target: WebAppLaunchTarget.Legacy, pageUrl: String): WebAppId? {
+    private suspend fun migrateLegacyShortcut(target: WebAppLaunchTarget?): WebAppId? {
+        if (target !is WebAppLaunchTarget.Legacy) return null
+        val pageUrl = ExternalInitialUrlPolicy.sanitize(target.pageUrl) ?: return null
         val shortcut = withContext(Dispatchers.IO) {
             webAppShortcutManager.findPinnedLegacyShortcut(target.launchUri)
         } ?: return null
@@ -162,6 +169,15 @@ internal class WebAppBrowserViewModel(
         if (profileId == ProfileId.DEFAULT) return profileId
         val isRegistered = profileRepository.observeProfiles().first().any { it.id == profileId }
         return if (isRegistered) profileId else ProfileId.DEFAULT
+    }
+
+    interface Event {
+        /**
+         * 旧形式から移行したので、新しい起動 URI のタスクで開き直す。
+         * documentLaunchMode はタスクを起動 URI で照合するため、旧 URI のタスクのままだと
+         * 書き換え後のアイコンから開いたときに同じアプリのタスクがもう一つできる。
+         */
+        fun relaunch(webAppId: WebAppId)
     }
 
     private data class LaunchDestination(
@@ -189,11 +205,7 @@ internal data class WebAppLaunchRequest(
     val restoresSession: Boolean,
 )
 
-/**
- * @param webAppId 登録済みのウェブアプリの ID。旧形式から移行した場合は移行後の ID
- */
 internal data class WebAppTab(
     val browserTab: BrowserTab,
     val startUrl: String,
-    val webAppId: WebAppId?,
 )

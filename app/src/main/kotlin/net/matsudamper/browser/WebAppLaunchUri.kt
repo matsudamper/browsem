@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.WebAppId
@@ -18,6 +20,15 @@ internal object WebAppLaunchUri {
     private const val WEB_APP_AUTHORITY = "app"
     private const val QUERY_WEB_APP_ID = "id"
     private const val QUERY_PAGE_URL = "url"
+
+    // 独立した Recents エントリは WebAppActivity の documentLaunchMode="intoExisting"
+    // (= FLAG_ACTIVITY_NEW_DOCUMENT 相当) が保証するため、Intent 側にフラグは不要。
+    fun createIntent(context: Context, webAppId: WebAppId): Intent {
+        return Intent(context, WebAppActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = create(webAppId)
+        }
+    }
 
     fun create(webAppId: WebAppId): Uri {
         return Uri.Builder()

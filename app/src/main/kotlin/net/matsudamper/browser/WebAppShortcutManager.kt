@@ -1,7 +1,6 @@
 package net.matsudamper.browser
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -36,7 +35,7 @@ internal class WebAppShortcutManager(
             .setShortLabel(label.take(25))
             .setLongLabel(label)
             .setIcon(icon)
-            .setIntent(createLaunchIntent(webAppId))
+            .setIntent(WebAppLaunchUri.createIntent(context, webAppId))
             .build()
         ShortcutManagerCompat.requestPinShortcut(context, info, null)
     }
@@ -69,7 +68,7 @@ internal class WebAppShortcutManager(
     fun migrateLegacyShortcut(shortcut: PinnedLegacyShortcut, webAppId: WebAppId) {
         val info = ShortcutInfoCompat.Builder(context, shortcut.shortcutId)
             .setShortLabel(shortcut.shortLabel)
-            .setIntent(createLaunchIntent(webAppId))
+            .setIntent(WebAppLaunchUri.createIntent(context, webAppId))
             .build()
         ShortcutManagerCompat.updateShortcuts(context, listOf(info))
     }
@@ -96,15 +95,6 @@ internal class WebAppShortcutManager(
         return when (val target = WebAppLaunchUri.parse(intent.data)) {
             is WebAppLaunchTarget.Registered -> target.webAppId
             is WebAppLaunchTarget.Legacy, null -> null
-        }
-    }
-
-    // 独立した Recents エントリは WebAppActivity の documentLaunchMode="intoExisting"
-    // (= FLAG_ACTIVITY_NEW_DOCUMENT 相当) が保証するため、ピン Intent 側にフラグは不要。
-    private fun createLaunchIntent(webAppId: WebAppId): Intent {
-        return Intent(context, WebAppActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
-            data = WebAppLaunchUri.create(webAppId)
         }
     }
 
