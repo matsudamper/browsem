@@ -35,10 +35,14 @@ internal class WebAppsScreenViewModel(
             val target = viewModelStateFlow.value.deleteTarget ?: return
             viewModelStateFlow.update { it.copy(deleteTarget = null) }
             viewModelScope.launch {
-                withContext(Dispatchers.IO) {
+                val isDisabled = withContext(Dispatchers.IO) {
                     webAppShortcutManager.disableShortcut(webAppId = target.id, title = target.title)
                 }
-                webAppRepository.deleteWebApp(target.id)
+                if (isDisabled) {
+                    webAppRepository.deleteWebApp(target.id)
+                } else {
+                    eventHandler.trySend { it.onDeleteFailed() }
+                }
             }
         }
 
@@ -153,6 +157,9 @@ internal class WebAppsScreenViewModel(
     interface Event {
         /** ランチャーがアイコンの書き換えを拒否した（レート制限など） */
         fun onRenameFailed()
+
+        /** ランチャーがアイコンの書き換えを拒否したため、削除を中止した（レート制限など） */
+        fun onDeleteFailed()
     }
 
     data class ViewModelState(

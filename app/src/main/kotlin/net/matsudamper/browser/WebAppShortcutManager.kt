@@ -82,15 +82,19 @@ internal class WebAppShortcutManager(
     /**
      * ホームのアイコンはアプリから消せないため、削除済みとわかるラベルに変えてから無効化し、起動できなくする。
      * 無効化したショートカットは更新できないので、ラベルの変更を先に行う。
+     * @return ラベルの変更がレート制限などで拒否されると、元の名前のまま起動できなくなるのを避けるため無効化せず false を返す
      */
-    fun disableShortcut(webAppId: WebAppId, title: String) {
+    fun disableShortcut(webAppId: WebAppId, title: String): Boolean {
         val shortcutIds = pinnedShortcutIds(webAppId)
-        updateLabel(shortcutIds = shortcutIds, webAppId = webAppId, label = "(削除済み) $title")
+        if (!updateLabel(shortcutIds = shortcutIds, webAppId = webAppId, label = "(削除済み) $title")) {
+            return false
+        }
         ShortcutManagerCompat.disableShortcuts(
             context,
             shortcutIds,
             "削除されたアプリです。アイコンを長押ししてホームから削除してください",
         )
+        return true
     }
 
     /** ホームのアイコンのラベルを変える。レート制限などでランチャーに拒否されると false */

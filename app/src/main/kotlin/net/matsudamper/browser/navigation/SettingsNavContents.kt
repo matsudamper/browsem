@@ -320,6 +320,10 @@ internal fun WebAppsNavContent(navActions: OuterNavActions) {
                 override fun onRenameFailed() {
                     Toast.makeText(context, "ホームのアイコンの名前を変更できませんでした。時間をおいて再度お試しください", Toast.LENGTH_SHORT).show()
                 }
+
+                override fun onDeleteFailed() {
+                    Toast.makeText(context, "ホームのアイコンを更新できなかったため削除を中止しました。時間をおいて再度お試しください", Toast.LENGTH_SHORT).show()
+                }
             })
         }
     }
