@@ -18,7 +18,8 @@ class WebAppRepository(context: Context) {
     // GeckoView の sessionState は CursorWindow 上限を超え得るため、タブと同様に DB ではなくファイルへ保存する
     private val sessionStateDir = File(context.filesDir, "web_app_session_states")
 
-    // 登録の確認からファイル書き込みまでの間に削除が割り込むと、削除済みのファイルを作り直して孤立させるため排他する
+    // 登録の確認からファイル書き込みまでの間に削除が割り込むと、削除済みのファイルを作り直して孤立させるため排他する。
+    // 読み込みも、削除中のファイルや書き込み途中のファイルを読まないよう同じく排他する。
     private val sessionStateMutex = Mutex()
 
     fun observeWebApps(): Flow<List<WebAppData>> {
@@ -61,9 +62,11 @@ class WebAppRepository(context: Context) {
     }
 
     suspend fun loadSessionState(webAppId: WebAppId): String? {
-        return withContext(Dispatchers.IO) {
-            val file = sessionStateFile(webAppId)
-            if (file != null && file.exists()) file.readText().ifBlank { null } else null
+        return sessionStateMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val file = sessionStateFile(webAppId)
+                if (file != null && file.exists()) file.readText().ifBlank { null } else null
+            }
         }
     }
 
