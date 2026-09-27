@@ -43,10 +43,12 @@ internal class WebAppShortcutManager(
     /**
      * 起動 URI が一致するピン留めショートカットを探す。
      * 同じ URL を通常のショートカット（DeepLinkActivity 向け）としても追加していると旧形式の data URI が一致するため、起動先でも絞る。
+     * 削除して無効化したアイコンもホームに残るため、無効化済みのものは対象にしない。
      */
     fun findPinnedShortcut(launchUri: String): PinnedWebAppShortcut? {
         val shortcut = pinnedShortcuts().firstOrNull {
-            it.intent.component?.className == WebAppActivity::class.java.name &&
+            it.isEnabled &&
+                it.intent.component?.className == WebAppActivity::class.java.name &&
                 it.intent.data?.toString() == launchUri
         }
         return if (shortcut == null) {
