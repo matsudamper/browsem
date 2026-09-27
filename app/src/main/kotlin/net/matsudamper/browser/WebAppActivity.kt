@@ -290,4 +290,3 @@ class WebAppActivity : ComponentActivity() {
         deferred.await()
     }
 }
-
