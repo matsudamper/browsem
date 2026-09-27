@@ -3,8 +3,6 @@ package net.matsudamper.browser
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
@@ -31,8 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
-import kotlin.math.max
-import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 
@@ -46,7 +42,7 @@ internal fun AddToHomeScreenDialog(
     title: String,
     favicon: Bitmap?,
     isIconLoading: Boolean,
-    profileId: ProfileId,
+    onAddWebApp: (title: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -90,7 +86,7 @@ internal fun AddToHomeScreenDialog(
                 }
                 TextButton(
                     onClick = {
-                        addWebAppToHome(context, url, editedTitle, favicon, profileId)
+                        onAddWebApp(editedTitle)
                         onDismiss()
                     },
                     enabled = !isIconLoading,
@@ -127,59 +123,6 @@ private fun addShortcutToHome(context: Context, url: String, title: String, favi
     ShortcutManagerCompat.requestPinShortcut(context, info, null)
 }
 
-/**
- * ホーム画面にアプリとして追加する。
- * 専用の WebAppActivity で開き、ドキュメントタスクとして独立したRecentsエントリを持つ。
- */
-private fun addWebAppToHome(
-    context: Context,
-    url: String,
-    title: String,
-    favicon: Bitmap?,
-    profileId: ProfileId,
-) {
-    if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
-        Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
-        return
-    }
-    // 独立した Recents エントリは WebAppActivity の documentLaunchMode="intoExisting"
-    // (= FLAG_ACTIVITY_NEW_DOCUMENT 相当) が保証するため、ピン Intent 側にフラグは不要。
-    val intent = Intent(context, WebAppActivity::class.java).apply {
-        action = Intent.ACTION_VIEW
-        data = WebAppLaunchUri.create(pageUrl = url, profileId = profileId)
-    }
-    // documentLaunchMode のアプリピンは、ランチャーがアイコンの透過部分を黒で塗りつぶし、
-    // 暗い favicon と合わさって真っ黒に見える。透過を不透明な白背景で埋めてから渡す。
-    val icon = if (favicon != null) {
-        IconCompat.createWithBitmap(favicon.toOpaqueSquareIcon())
-    } else {
-        IconCompat.createWithResource(context, R.mipmap.ic_launcher)
-    }
-    val info = ShortcutInfoCompat.Builder(context, "webapp_${profileId.value}_${url.hashCode()}")
-        .setShortLabel(title.ifBlank { url }.take(25))
-        .setLongLabel(title.ifBlank { url })
-        .setIcon(icon)
-        .setIntent(intent)
-        .build()
-    ShortcutManagerCompat.requestPinShortcut(context, info, null)
-}
-
-/**
- * favicon を不透明な白背景の正方形 Bitmap に合成する。
- * documentLaunchMode のアプリピンではランチャーがアイコンの透過部分を黒で塗るため、
- * 透過を白で埋めて真っ黒化を防ぐ。元 Bitmap が長方形でも短辺側を余白とした正方形にする。
- */
-private fun Bitmap.toOpaqueSquareIcon(): Bitmap {
-    val size = max(width, height)
-    val squared = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(squared)
-    canvas.drawColor(Color.WHITE)
-    val left = (size - width) / 2f
-    val top = (size - height) / 2f
-    canvas.drawBitmap(this, left, top, null)
-    return squared
-}
-
 @Preview(name = "favicon あり")
 @Composable
 private fun PreviewWithFavicon() {
@@ -189,7 +132,7 @@ private fun PreviewWithFavicon() {
             title = "Example Site",
             favicon = null,
             isIconLoading = false,
-            profileId = ProfileId.DEFAULT,
+            onAddWebApp = {},
             onDismiss = {},
         )
     }
@@ -204,7 +147,7 @@ private fun PreviewNoTitle() {
             title = "",
             favicon = null,
             isIconLoading = true,
-            profileId = ProfileId.DEFAULT,
+            onAddWebApp = {},
             onDismiss = {},
         )
     }

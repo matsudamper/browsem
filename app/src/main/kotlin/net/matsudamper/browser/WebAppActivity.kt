@@ -32,6 +32,8 @@ import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.WebAppId
+import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
@@ -59,6 +61,8 @@ class WebAppActivity : ComponentActivity() {
     private val profileRepository: ProfileRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
+    private val webAppRepository: WebAppRepository by inject()
+    private var launchConfig: WebAppLaunchConfig? by mutableStateOf(null)
 
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
@@ -80,13 +84,17 @@ class WebAppActivity : ComponentActivity() {
             geckoRuntime = initialized
         }
 
-        val launchTarget = resolveLaunchTarget()
-        val initialUrl = launchTarget?.pageUrl
-        val profileId = launchTarget?.profileId ?: ProfileId.DEFAULT
+        // savedInstanceState があるのは、プロセス終了後に Recents から Activity が再生成されたとき。
+        // このときだけ前回のページ状態を復元し、アイコンから新しく起動したときは起動ページから開く。
+        val restoresSession = savedInstanceState != null
+        lifecycleScope.launch {
+            launchConfig = resolveLaunchConfig(restoresSession = restoresSession)
+        }
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
             val runtime = geckoRuntime ?: return@setContent
+            val config = launchConfig ?: return@setContent
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
                 runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
@@ -105,7 +113,7 @@ class WebAppActivity : ComponentActivity() {
                             )
                         }
                     }
-                    val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
+                    val resolvedInitialUrl = config.pageUrl ?: browserSettings.resolvedHomepageUrl()
                     val webAppPinnedHost = runCatching { URI(resolvedInitialUrl).host }.getOrNull()
                     val webAppScreenViewModel: WebAppScreenViewModel = koinViewModel()
                     val uiState by webAppScreenViewModel.uiState.collectAsState()
@@ -123,9 +131,11 @@ class WebAppActivity : ComponentActivity() {
                             // Activity再生成（フォルダブル開閉等）時はViewModelのcontrollerに既存タブが残っているため再利用する。
                             // タブの破棄はViewModelの onCleared() で行う。
                             value = browserTabController.tabs.firstOrNull()
-                                ?: browserTabController.createAndAppendTab(
+                                ?: browserViewModel.createTab(
                                     initialUrl = resolvedInitialUrl,
-                                    profileId = resolveRegisteredProfileId(profileId),
+                                    profileId = resolveRegisteredProfileId(config.profileId),
+                                    webAppId = config.webAppId,
+                                    restoredSessionState = config.restoredSessionState,
                                 )
                         }
                         val activeTab = browserTab
@@ -279,13 +289,36 @@ class WebAppActivity : ComponentActivity() {
     }
 
     /**
-     * Intentのデータから起動するページとプロファイルを取り出す。
+     * Intentのデータから起動するページとプロファイルを解決する。
      * ページ URL は http/https の場合のみ採用し、それ以外は null にしてホームページにフォールバックさせる。
+     * 削除済みのウェブアプリもホームページにフォールバックさせる。
      */
-    private fun resolveLaunchTarget(): WebAppLaunchTarget? {
-        if (intent.action != Intent.ACTION_VIEW) return null
-        val launchTarget = WebAppLaunchUri.parse(intent.data) ?: return null
-        return launchTarget.copy(pageUrl = ExternalInitialUrlPolicy.sanitize(launchTarget.pageUrl))
+    private suspend fun resolveLaunchConfig(restoresSession: Boolean): WebAppLaunchConfig {
+        val launchTarget = if (intent.action == Intent.ACTION_VIEW) WebAppLaunchUri.parse(intent.data) else null
+        return when (launchTarget) {
+            null -> WebAppLaunchConfig.homepage()
+
+            is WebAppLaunchTarget.Legacy -> WebAppLaunchConfig(
+                pageUrl = ExternalInitialUrlPolicy.sanitize(launchTarget.pageUrl),
+                profileId = launchTarget.profileId,
+                webAppId = null,
+                restoredSessionState = null,
+            )
+
+            is WebAppLaunchTarget.Registered -> {
+                val webApp = webAppRepository.getWebApp(launchTarget.webAppId)
+                if (webApp == null) {
+                    WebAppLaunchConfig.homepage()
+                } else {
+                    WebAppLaunchConfig(
+                        pageUrl = ExternalInitialUrlPolicy.sanitize(webApp.startUrl),
+                        profileId = webApp.profileId,
+                        webAppId = webApp.id,
+                        restoredSessionState = if (restoresSession) webAppRepository.loadSessionState(webApp.id) else null,
+                    )
+                }
+            }
+        }
     }
 
     /**
@@ -321,5 +354,21 @@ class WebAppActivity : ComponentActivity() {
         pendingDownloadNotificationPermissionDeferred = deferred
         requestDownloadNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         deferred.await()
+    }
+}
+
+private data class WebAppLaunchConfig(
+    val pageUrl: String?,
+    val profileId: ProfileId,
+    val webAppId: WebAppId?,
+    val restoredSessionState: String?,
+) {
+    companion object {
+        fun homepage(): WebAppLaunchConfig = WebAppLaunchConfig(
+            pageUrl = null,
+            profileId = ProfileId.DEFAULT,
+            webAppId = null,
+            restoredSessionState = null,
+        )
     }
 }

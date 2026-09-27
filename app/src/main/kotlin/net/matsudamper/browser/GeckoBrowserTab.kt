@@ -162,6 +162,7 @@ internal fun GeckoBrowserTab(
     val context = LocalContext.current
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val addressRepository: AddressRepository = koinInject()
+    val webAppShortcutManager: WebAppShortcutManager = koinInject()
     val formInputRepository: FormInputRepository = koinInject()
     val addressAutofillCoordinator: AddressAutofillCoordinator = koinInject()
     val formInputAutofillCoordinator: FormInputAutofillCoordinator = koinInject()
@@ -1541,7 +1542,14 @@ internal fun GeckoBrowserTab(
             title = addToHomeScreenState.title,
             favicon = addToHomeScreenState.favicon,
             isIconLoading = addToHomeScreenState.isIconLoading,
-            profileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId),
+            onAddWebApp = { title ->
+                webAppShortcutManager.addToHome(
+                    url = addToHomeScreenState.url,
+                    title = title,
+                    favicon = addToHomeScreenState.favicon,
+                    profileId = ProfileId.fromGeckoContextId(browserTab.session.settings.contextId),
+                )
+            },
             onDismiss = state::dismissAddToHomeScreen,
         )
     }

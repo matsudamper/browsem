@@ -2,43 +2,57 @@ package net.matsudamper.browser
 
 import android.net.Uri
 import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.WebAppId
 
 /**
  * ホームに追加したアプリを起動する Intent の data。
  *
  * documentLaunchMode="intoExisting" は component と data URI で既存タスクを照合するため、
- * ページ URL をそのまま data にすると別プロファイルで追加した同じ URL のアプリが同じタスクを再利用してしまう。
- * data にプロファイルを含めてタスクを分け、ページ URL はクエリに持たせる。
+ * data にウェブアプリ ID を含めてアプリごとにタスクを分ける。
+ * 起動ページやプロファイルはウェブアプリ ID から DB を引いて解決する。
  */
 internal object WebAppLaunchUri {
     private const val SCHEME = "browsem-webapp"
+
+    // authority が無いと文字列からの再パースで opaque URI になりクエリを読めないため、固定の authority を置く
+    private const val WEB_APP_AUTHORITY = "app"
+    private const val QUERY_WEB_APP_ID = "id"
     private const val QUERY_PAGE_URL = "url"
 
-    fun create(pageUrl: String, profileId: ProfileId): Uri {
+    fun create(webAppId: WebAppId): Uri {
         return Uri.Builder()
             .scheme(SCHEME)
-            .authority(profileId.value)
-            .appendQueryParameter(QUERY_PAGE_URL, pageUrl)
+            .authority(WEB_APP_AUTHORITY)
+            .appendQueryParameter(QUERY_WEB_APP_ID, webAppId.value)
             .build()
     }
 
     /**
-     * プロファイル導入前に追加されたアプリはページ URL をそのまま data に持つため、デフォルトプロファイルとして扱う。
+     * DB 管理導入前に追加されたアプリは data にページ URL とプロファイルを直接持つため、[WebAppLaunchTarget.Legacy] として扱う。
+     * さらにプロファイル導入前のアプリはページ URL をそのまま data に持つため、デフォルトプロファイルとして扱う。
      */
     fun parse(uri: Uri?): WebAppLaunchTarget? {
         if (uri == null) return null
         if (uri.scheme != SCHEME) {
-            return WebAppLaunchTarget(pageUrl = uri.toString(), profileId = ProfileId.DEFAULT)
+            return WebAppLaunchTarget.Legacy(pageUrl = uri.toString(), profileId = ProfileId.DEFAULT)
+        }
+        val webAppIdValue = uri.getQueryParameter(QUERY_WEB_APP_ID)
+        if (!webAppIdValue.isNullOrEmpty()) {
+            return WebAppLaunchTarget.Registered(WebAppId(webAppIdValue))
         }
         val profileIdValue = uri.authority
-        return WebAppLaunchTarget(
+        return WebAppLaunchTarget.Legacy(
             pageUrl = uri.getQueryParameter(QUERY_PAGE_URL),
             profileId = if (profileIdValue.isNullOrEmpty()) ProfileId.DEFAULT else ProfileId(profileIdValue),
         )
     }
 }
 
-internal data class WebAppLaunchTarget(
-    val pageUrl: String?,
-    val profileId: ProfileId,
-)
+internal sealed interface WebAppLaunchTarget {
+    data class Registered(val webAppId: WebAppId) : WebAppLaunchTarget
+
+    data class Legacy(
+        val pageUrl: String?,
+        val profileId: ProfileId,
+    ) : WebAppLaunchTarget
+}
