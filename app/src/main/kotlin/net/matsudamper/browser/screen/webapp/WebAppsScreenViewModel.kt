@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +35,8 @@ internal class WebAppsScreenViewModel(
         override fun onConfirm() {
             val target = viewModelStateFlow.value.deleteTarget ?: return
             viewModelStateFlow.update { it.copy(deleteTarget = null) }
-            viewModelScope.launch {
+            // 確定直後に画面を閉じても、アイコンの無効化と DB 削除の途中で止めて登録だけ残さないよう、キャンセルさせない
+            viewModelScope.launch(NonCancellable) {
                 val isDisabled = withContext(Dispatchers.IO) {
                     webAppShortcutManager.disableShortcut(webAppId = target.id, title = target.title)
                 }
@@ -55,7 +57,8 @@ internal class WebAppsScreenViewModel(
         override fun onConfirm(title: String) {
             val target = viewModelStateFlow.value.renameTarget ?: return
             viewModelStateFlow.update { it.copy(renameTarget = null) }
-            viewModelScope.launch {
+            // 確定直後に画面を閉じても、アイコンと DB の名前が食い違ったまま止まらないよう、キャンセルさせない
+            viewModelScope.launch(NonCancellable) {
                 // 一覧の名前とホームのアイコンの名前を食い違わせないよう、アイコンを書き換えられたときだけ名前を変える
                 val isLabelUpdated = withContext(Dispatchers.IO) {
                     webAppShortcutManager.updateLabel(webAppId = target.id, label = title)
