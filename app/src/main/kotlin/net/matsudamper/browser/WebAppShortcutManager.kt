@@ -79,13 +79,37 @@ internal class WebAppShortcutManager(
         return pinnedShortcuts().mapNotNull { it.webAppIdOrNull() }.toSet()
     }
 
-    /** ホームに残ったアイコンは消せないため、無効化して起動できなくする */
-    fun disableShortcut(webAppId: WebAppId) {
-        // 旧形式から移行したショートカットは ID が旧形式のままなので、ID ではなく Intent から探す
-        val shortcutIds = pinnedShortcuts()
+    /**
+     * ホームのアイコンはアプリから消せないため、削除済みとわかるラベルに変えてから無効化し、起動できなくする。
+     * 無効化したショートカットは更新できないので、ラベルの変更を先に行う。
+     */
+    fun disableShortcut(webAppId: WebAppId, title: String) {
+        val shortcutIds = pinnedShortcutIds(webAppId)
+        updateLabel(shortcutIds = shortcutIds, webAppId = webAppId, label = "(削除済み) $title")
+        ShortcutManagerCompat.disableShortcuts(
+            context,
+            shortcutIds,
+            "削除されたアプリです。アイコンを長押ししてホームから削除してください",
+        )
+    }
+
+    // 旧形式から移行したショートカットは ID が旧形式のままなので、ID ではなく Intent から探す
+    private fun pinnedShortcutIds(webAppId: WebAppId): List<String> {
+        return pinnedShortcuts()
             .filter { it.webAppIdOrNull() == webAppId }
             .map { it.id }
-        ShortcutManagerCompat.disableShortcuts(context, shortcutIds, "削除されたアプリです")
+    }
+
+    /** アイコンは指定しなければ既存のものが残る */
+    private fun updateLabel(shortcutIds: List<String>, webAppId: WebAppId, label: String): Boolean {
+        val infos = shortcutIds.map { shortcutId ->
+            ShortcutInfoCompat.Builder(context, shortcutId)
+                .setShortLabel(label.take(25))
+                .setLongLabel(label)
+                .setIntent(WebAppLaunchUri.createIntent(context, webAppId))
+                .build()
+        }
+        return ShortcutManagerCompat.updateShortcuts(context, infos)
     }
 
     private fun pinnedShortcuts(): List<ShortcutInfoCompat> {

@@ -112,7 +112,7 @@ internal fun WebAppsScreen(
         AlertDialog(
             onDismissRequest = deleteConfirmDialog.listener::onDismiss,
             title = { Text("確認") },
-            text = { Text("「${deleteConfirmDialog.title}」を削除しますか？ホームのアイコンは使えなくなります。") },
+            text = { Text("「${deleteConfirmDialog.title}」を削除しますか？ホームのアイコンは「削除済み」になり使えなくなります。アイコン自体は長押しでホームから削除してください。") },
             confirmButton = {
                 TextButton(
                     onClick = deleteConfirmDialog.listener::onConfirm,

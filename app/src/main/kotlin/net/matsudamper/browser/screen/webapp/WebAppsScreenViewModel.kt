@@ -31,7 +31,7 @@ internal class WebAppsScreenViewModel(
         override fun onConfirm() {
             val target = viewModelStateFlow.value.deleteTarget ?: return
             viewModelStateFlow.update { it.copy(deleteTarget = null) }
-            webAppShortcutManager.disableShortcut(target.id)
+            webAppShortcutManager.disableShortcut(webAppId = target.id, title = target.title)
             viewModelScope.launch { webAppRepository.deleteWebApp(target.id) }
         }
 
