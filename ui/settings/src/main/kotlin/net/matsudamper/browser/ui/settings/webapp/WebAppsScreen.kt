@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +60,14 @@ sealed interface WebAppsScreenTestTags {
 
     data object ConfirmDeleteButton : WebAppsScreenTestTags {
         override val id = "confirm_delete_button"
+    }
+
+    data class AddToHomeButton(val index: Int) : WebAppsScreenTestTags {
+        override val id = "add_to_home_button_$index"
+    }
+
+    data class OverflowMenuButton(val index: Int) : WebAppsScreenTestTags {
+        override val id = "overflow_menu_button_$index"
     }
 }
 
@@ -188,6 +198,7 @@ private fun WebAppListItem(
     entry: WebAppsScreenUiState.EntryItem,
     index: Int,
 ) {
+    var overflowMenuExpanded by remember { mutableStateOf(false) }
     ListItem(
         headlineContent = {
             Text(
@@ -214,14 +225,37 @@ private fun WebAppListItem(
             }
         },
         trailingContent = {
-            IconButton(
-                onClick = entry.listener::onClickDelete,
-                modifier = Modifier.testTag(WebAppsScreenTestTags.DeleteButton(index).testTag),
-            ) {
-                Icon(
-                    painter = painterResource(ResourcesR.drawable.ic_delete_24dp),
-                    contentDescription = "削除",
-                )
+            Box {
+                IconButton(
+                    onClick = { overflowMenuExpanded = true },
+                    modifier = Modifier.testTag(WebAppsScreenTestTags.OverflowMenuButton(index).testTag),
+                ) {
+                    Icon(
+                        painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
+                        contentDescription = "メニュー",
+                    )
+                }
+                DropdownMenu(
+                    expanded = overflowMenuExpanded,
+                    onDismissRequest = { overflowMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("ホームにアイコンを追加") },
+                        onClick = {
+                            overflowMenuExpanded = false
+                            entry.listener.onClickAddToHome()
+                        },
+                        modifier = Modifier.testTag(WebAppsScreenTestTags.AddToHomeButton(index).testTag),
+                    )
+                    DropdownMenuItem(
+                        text = { Text("削除") },
+                        onClick = {
+                            overflowMenuExpanded = false
+                            entry.listener.onClickDelete()
+                        },
+                        modifier = Modifier.testTag(WebAppsScreenTestTags.DeleteButton(index).testTag),
+                    )
+                }
             }
         },
         modifier = Modifier
@@ -232,6 +266,7 @@ private fun WebAppListItem(
 
 private object PreviewEntryListener : WebAppsScreenUiState.EntryItem.Listener {
     override fun onClick() = Unit
+    override fun onClickAddToHome() = Unit
     override fun onClickDelete() = Unit
 }
 

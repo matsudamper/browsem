@@ -19,6 +19,7 @@ data class WebAppsScreenUiState(
         @Stable
         interface Listener {
             fun onClick()
+            fun onClickAddToHome()
             fun onClickDelete()
         }
     }

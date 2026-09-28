@@ -37,6 +37,10 @@ internal class WebAppShortcutManager(
             .setIcon(icon)
             .setIntent(WebAppLaunchUri.createIntent(context, launchInfo))
             .build()
+        // 同じ ID のショートカットが残っていると、ランチャーは渡した情報ではなく既存のものを表示するため、先にアイコンを差し替える
+        if (pinnedShortcuts().any { it.id == info.id && it.isEnabled }) {
+            ShortcutManagerCompat.updateShortcuts(context, listOf(info))
+        }
         ShortcutManagerCompat.requestPinShortcut(context, info, null)
     }
 
