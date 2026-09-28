@@ -324,6 +324,10 @@ internal fun WebAppsNavContent(navActions: OuterNavActions) {
                 override fun onDeleteFailed() {
                     Toast.makeText(context, "ホームのアイコンを更新できなかったため削除を中止しました。時間をおいて再度お試しください", Toast.LENGTH_SHORT).show()
                 }
+
+                override fun onPinNotSupported() {
+                    Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
+                }
             })
         }
     }

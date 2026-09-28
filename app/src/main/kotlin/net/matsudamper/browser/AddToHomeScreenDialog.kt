@@ -1,10 +1,6 @@
 package net.matsudamper.browser
 
-import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,12 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.pm.ShortcutInfoCompat
-import androidx.core.content.pm.ShortcutManagerCompat
-import androidx.core.graphics.drawable.IconCompat
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 
@@ -42,10 +34,11 @@ internal fun AddToHomeScreenDialog(
     title: String,
     favicon: Bitmap?,
     isIconLoading: Boolean,
+    showShortcutOption: Boolean,
     onAddWebApp: (title: String) -> Unit,
+    onAddShortcut: (title: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
     var editedTitle by remember { mutableStateOf(title.ifBlank { url }) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -75,14 +68,15 @@ internal fun AddToHomeScreenDialog(
         },
         confirmButton = {
             Row {
-                TextButton(
-                    onClick = {
-                        addShortcutToHome(context, url, editedTitle, favicon)
-                        onDismiss()
-                    },
-                    enabled = !isIconLoading,
-                ) {
-                    Text("ショートカット")
+                if (showShortcutOption) {
+                    TextButton(
+                        onClick = {
+                            onAddShortcut(editedTitle)
+                        },
+                        enabled = !isIconLoading,
+                    ) {
+                        Text("ショートカット")
+                    }
                 }
                 TextButton(
                     onClick = {
@@ -91,36 +85,11 @@ internal fun AddToHomeScreenDialog(
                     },
                     enabled = !isIconLoading,
                 ) {
-                    Text("アプリ")
+                    Text(if (showShortcutOption) "アプリ" else "追加")
                 }
             }
         },
     )
-}
-
-/**
- * ホーム画面にショートカットを追加する。
- * ショートカットはアプリの http/https ディープリンクハンドラ経由でURLを開く。
- */
-private fun addShortcutToHome(context: Context, url: String, title: String, favicon: Bitmap?) {
-    if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
-        Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
-        return
-    }
-    // DeepLinkActivity を経由することでアプリの http/https VIEW ルーティングを正しく使用する
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url), context, DeepLinkActivity::class.java)
-    val icon = if (favicon != null) {
-        IconCompat.createWithBitmap(favicon)
-    } else {
-        IconCompat.createWithResource(context, R.mipmap.ic_launcher)
-    }
-    val info = ShortcutInfoCompat.Builder(context, "shortcut_${url.hashCode()}")
-        .setShortLabel(title.ifBlank { url }.take(25))
-        .setLongLabel(title.ifBlank { url })
-        .setIcon(icon)
-        .setIntent(intent)
-        .build()
-    ShortcutManagerCompat.requestPinShortcut(context, info, null)
 }
 
 @Preview(name = "favicon あり")
@@ -132,7 +101,26 @@ private fun PreviewWithFavicon() {
             title = "Example Site",
             favicon = null,
             isIconLoading = false,
+            showShortcutOption = true,
             onAddWebApp = {},
+            onAddShortcut = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "登録済みウェブアプリ")
+@Composable
+private fun PreviewRegisteredWebApp() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        AddToHomeScreenDialog(
+            url = "https://example.com",
+            title = "Example",
+            favicon = null,
+            isIconLoading = false,
+            showShortcutOption = false,
+            onAddWebApp = {},
+            onAddShortcut = {},
             onDismiss = {},
         )
     }
@@ -147,7 +135,9 @@ private fun PreviewNoTitle() {
             title = "",
             favicon = null,
             isIconLoading = true,
+            showShortcutOption = true,
             onAddWebApp = {},
+            onAddShortcut = {},
             onDismiss = {},
         )
     }

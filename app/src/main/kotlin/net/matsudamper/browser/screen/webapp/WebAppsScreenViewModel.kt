@@ -14,12 +14,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.AddToHomeScreenTarget
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.data.ProfileData
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.WebAppData
 import net.matsudamper.browser.data.WebAppRepository
+import net.matsudamper.browser.requestPinRegisteredWebAppToHome
 import net.matsudamper.browser.ui.settings.webapp.WebAppsScreenUiState
 
 internal class WebAppsScreenViewModel(
@@ -150,6 +152,25 @@ internal class WebAppsScreenViewModel(
                     viewModelStateFlow.update { it.copy(renameTarget = webApp) }
                 }
 
+                override fun onClickAddToHome() {
+                    val target = AddToHomeScreenTarget.RegisteredWebApp(
+                        webAppId = webApp.id,
+                        url = webApp.startUrl,
+                        title = webApp.title,
+                        profileId = webApp.profileId,
+                    )
+                    viewModelScope.launch {
+                        val isPinned = requestPinRegisteredWebAppToHome(
+                            webAppShortcutManager = webAppShortcutManager,
+                            target = target,
+                            fallbackFavicon = null,
+                        )
+                        if (!isPinned) {
+                            eventHandler.trySend { it.onPinNotSupported() }
+                        }
+                    }
+                }
+
                 override fun onClickDelete() {
                     viewModelStateFlow.update { it.copy(deleteTarget = webApp) }
                 }
@@ -158,7 +179,8 @@ internal class WebAppsScreenViewModel(
     }
 
     interface Event {
-        /** ランチャーがアイコンの書き換えを拒否した（レート制限など） */
+        /** ランチャーがピン留めに対応していない */
+        fun onPinNotSupported()
         fun onRenameFailed()
 
         /** ランチャーがアイコンの書き換えを拒否したため、削除を中止した（レート制限など） */

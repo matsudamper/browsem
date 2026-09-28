@@ -691,6 +691,8 @@ private fun MainBrowserContent(
                                     customTabMode = false,
                                     webAppMode = false,
                                     webAppPinnedHost = null,
+                                    webAppLaunchInfo = null,
+                                    webAppRegisteredTitle = null,
                                     onWebAppCrossDomainNavigation = null,
                                     onCloseCustomTab = null,
                                     onOpenInBrowser = null,
