@@ -14,6 +14,16 @@ class DeepLinkActivity : ComponentActivity() {
                     action = intent.action
                     data = intent.data
                     intent.extras?.let { putExtras(it) }
+                    if (intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0) {
+                        // 呼び出し元のタスクに載らない起動では、既存のブラウザタスクへ積むと
+                        // MainActivity(singleTask) の再表示で破棄され、呼び出し元にも戻れない。
+                        // Chrome と同様に独立した Recents エントリとして開く。
+                        addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_NEW_DOCUMENT or
+                                Intent.FLAG_ACTIVITY_MULTIPLE_TASK,
+                        )
+                    }
                 },
             )
         } else {

@@ -103,9 +103,14 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
+        <!--
+            taskAffinity を MainActivity と分け、独立タスクで開いたカスタムタブに
+            MainActivity(singleTask) が相乗りしないようにする。
+        -->
         <activity
             android:name=".CustomTabActivity"
             android:exported="false"
+            android:taskAffinity=""
             android:windowSoftInputMode="adjustResize" />
         <!--
             ホームに「アプリとして追加」したショートカットから起動するActivity。
