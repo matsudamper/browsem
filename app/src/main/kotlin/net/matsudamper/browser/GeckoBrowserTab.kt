@@ -19,7 +19,6 @@ import android.view.ViewTreeObserver
 import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -1808,15 +1807,6 @@ private const val MENU_ID_OPEN = 0x10002
 private const val MENU_ID_SAVE_FORM_INPUT = 0x10003
 
 /**
- * 任意の画像を求める要求かどうか。
- * image/png のような具体的なサブタイプ指定はフォトピッカーでは制約を表現できず、
- * SVG など MediaStore に載らない形式も選べなくなるため、従来のファイルピッカーに任せる。
- */
-private fun isAnyImageRequest(mimeTypes: Array<String>): Boolean {
-    return mimeTypes.any { it == "image/*" } && mimeTypes.all { it.startsWith("image/") }
-}
-
-/**
  * ACTION_GET_CONTENT を使った単一ファイル選択コントラクト。
  * OpenDocument と異なり Google Photos などのフォトアプリもピッカーに表示される。
  */
@@ -1917,49 +1907,16 @@ internal fun FilePromptLaunchEffect(dialogState: PromptDialogState) {
         }
     }
 
-    // 画像のみの要求で使うフォトピッカー（単一選択）Google フォトなどのクラウド写真も選択できる
-    val singleVisualMediaLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) {
-            dialogState.confirmFilePrompt(context, arrayOf(uri))
-        } else {
-            dialogState.dismissFilePrompt()
-        }
-    }
-
-    val multipleVisualMediaLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(),
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            dialogState.confirmFilePrompt(context, uris.toTypedArray())
-        } else {
-            dialogState.dismissFilePrompt()
-        }
-    }
-
     val pendingFilePrompt = dialogState.pendingFilePrompt
     LaunchedEffect(pendingFilePrompt) {
         val prompt = pendingFilePrompt ?: return@LaunchedEffect
         val mimeTypes = prompt.mimeTypes?.takeIf { it.isNotEmpty() } ?: arrayOf("*/*")
-        val isMultiple = prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE
-        // フォトピッカーには撮影機能がないため、capture 指定時は従来のピッカーでカメラを選べるようにする
-        val usesPhotoPicker = prompt.capture == GeckoSession.PromptDelegate.FilePrompt.Capture.NONE &&
-            isAnyImageRequest(mimeTypes) &&
-            ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(context)
-        val imageOnly = ActivityResultContracts.PickVisualMedia.ImageOnly
-        when {
-            usesPhotoPicker && isMultiple ->
-                multipleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnly))
-
-            usesPhotoPicker ->
-                singleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnly))
-
-            isMultiple ->
-                multipleFilesLauncher.launch(mimeTypes)
-
-            else ->
-                singleFileLauncher.launch(mimeTypes)
+        // image/* を ACTION_PICK_IMAGES で直接開くと外部アプリへの「参照」導線が無くなるため、
+        // 常に ACTION_GET_CONTENT で開き、対応端末ではシステム側に写真ピッカーへ切り替えさせる
+        if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
+            multipleFilesLauncher.launch(mimeTypes)
+        } else {
+            singleFileLauncher.launch(mimeTypes)
         }
     }
 }
