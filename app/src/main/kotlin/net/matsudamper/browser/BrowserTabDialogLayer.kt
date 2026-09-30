@@ -1192,6 +1192,12 @@ private fun DuplicateDownloadDialog(
         title = { Text("ダウンロードの重複") },
         text = {
             Column {
+                Text(
+                    text = state.url,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 state.existingDownloads.forEach { entry ->
                     val displayName = entry.fileName.ifEmpty { "（ファイル名未取得）" }
                     val fileUri = entry.fileUri
