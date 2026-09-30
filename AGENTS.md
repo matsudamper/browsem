@@ -16,7 +16,7 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 変更・削除前に `git log -p` で追加経緯を確認する。
 
 ## テスト
-- 単体: JUnit 4。`./gradlew test`（Paparazziは自動除外）
+- 単体: JUnit 4。`./gradlew test`
 - Instrumentation: Gradle Managed Device のみ（実機・通常エミュレータ禁止）
 - 通常は全件実行せず class 指定で絞る
 - UI操作は Compose セマンティクス API。生のタッチ注入禁止
@@ -31,14 +31,11 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 1. `./gradlew :app:assembleDebug` でビルド確認
 2. `./gradlew detekt` で lint を確認
 3. `./gradlew test` でユニットテスト通過を確認
-4. UI 変更を含む場合は `@Preview` を追加/更新し、Paparazzi スナップショットを撮影（コミットしない。PR とチャットに貼る）
 
 ## ビルド例
 ```bash
 ./gradlew :app:assembleDebug
 ./gradlew test
-./gradlew :app:verifyPaparazziDebug
-./gradlew :app:recordPaparazziDebug -Dpaparazzi.filter="PreviewName"
 ./gradlew :app:lintDebug detekt
 ./gradlew :app:pixel6Api34DebugAndroidTest
 ```
@@ -53,10 +50,8 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 リポジトリに存在する `docs/` 以下のエージェント向けドキュメントがあれば、必ず読んで従う。無いファイルは無視してよい。
 
 例:
-- `docs/agent-kotlin.md` — Kotlin 詳細スタイル
-- `docs/agent-compose.md` — Compose / UiState
-- `docs/agent-paparazzi.md` — Paparazzi
-- 既存の `docs/compose-guidelines.md` / `docs/coding_style.md` などリポ固有の詳細ガイド
+- `docs/agent-*.md`
+- `docs/*-guidelines.md` / `docs/*_style.md` など
 
 ## 言語
 - 応答・説明・コミットメッセージ・PR 文・レビュー返信は日本語
