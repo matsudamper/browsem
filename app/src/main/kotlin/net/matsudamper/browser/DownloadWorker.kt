@@ -18,6 +18,7 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.DownloadByteFormat
 import net.matsudamper.browser.download.DownloadEngine
@@ -71,6 +72,12 @@ internal class DownloadWorker(
         stableWorkerId = inputData.getString(KEY_STABLE_WORKER_ID) ?: id.toString()
 
         val enqueuedAt = System.currentTimeMillis()
+
+        // 再実行されたワーカーがダウンロードし直すと、管理画面に出ない重複ファイルと完了通知が作られてしまう
+        if (repository.isFinished(id.toString())) {
+            repostTerminalNotification()
+            return Result.success()
+        }
 
         ensureNotificationChannel(context)
         setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L, stableWorkerId))
@@ -161,6 +168,20 @@ internal class DownloadWorker(
     private suspend fun throwIfCancelledOnRecord() {
         if (repository.isStopRequested(id.toString())) {
             throw CancellationException("ダウンロードがキャンセルまたは一時停止されました")
+        }
+    }
+
+    /**
+     * 確定状態の更新後、終端通知を出す前に終了していた場合は通知が一度も表示されないため、
+     * 保存済みの結果から同じ通知IDで出し直す
+     */
+    private suspend fun repostTerminalNotification() {
+        val record = repository.getByCurrentWorkerId(id) ?: return
+        val fileUri = record.fileUri
+        if (record.status == DownloadRecordStatus.SUCCEEDED.name && fileUri != null) {
+            postCompletionNotification(record.fileName, fileUri, stableWorkerId)
+        } else if (record.status == DownloadRecordStatus.FAILED.name) {
+            postFailureNotification(stableWorkerId, record.failureReason.orEmpty())
         }
     }
 
