@@ -135,7 +135,7 @@ internal class TabDownloadState(
         state.onDismiss()
     }
 
-    /** 完了済みを優先して最新の 1 件を返す。完了済みもダウンロード中もなければ null */
+    /** 完了済みを優先して最新の 1 件を返す。完了済みもダウンロード中もなければ null（一時停止中は無視する） */
     private suspend fun findExistingDownload(url: String): ExistingDownload? {
         val records = geckoDownloadManager.findDuplicateDownloads(url)
         val latestSucceeded = records
@@ -184,7 +184,6 @@ internal class TabDownloadState(
         val IN_PROGRESS_STATUSES = setOf(
             DownloadRecordStatus.ENQUEUED,
             DownloadRecordStatus.RUNNING,
-            DownloadRecordStatus.PAUSED,
         )
     }
 }
