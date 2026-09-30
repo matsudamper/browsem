@@ -217,6 +217,18 @@ class DownloadRepository(context: Context) {
         )
     }
 
+    /**
+     * 指定したワーカーのダウンロードが完了または失敗で確定しているかを返す。
+     * 完了処理の後にプロセス終了やシステム停止が起きると WorkManager が同じワーカーを再実行するため、
+     * 確定済みのレコードを再びダウンロードしないよう Worker の開始時に確認するために使用する
+     */
+    suspend fun isFinished(currentWorkerId: String): Boolean {
+        return dao.getStatus(currentWorkerId) in listOf(
+            DownloadRecordStatus.SUCCEEDED.name,
+            DownloadRecordStatus.FAILED.name,
+        )
+    }
+
     suspend fun getByCurrentWorkerId(currentWorkerId: UUID): DownloadEntity? {
         return dao.getByCurrentWorkerId(currentWorkerId = currentWorkerId.toString())
     }

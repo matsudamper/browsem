@@ -46,6 +46,28 @@ class DownloadStopRequestTest {
         assertFalse("付け替え後のワーカーは走り続ける", repository.isStopRequested(newWorkerId))
     }
 
+    @Test
+    fun `完了済みのワーカーは確定済み`() = runBlocking {
+        val workerId = UUID.randomUUID().toString()
+        repository.insertDownload(workerId = workerId, url = URL, referrerUrl = "", enqueuedAt = 0L)
+        repository.updateCompleted(currentWorkerId = workerId, fileName = "file.bin", fileUri = "content://media/external/downloads/1")
+
+        assertTrue(repository.isFinished(workerId))
+    }
+
+    @Test
+    fun `実行中のワーカーは確定済みではない`() = runBlocking {
+        val workerId = UUID.randomUUID().toString()
+        repository.insertDownload(workerId = workerId, url = URL, referrerUrl = "", enqueuedAt = 0L)
+
+        assertFalse(repository.isFinished(workerId))
+    }
+
+    @Test
+    fun `レコードが無いワーカーは確定済みではない`() = runBlocking {
+        assertFalse(repository.isFinished(UUID.randomUUID().toString()))
+    }
+
     private companion object {
         const val URL = "https://example.com/file.bin"
     }

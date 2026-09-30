@@ -72,6 +72,11 @@ internal class DownloadWorker(
 
         val enqueuedAt = System.currentTimeMillis()
 
+        // 再実行されたワーカーがダウンロードし直すと、管理画面に出ない重複ファイルと完了通知が作られてしまう
+        if (repository.isFinished(id.toString())) {
+            return Result.success()
+        }
+
         ensureNotificationChannel(context)
         setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L, stableWorkerId))
 
