@@ -55,6 +55,9 @@ internal sealed interface CustomTabToolbarTestTags {
     object PageInfo : CustomTabToolbarTestTags {
         override val id = "custom_tab_page_info"
     }
+    object TranslateButton : CustomTabToolbarTestTags {
+        override val id = "custom_tab_translate_button"
+    }
     object MenuButton : CustomTabToolbarTestTags {
         override val id = "custom_tab_menu_button"
     }
@@ -169,6 +172,15 @@ internal fun CustomTabToolbar(
                     color = toolbarSecondaryContentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(
+                modifier = Modifier.testTag(CustomTabToolbarTestTags.TranslateButton.testTag),
+                onClick = onTranslatePage,
+            ) {
+                Icon(
+                    painter = painterResource(ResourcesR.drawable.ic_translate_24dp),
+                    contentDescription = "翻訳",
                 )
             }
             Box(
