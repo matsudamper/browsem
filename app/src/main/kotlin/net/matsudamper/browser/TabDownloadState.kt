@@ -27,17 +27,24 @@ internal class TabDownloadState(
     @Stable
     class DuplicateDownloadState(
         val url: String,
-        val existingDownloads: List<DuplicateDownloadEntry>,
+        val existingDownload: ExistingDownload,
         internal val onConfirm: () -> Unit,
         internal val onDismiss: () -> Unit = {},
         internal val onCancel: () -> Unit = {},
     )
 
-    data class DuplicateDownloadEntry(
-        val fileName: String,
-        val status: DownloadRecordStatus,
-        val fileUri: String?,
-    )
+    sealed interface ExistingDownload {
+        val fileName: String
+
+        data class Succeeded(
+            override val fileName: String,
+            val fileUri: String?,
+        ) : ExistingDownload
+
+        data class InProgress(
+            override val fileName: String,
+        ) : ExistingDownload
+    }
 
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
         private set
@@ -48,11 +55,11 @@ internal class TabDownloadState(
     fun downloadImage(imageUrl: String) {
         val referrerUrl = currentPageUrl()
         coroutineScope.launch {
-            val duplicates = findDuplicates(imageUrl)
-            if (duplicates != null) {
+            val duplicate = findExistingDownload(imageUrl)
+            if (duplicate != null) {
                 duplicateDownloadState = DuplicateDownloadState(
                     url = imageUrl,
-                    existingDownloads = duplicates,
+                    existingDownload = duplicate,
                     onConfirm = { proceedDownloadImage(imageUrl, referrerUrl) },
                 )
                 return@launch
@@ -66,11 +73,11 @@ internal class TabDownloadState(
     fun downloadFileFromResponse(response: WebResponse) {
         val referrerUrl = currentPageUrl()
         coroutineScope.launch {
-            val duplicates = findDuplicates(response.uri)
-            if (duplicates != null) {
+            val duplicate = findExistingDownload(response.uri)
+            if (duplicate != null) {
                 duplicateDownloadState = DuplicateDownloadState(
                     url = response.uri,
-                    existingDownloads = duplicates,
+                    existingDownload = duplicate,
                     onConfirm = {
                         proceedDownloadFromResponse(response, referrerUrl) {
                             onDownloadResolved(response.uri)
@@ -128,17 +135,23 @@ internal class TabDownloadState(
         state.onDismiss()
     }
 
-    /** 既存ダウンロードがない場合は null を返す */
-    private suspend fun findDuplicates(url: String): List<DuplicateDownloadEntry>? {
-        val duplicates = geckoDownloadManager.findDuplicateDownloads(url)
-        if (duplicates.isEmpty()) return null
-        return duplicates.map { record ->
-            DuplicateDownloadEntry(
-                fileName = record.fileName,
-                status = record.status,
-                fileUri = record.fileUri,
+    /** 完了済みを優先して最新の 1 件を返す。完了済みもダウンロード中もなければ null（一時停止中は無視する） */
+    private suspend fun findExistingDownload(url: String): ExistingDownload? {
+        val records = geckoDownloadManager.findDuplicateDownloads(url)
+        val latestSucceeded = records
+            .filter { it.status == DownloadRecordStatus.SUCCEEDED }
+            .maxByOrNull { it.enqueuedAt }
+        if (latestSucceeded != null) {
+            return ExistingDownload.Succeeded(
+                fileName = latestSucceeded.fileName,
+                fileUri = latestSucceeded.fileUri,
             )
         }
+        val latestInProgress = records
+            .filter { it.status in IN_PROGRESS_STATUSES }
+            .maxByOrNull { it.enqueuedAt }
+            ?: return null
+        return ExistingDownload.InProgress(fileName = latestInProgress.fileName)
     }
 
     private fun proceedDownloadImage(imageUrl: String, referrerUrl: String) {
@@ -165,5 +178,12 @@ internal class TabDownloadState(
                 onEnqueueFailed = { response.body?.close() },
             )
         }
+    }
+
+    private companion object {
+        val IN_PROGRESS_STATUSES = setOf(
+            DownloadRecordStatus.ENQUEUED,
+            DownloadRecordStatus.RUNNING,
+        )
     }
 }

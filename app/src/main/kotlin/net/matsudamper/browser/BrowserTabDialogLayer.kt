@@ -57,7 +57,6 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import net.matsudamper.browser.data.ThemeMode
-import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.Autocomplete
@@ -1192,34 +1191,44 @@ private fun DuplicateDownloadDialog(
         title = { Text("ダウンロードの重複") },
         text = {
             Column {
-                state.existingDownloads.forEach { entry ->
-                    val displayName = entry.fileName.ifEmpty { "（ファイル名未取得）" }
-                    val fileUri = entry.fileUri
-                    Text(
-                        text = buildAnnotatedString {
-                            if (onOpenFile != null && fileUri != null) {
-                                withLink(
-                                    LinkAnnotation.Clickable("open_file") {
-                                        onDismiss()
-                                        onOpenFile(fileUri)
-                                    },
+                Text(
+                    text = state.url,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                val existingDownload = state.existingDownload
+                val displayName = existingDownload.fileName.ifEmpty { "（ファイル名未取得）" }
+                val openableFileUri = (existingDownload as? TabDownloadState.ExistingDownload.Succeeded)
+                    ?.fileUri
+                    ?.takeIf { onOpenFile != null }
+                Text(
+                    text = buildAnnotatedString {
+                        if (openableFileUri != null && onOpenFile != null) {
+                            withLink(
+                                LinkAnnotation.Clickable("open_file") {
+                                    onDismiss()
+                                    onOpenFile(openableFileUri)
+                                },
+                            ) {
+                                withStyle(
+                                    SpanStyle(
+                                        color = linkColor,
+                                        textDecoration = TextDecoration.Underline,
+                                    ),
                                 ) {
-                                    withStyle(
-                                        SpanStyle(
-                                            color = linkColor,
-                                            textDecoration = TextDecoration.Underline,
-                                        ),
-                                    ) {
-                                        append(displayName)
-                                    }
+                                    append(displayName)
                                 }
-                            } else {
-                                append(displayName)
                             }
-                            append(" は既に存在します")
-                        },
-                    )
-                }
+                        } else {
+                            append(displayName)
+                        }
+                        when (existingDownload) {
+                            is TabDownloadState.ExistingDownload.Succeeded -> append(" は既に存在します")
+                            is TabDownloadState.ExistingDownload.InProgress -> append(" はダウンロード中です")
+                        }
+                    },
+                )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("続行しますか？")
             }
@@ -1256,17 +1265,29 @@ private fun PreviewDuplicateDownloadDialog() {
         DuplicateDownloadDialog(
             state = TabDownloadState.DuplicateDownloadState(
                 url = "https://example.com/file.zip",
-                existingDownloads = listOf(
-                    TabDownloadState.DuplicateDownloadEntry(
-                        fileName = "file.zip",
-                        status = DownloadRecordStatus.SUCCEEDED,
-                        fileUri = "content://media/external/downloads/123",
-                    ),
-                    TabDownloadState.DuplicateDownloadEntry(
-                        fileName = "file.zip",
-                        status = DownloadRecordStatus.RUNNING,
-                        fileUri = null,
-                    ),
+                existingDownload = TabDownloadState.ExistingDownload.Succeeded(
+                    fileName = "file.zip",
+                    fileUri = "content://media/external/downloads/123",
+                ),
+                onConfirm = {},
+            ),
+            onConfirm = {},
+            onCancel = {},
+            onDismiss = {},
+            onOpenFile = {},
+        )
+    }
+}
+
+@Preview(name = "DuplicateDownloadDialogInProgress")
+@Composable
+private fun PreviewDuplicateDownloadDialogInProgress() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        DuplicateDownloadDialog(
+            state = TabDownloadState.DuplicateDownloadState(
+                url = "https://example.com/file.zip",
+                existingDownload = TabDownloadState.ExistingDownload.InProgress(
+                    fileName = "file.zip",
                 ),
                 onConfirm = {},
             ),
