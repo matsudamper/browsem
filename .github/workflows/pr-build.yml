@@ -121,7 +121,7 @@ jobs:
 
             | Storage | 圧縮方式 | Download Link | QR Code |
             | :--- | :--- | :--- | :--- |
-            | 🐙 GitHub Artifacts | zstd | [Download](${{ steps.upload_apk.outputs.artifact-url }}) | [View](${{ steps.github_qr_artifact.outputs.artifact-url }}) |
+            | 🐙 GitHub Artifacts | zip | [Download](${{ steps.upload_apk.outputs.artifact-url }}) | [View](${{ steps.github_qr_artifact.outputs.artifact-url }}) |
             ${{ steps.upload_s3.outputs.url && format('| ☁️ S3 | zstd | [Download]({0}) | [View]({1}) |', steps.upload_s3.outputs.url, steps.s3_qr_artifact.outputs.artifact-url) || format('| ☁️ S3 | - | ⚠️ アップロード失敗 ([run]({0}/{1}/actions/runs/{2})) | - |', github.server_url, github.repository, github.run_id) }}
 
             ---
