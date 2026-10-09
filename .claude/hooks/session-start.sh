@@ -97,21 +97,36 @@ def import_ca_into_jdk(jdk_path, label):
         else:
             print(f"[session-start] Failed to import CA into {label}: {alias} ({r.stderr.strip()})")
 
-java_home = os.environ.get('JAVA_HOME', '/usr/lib/jvm/java-21-openjdk-amd64')
-import_ca_into_jdk(java_home, 'JDK 25')
-enable_basic_auth_tunneling(java_home, 'JDK 25')
-
-gradle_jdks_dir = os.path.join(gradle_home, 'jdks')
-if os.path.isdir(gradle_jdks_dir):
-    for jdk_name in os.listdir(gradle_jdks_dir):
-        jdk_path = os.path.join(gradle_jdks_dir, jdk_name)
-        if not os.path.isdir(jdk_path):
+def collect_jdk_paths():
+    paths = []
+    gradle_jdks_dir = os.path.join(gradle_home, 'jdks')
+    if os.path.isdir(gradle_jdks_dir):
+        for jdk_name in sorted(os.listdir(gradle_jdks_dir)):
+            jdk_path = os.path.join(gradle_jdks_dir, jdk_name)
+            if os.path.isdir(jdk_path):
+                paths.append((jdk_path, f'Gradle JDK ({jdk_name})'))
+    for candidate, label in [
+        ('/usr/lib/jvm/java-25-openjdk-amd64', 'JDK 25 (system)'),
+        (os.environ.get('JAVA_HOME', ''), 'JAVA_HOME'),
+    ]:
+        if candidate and os.path.isdir(candidate):
+            paths.append((candidate, label))
+    seen = set()
+    unique = []
+    for jdk_path, label in paths:
+        real = os.path.realpath(jdk_path)
+        if real in seen:
             continue
+        seen.add(real)
         keytool = os.path.join(jdk_path, 'bin', 'keytool')
         if not os.path.exists(keytool):
             continue
-        import_ca_into_jdk(jdk_path, f'Gradle JDK ({jdk_name})')
-        enable_basic_auth_tunneling(jdk_path, f'Gradle JDK ({jdk_name})')
+        unique.append((jdk_path, label))
+    return unique
+
+for jdk_path, label in collect_jdk_paths():
+    import_ca_into_jdk(jdk_path, label)
+    enable_basic_auth_tunneling(jdk_path, label)
 
 props = (
     f"systemProp.https.proxyHost={host}\n"
