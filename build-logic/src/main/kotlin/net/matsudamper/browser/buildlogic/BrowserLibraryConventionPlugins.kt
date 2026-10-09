@@ -43,8 +43,8 @@ class BrowserAndroidLibraryConventionPlugin : Plugin<Project> {
         const val COMPILE_SDK = 37
         const val COMPILE_SDK_MINOR = 1
         const val MIN_SDK = 30
-        val JAVA_VERSION = JavaVersion.VERSION_21
-        val JVM_TARGET = JvmTarget.JVM_21
+        val JAVA_VERSION = JavaVersion.VERSION_25
+        val JVM_TARGET = JvmTarget.JVM_25
     }
 }
 
