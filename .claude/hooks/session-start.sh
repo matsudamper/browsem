@@ -98,8 +98,8 @@ def import_ca_into_jdk(jdk_path, label):
             print(f"[session-start] Failed to import CA into {label}: {alias} ({r.stderr.strip()})")
 
 java_home = os.environ.get('JAVA_HOME', '/usr/lib/jvm/java-21-openjdk-amd64')
-import_ca_into_jdk(java_home, 'JDK 21')
-enable_basic_auth_tunneling(java_home, 'JDK 21')
+import_ca_into_jdk(java_home, 'JDK 25')
+enable_basic_auth_tunneling(java_home, 'JDK 25')
 
 gradle_jdks_dir = os.path.join(gradle_home, 'jdks')
 if os.path.isdir(gradle_jdks_dir):
