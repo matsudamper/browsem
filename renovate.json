@@ -27,6 +27,12 @@
         "/^actions\\//"
       ],
       "automerge": true
+    },
+    {
+      "matchPackageNames": [
+        "org.jetbrains.kotlin.jvm"
+      ],
+      "groupName": "kotlin monorepo"
     }
   ]
 }
