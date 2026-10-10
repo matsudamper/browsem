@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload APK to S3
         id: upload_s3
-        uses: matsudamper/actions/upload-matsudamper-s3@6f7068834e08294360d6e5987869a5f50c924c66 # v1.0.1
+        uses: matsudamper/actions/upload-matsudamper-s3@7577a0a7bddd81843525c1f8539b119bdaa7825c # v1.1.0
         continue-on-error: true
         with:
           file_path: ${{ env.S3_APK_PATH }}
