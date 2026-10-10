@@ -3,6 +3,8 @@ package net.matsudamper.browser
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -653,81 +655,86 @@ private fun ContextMenuDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(text = title) },
+        // ボタン領域はダイアログの高さを超えると切れる。テキスト領域は残りの高さに収まるので、
+        // URLは固定し、アクションだけをそこでスクロールする。
         text = {
-            Text(
-                text = bodyText,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        // ボタンを縦に並べたいので confirm は空にして dismissButton スロットに集約する
-        confirmButton = {},
-        dismissButton = {
-            // 片手で持っていても押しやすいように全幅にする
             Column(modifier = Modifier.fillMaxWidth()) {
-                when (menu) {
-                    is BrowserTabScreenState.ContextMenuState.Link -> {
-                        LinkActionButtons(
-                            url = menu.url,
-                            linkText = menu.linkText,
-                            enableTabUi = enableTabUi,
-                            customTabMode = customTabMode,
-                            onOpenNewTab = onOpenNewTab,
-                            onOpenUrl = onOpenUrl,
-                            onCopyLink = onCopyLink,
-                            onCopyLinkText = onCopyLinkText,
-                        )
-                    }
-
-                    is BrowserTabScreenState.ContextMenuState.Image -> {
-                        ImageActionButtons(
-                            srcUrl = menu.srcUrl,
-                            enableTabUi = enableTabUi,
-                            onOpenNewTab = onOpenNewTab,
-                            onOpenUrl = onOpenUrl,
-                            onCopyLink = onCopyLink,
-                            onDownloadImage = onDownloadImage,
-                        )
-                    }
-
-                    is BrowserTabScreenState.ContextMenuState.LinkWithImage -> {
-                        LinkActionButtons(
-                            url = menu.url,
-                            linkText = menu.linkText,
-                            enableTabUi = enableTabUi,
-                            customTabMode = customTabMode,
-                            onOpenNewTab = onOpenNewTab,
-                            onOpenUrl = onOpenUrl,
-                            onCopyLink = onCopyLink,
-                            onCopyLinkText = onCopyLinkText,
-                        )
-                        if (enableTabUi) {
-                            ContextMenuActionButton(
-                                text = "画像を新しいタブで開く",
-                                iconRes = ResourcesR.drawable.ic_open_in_new_24dp,
-                                onClick = { onOpenNewTab(menu.imageSrcUrl) },
-                            )
-                        } else {
-                            ContextMenuActionButton(
-                                text = "画像を開く",
-                                iconRes = ResourcesR.drawable.ic_open_in_browser_24dp,
-                                onClick = { onOpenUrl(menu.imageSrcUrl) },
+                Text(
+                    text = bodyText,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(weight = 1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    when (menu) {
+                        is BrowserTabScreenState.ContextMenuState.Link -> {
+                            LinkActionButtons(
+                                url = menu.url,
+                                linkText = menu.linkText,
+                                enableTabUi = enableTabUi,
+                                customTabMode = customTabMode,
+                                onOpenNewTab = onOpenNewTab,
+                                onOpenUrl = onOpenUrl,
+                                onCopyLink = onCopyLink,
+                                onCopyLinkText = onCopyLinkText,
                             )
                         }
-                        ContextMenuActionButton(
-                            text = "画像のリンクをコピー",
-                            iconRes = ResourcesR.drawable.ic_content_copy_24dp,
-                            onClick = { onCopyLink(menu.imageSrcUrl) },
-                        )
-                        ContextMenuActionButton(
-                            text = "画像をダウンロード",
-                            iconRes = ResourcesR.drawable.ic_download_24dp,
-                            onClick = { onDownloadImage(menu.imageSrcUrl) },
-                        )
+
+                        is BrowserTabScreenState.ContextMenuState.Image -> {
+                            ImageActionButtons(
+                                srcUrl = menu.srcUrl,
+                                enableTabUi = enableTabUi,
+                                onOpenNewTab = onOpenNewTab,
+                                onOpenUrl = onOpenUrl,
+                                onCopyLink = onCopyLink,
+                                onDownloadImage = onDownloadImage,
+                            )
+                        }
+
+                        is BrowserTabScreenState.ContextMenuState.LinkWithImage -> {
+                            LinkActionButtons(
+                                url = menu.url,
+                                linkText = menu.linkText,
+                                enableTabUi = enableTabUi,
+                                customTabMode = customTabMode,
+                                onOpenNewTab = onOpenNewTab,
+                                onOpenUrl = onOpenUrl,
+                                onCopyLink = onCopyLink,
+                                onCopyLinkText = onCopyLinkText,
+                            )
+                            if (enableTabUi) {
+                                ContextMenuActionButton(
+                                    text = "画像を新しいタブで開く",
+                                    iconRes = ResourcesR.drawable.ic_open_in_new_24dp,
+                                    onClick = { onOpenNewTab(menu.imageSrcUrl) },
+                                )
+                            } else {
+                                ContextMenuActionButton(
+                                    text = "画像を開く",
+                                    iconRes = ResourcesR.drawable.ic_open_in_browser_24dp,
+                                    onClick = { onOpenUrl(menu.imageSrcUrl) },
+                                )
+                            }
+                            ContextMenuActionButton(
+                                text = "画像のリンクをコピー",
+                                iconRes = ResourcesR.drawable.ic_content_copy_24dp,
+                                onClick = { onCopyLink(menu.imageSrcUrl) },
+                            )
+                            ContextMenuActionButton(
+                                text = "画像をダウンロード",
+                                iconRes = ResourcesR.drawable.ic_download_24dp,
+                                onClick = { onDownloadImage(menu.imageSrcUrl) },
+                            )
+                        }
                     }
                 }
             }
         },
+        confirmButton = {},
     )
 }
 
@@ -1376,6 +1383,7 @@ private fun PreviewFormInputSaveDialogEmptyValue() {
 }
 
 @Preview(name = "ContextMenuDialog")
+@Preview(name = "ContextMenuDialogCompact", heightDp = 360, fontScale = 1.3f)
 @Composable
 private fun PreviewContextMenuDialog() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
