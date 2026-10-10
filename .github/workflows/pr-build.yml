@@ -83,33 +83,21 @@ jobs:
           file_path: ${{ env.S3_APK_PATH }}
 
       - name: Generate and Upload GitHub QR code
-        id: upload_github_qr
-        run: |
-          pip install "qrcode[pil]" --quiet
-          python3 -c "import qrcode, sys; qrcode.make(sys.argv[1]).save('qrcode-github.png')" "${{ steps.upload_apk.outputs.artifact-url }}"
-
-      - name: Upload GitHub QR artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: github_qr_artifact
+        uses: matsudamper/actions/upload-qr-code@7577a0a7bddd81843525c1f8539b119bdaa7825c # v1.1.0
         with:
-          name: apk-qr-code-github
-          path: qrcode-github.png
-          archive: false
+          url: ${{ steps.upload_apk.outputs.artifact-url }}
+          output_path: qrcode-github.png
+          artifact_name: apk-qr-code-github
 
       - name: Generate and Upload S3 QR code
         if: steps.upload_s3.outputs.url != ''
-        id: upload_s3_qr
-        run: |
-          python3 -c "import qrcode, sys; qrcode.make(sys.argv[1]).save('qrcode-s3.png')" "${{ steps.upload_s3.outputs.url }}"
-
-      - name: Upload S3 QR artifact
-        if: steps.upload_s3.outputs.url != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: s3_qr_artifact
+        uses: matsudamper/actions/upload-qr-code@7577a0a7bddd81843525c1f8539b119bdaa7825c # v1.1.0
         with:
-          name: apk-qr-code-s3
-          path: qrcode-s3.png
-          archive: false
+          url: ${{ steps.upload_s3.outputs.url }}
+          output_path: qrcode-s3.png
+          artifact_name: apk-qr-code-s3
 
       - name: Comment APK download URLs
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
