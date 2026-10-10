@@ -35,10 +35,10 @@
       "automerge": true
     },
     {
-      "matchPackageNames": [
+      "groupName": "kotlin monorepo",
+      "matchDepNames": [
         "org.jetbrains.kotlin.jvm"
-      ],
-      "groupName": "kotlin monorepo"
+      ]
     }
   ]
 }
