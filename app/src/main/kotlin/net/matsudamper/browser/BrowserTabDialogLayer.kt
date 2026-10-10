@@ -90,6 +90,7 @@ internal fun BrowserTabDialogLayer(
                 state.dismissContextMenu()
             },
             onCopyLink = { url -> state.copyLinkUrl(url) },
+            onCopyLinkText = { text -> state.copyLinkText(text) },
             onDownloadImage = { url ->
                 state.dismissContextMenu()
                 state.downloadState.downloadImage(url)
@@ -635,6 +636,7 @@ private fun ContextMenuDialog(
     onOpenNewTab: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
     onCopyLink: (String) -> Unit,
+    onCopyLinkText: (String) -> Unit,
     onDownloadImage: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -667,11 +669,13 @@ private fun ContextMenuDialog(
                     is BrowserTabScreenState.ContextMenuState.Link -> {
                         LinkActionButtons(
                             url = menu.url,
+                            linkText = menu.linkText,
                             enableTabUi = enableTabUi,
                             customTabMode = customTabMode,
                             onOpenNewTab = onOpenNewTab,
                             onOpenUrl = onOpenUrl,
                             onCopyLink = onCopyLink,
+                            onCopyLinkText = onCopyLinkText,
                         )
                     }
 
@@ -689,11 +693,13 @@ private fun ContextMenuDialog(
                     is BrowserTabScreenState.ContextMenuState.LinkWithImage -> {
                         LinkActionButtons(
                             url = menu.url,
+                            linkText = menu.linkText,
                             enableTabUi = enableTabUi,
                             customTabMode = customTabMode,
                             onOpenNewTab = onOpenNewTab,
                             onOpenUrl = onOpenUrl,
                             onCopyLink = onCopyLink,
+                            onCopyLinkText = onCopyLinkText,
                         )
                         if (enableTabUi) {
                             ContextMenuActionButton(
@@ -764,11 +770,13 @@ private fun ImageActionButtons(
 @Composable
 private fun LinkActionButtons(
     url: String,
+    linkText: String?,
     enableTabUi: Boolean,
     customTabMode: Boolean,
     onOpenNewTab: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
     onCopyLink: (String) -> Unit,
+    onCopyLinkText: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         if (enableTabUi || customTabMode) {
@@ -790,6 +798,13 @@ private fun LinkActionButtons(
             iconRes = ResourcesR.drawable.ic_content_copy_24dp,
             onClick = { onCopyLink(url) },
         )
+        if (linkText != null) {
+            ContextMenuActionButton(
+                text = "リンクテキストをコピー",
+                iconRes = ResourcesR.drawable.ic_content_copy_24dp,
+                onClick = { onCopyLinkText(linkText) },
+            )
+        }
     }
 }
 
@@ -1368,12 +1383,14 @@ private fun PreviewContextMenuDialog() {
             menu = BrowserTabScreenState.ContextMenuState.LinkWithImage(
                 url = "https://example.com/very/long/link/path/page.html",
                 imageSrcUrl = "https://example.com/image.png",
+                linkText = "サンプルリンク",
             ),
             enableTabUi = true,
             customTabMode = false,
             onOpenNewTab = {},
             onOpenUrl = {},
             onCopyLink = {},
+            onCopyLinkText = {},
             onDownloadImage = {},
             onDismiss = {},
         )
