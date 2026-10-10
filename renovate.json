@@ -33,6 +33,13 @@
         "/^org\\.jetbrains\\.kotlin[.:]/"
       ],
       "automerge": true
+    },
+    {
+      "groupName": "kotlin monorepo",
+      "matchDepNames": [
+        "org.jetbrains.kotlin.jvm"
+      ],
+      "automerge": true
     }
   ]
 }
