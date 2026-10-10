@@ -30,6 +30,12 @@
     },
     {
       "matchPackageNames": [
+        "/^org\\.jetbrains\\.kotlin[.:]/"
+      ],
+      "automerge": true
+    },
+    {
+      "matchPackageNames": [
         "org.jetbrains.kotlin.jvm"
       ],
       "groupName": "kotlin monorepo"
