@@ -825,6 +825,7 @@ private fun MainBrowserContent(
                     }
                     TabsScreen(
                         uiState = tabsUiState,
+                        profileSwitcher = profileSwitcher,
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.surface),
