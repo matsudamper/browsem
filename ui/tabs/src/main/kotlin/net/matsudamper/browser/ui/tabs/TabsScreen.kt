@@ -63,10 +63,13 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.data.ProfileIcon
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.resources.R as ResourcesR
@@ -125,6 +128,7 @@ internal fun calculatePagerIndicatorBounds(
 @Composable
 fun TabsScreen(
     uiState: TabsScreenUiState,
+    profileSwitcher: ProfileSwitcherUiState,
     modifier: Modifier = Modifier,
 ) {
     StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
@@ -169,6 +173,7 @@ fun TabsScreen(
                 activeGroupIndex = loadingState.activeGroupIndex,
                 selectedTabId = loadingState.selectedTabId,
                 groupHasPlayingTab = loadingState.groupHasPlayingTab,
+                profileSwitcher = profileSwitcher,
                 snackbarHostState = snackbarHostState,
                 newTabListener = loadingState.newTabListener,
                 onReorderTabs = currentCallbacks::onReorderTabs,
@@ -192,6 +197,7 @@ private fun TabsScreenLoadedContent(
     activeGroupIndex: Int,
     selectedTabId: String?,
     groupHasPlayingTab: List<Boolean>,
+    profileSwitcher: ProfileSwitcherUiState,
     snackbarHostState: SnackbarHostState,
     newTabListener: TabsScreenUiState.LoadingState.Loaded.NewTabListener,
     onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
@@ -309,6 +315,8 @@ private fun TabsScreenLoadedContent(
     // フローティング表示のグループ操作メニューはグリッドに重なるため、
     // 先頭行がメニューへ隠れないよう実測した高さをグリッドの上端余白へ渡す。
     var floatingMenuHeight by remember { mutableStateOf(0.dp) }
+
+    var isProfileDialogVisible by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier
@@ -429,6 +437,8 @@ private fun TabsScreenLoadedContent(
                             ),
                         page = page,
                         groups = groups,
+                        profileIcon = profileSwitcher.activeProfileIcon,
+                        onClickProfile = { isProfileDialogVisible = true },
                         onClickDelete = {
                             deleteDialogGroupIndex = page
                         },
@@ -442,6 +452,13 @@ private fun TabsScreenLoadedContent(
                 }
             }
         }
+    }
+
+    if (isProfileDialogVisible) {
+        ProfileManagementDialog(
+            uiState = profileSwitcher,
+            onDismiss = { isProfileDialogVisible = false },
+        )
     }
 
     val moveDialogHandler = moveDialogOnGroupSelected
@@ -492,6 +509,8 @@ private fun TabsScreenLoadedContent(
 private fun TabGroupMenu(
     page: Int,
     groups: List<TabGroupData>,
+    profileIcon: ProfileIcon,
+    onClickProfile: () -> Unit,
     onToggleDefaultGroup: (page: Int) -> Unit,
     onClickRename: () -> Unit,
     onClickDelete: () -> Unit,
@@ -514,6 +533,18 @@ private fun TabGroupMenu(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                IconButton(
+                    onClick = onClickProfile,
+                    modifier = Modifier
+                        .testTag(TabsScreenTestTags.ProfileSwitchButton(page).testTag)
+                        .semantics { contentDescription = "プロファイルを管理" },
+                ) {
+                    ProfileIconBadge(
+                        icon = profileIcon,
+                        size = 28.dp,
+                        isEmphasized = false,
+                    )
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -656,6 +687,7 @@ private fun PreviewFloatingGroupMenu() {
         activeGroupIndex = 0,
         selectedTabId = "1",
         groupHasPlayingTab = listOf(),
+        profileSwitcher = PreviewProfileSwitcherUiState,
         snackbarHostState = remember { SnackbarHostState() },
         newTabListener = PreviewNewTabListener,
         onReorderTabs = { _, _, _ -> },
@@ -692,6 +724,7 @@ private fun PreviewSingleGroup() {
         activeGroupIndex = 0,
         selectedTabId = "1",
         groupHasPlayingTab = listOf(),
+        profileSwitcher = PreviewProfileSwitcherUiState,
         snackbarHostState = remember { SnackbarHostState() },
         newTabListener = PreviewNewTabListener,
         onReorderTabs = { _, _, _ -> },
@@ -732,6 +765,7 @@ private fun PreviewWithSnackbar() {
             groups = groups,
             activeGroupIndex = 0,
             selectedTabId = "1",
+            profileSwitcher = PreviewProfileSwitcherUiState,
             snackbarHostState = remember { SnackbarHostState() },
             newTabListener = PreviewNewTabListener,
             onReorderTabs = { _, _, _ -> },
@@ -791,6 +825,10 @@ sealed interface TabsScreenTestTags {
 
     class DefaultGroupSwitch(index: Int) : TabsScreenTestTags {
         override val id: String = "default_group_switch_$index"
+    }
+
+    class ProfileSwitchButton(index: Int) : TabsScreenTestTags {
+        override val id: String = "profile_switch_button_$index"
     }
 
     class TabItem(index: Int) : TabsScreenTestTags {
