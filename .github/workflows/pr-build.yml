@@ -77,14 +77,14 @@ jobs:
 
       - name: Upload APK to S3
         id: upload_s3
-        uses: matsudamper/actions/upload-matsudamper-s3@7577a0a7bddd81843525c1f8539b119bdaa7825c # v1.1.0
+        uses: matsudamper/actions/upload-matsudamper-s3@5c2f397727eaf53708de3f663fa9b754f55d80be # v1.1.1
         continue-on-error: true
         with:
           file_path: ${{ env.S3_APK_PATH }}
 
       - name: Generate and Upload GitHub QR code
         id: github_qr_artifact
-        uses: matsudamper/actions/upload-qr-code@7577a0a7bddd81843525c1f8539b119bdaa7825c # v1.1.0
+        uses: matsudamper/actions/upload-qr-code@5c2f397727eaf53708de3f663fa9b754f55d80be # v1.1.1
         with:
           url: ${{ steps.upload_apk.outputs.artifact-url }}
           output_path: qrcode-github.png
@@ -93,7 +93,7 @@ jobs:
       - name: Generate and Upload S3 QR code
         if: steps.upload_s3.outputs.url != ''
         id: s3_qr_artifact
-        uses: matsudamper/actions/upload-qr-code@7577a0a7bddd81843525c1f8539b119bdaa7825c # v1.1.0
+        uses: matsudamper/actions/upload-qr-code@5c2f397727eaf53708de3f663fa9b754f55d80be # v1.1.1
         with:
           url: ${{ steps.upload_s3.outputs.url }}
           output_path: qrcode-s3.png
