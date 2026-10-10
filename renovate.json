@@ -38,7 +38,8 @@
       "groupName": "kotlin monorepo",
       "matchDepNames": [
         "org.jetbrains.kotlin.jvm"
-      ]
+      ],
+      "automerge": true
     }
   ]
 }
