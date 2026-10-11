@@ -170,6 +170,28 @@ class BrowserSessionLifecycleControllerTest {
     }
 
     @Test
+    fun `読み込み失敗表示中は sessionState を復元せず about_blank を開く`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns false
+        val tab = createTab(session)
+        tab.sessionState = "restored-state"
+        tab.tabPageLoadError = TabPageLoadError(
+            title = "アドレスが見つかりません",
+            message = "失敗",
+            failingUrl = "https://example.invalid/",
+        )
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        controller.restoreSession(tab)
+
+        verify { session.open(runtime) }
+        verify { session.loadUri("about:blank") }
+        verify(exactly = 0) { session.restoreState(any()) }
+        verify { session.setActive(true) }
+    }
+
+    @Test
     fun `cancelPendingInitialLoad が先の場合は shouldFilterDeferredLoad はセットされない`() {
         val runtime = mockk<GeckoRuntime>(relaxed = true)
         val session = mockk<GeckoSession>(relaxed = true)

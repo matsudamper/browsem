@@ -382,7 +382,15 @@ internal class BrowserTabScreenState(
             field = value
         }
 
-    var pageLoadError by mutableStateOf<PageLoadError?>(null)
+    var pageLoadError by mutableStateOf(
+        browserTab.tabPageLoadError?.let { stored ->
+            PageLoadError(
+                title = stored.title,
+                message = stored.message,
+                failingUrl = stored.failingUrl,
+            )
+        },
+    )
 
     // BrowserTab.pageZoomPercent に委譲することで、タブ切替や State 再生成後も倍率を維持する。
     val pageZoomPercent: Int
@@ -899,6 +907,11 @@ internal class BrowserTabScreenState(
         }
         currentPageTitle = resolvedError.title
         pageLoadError = resolvedError
+        browserTab.tabPageLoadError = TabPageLoadError(
+            title = resolvedError.title,
+            message = resolvedError.message,
+            failingUrl = resolvedError.failingUrl,
+        )
     }
 
     override fun onLocationChange(url: String) {
@@ -906,13 +919,19 @@ internal class BrowserTabScreenState(
             return
         }
         if (url.startsWith("javascript:")) return
+        val activeError = pageLoadError
+        if (activeError != null) {
+            // 失敗 URL 以外の location は、背後に残った旧ページや sessionState 復元由来。
+            // 戻る/進む/URL 送信など UI 操作側で明示的にエラーをクリアする。
+            if (url != activeError.failingUrl) {
+                return
+            }
+            clearPageLoadError()
+        }
         // visualViewportScale はここではリセットしない。SPA の pushState 遷移
         // （X のタブ内遷移等）ではピンチズームが維持されたまま onLocationChange が
         // 発火するため、リセットすると拡大中なのに PullToRefresh が許可されてしまう。
         // フルページロードでは onPageStart でリセットされる。
-        if (pageLoadError?.failingUrl != url) {
-            clearPageLoadError()
-        }
         // フルページロード（onPageStart が先行した場合）のみ色をリセット
         // SPA 遷移（pushState）では onPageStart が発火しないためリセットしない
         // ダウンロードリンクのように onPageStart だけ発火して onLocationChange が呼ばれない
@@ -1043,7 +1062,13 @@ internal class BrowserTabScreenState(
     }
 
     override fun onPageStart(url: String) {
-        clearPageLoadError()
+        val activeError = pageLoadError
+        if (activeError != null && url != activeError.failingUrl) {
+            return
+        }
+        if (activeError != null) {
+            clearPageLoadError()
+        }
         visualViewportScale = 1f
         // previewCaptureReady は false に戻さない。
         // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
@@ -1405,6 +1430,7 @@ internal class BrowserTabScreenState(
 
     private fun clearPageLoadError() {
         pageLoadError = null
+        browserTab.tabPageLoadError = null
     }
 
     private fun applyPendingHistoryTitle(entryId: Long) {
