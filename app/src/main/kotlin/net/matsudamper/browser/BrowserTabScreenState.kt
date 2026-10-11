@@ -299,9 +299,13 @@ internal class BrowserTabScreenState(
 
     @Stable
     sealed interface ContextMenuState {
-        data class Link(val url: String) : ContextMenuState
+        data class Link(val url: String, val linkText: String?) : ContextMenuState
         data class Image(val srcUrl: String) : ContextMenuState
-        data class LinkWithImage(val url: String, val imageSrcUrl: String) : ContextMenuState
+        data class LinkWithImage(
+            val url: String,
+            val imageSrcUrl: String,
+            val linkText: String?,
+        ) : ContextMenuState
     }
 
     val addToHomeScreenDialogController = AddToHomeScreenDialogController(coroutineScope)
@@ -794,6 +798,11 @@ internal class BrowserTabScreenState(
         dismissContextMenu()
     }
 
+    fun copyLinkText(text: String) {
+        copyLinkTextToClipboard(context, text)
+        dismissContextMenu()
+    }
+
     fun captureTabPreview(geckoView: GeckoView, onCaptured: (() -> Unit)? = null) {
         if (!shouldCaptureTabPreview(previewCaptureReady)) {
             Log.d(TAG, "captureTabPreview skipped: previewCaptureReady=false (tabId=${browserTab.tabId} url=$currentPageUrl)")
@@ -993,20 +1002,12 @@ internal class BrowserTabScreenState(
         ) {
             return
         }
-        val linkUri = element.linkUri
-        val srcUri = element.srcUri
-        val isImage = element.type == GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE
-        contextMenuState = when {
-            linkUri != null && isImage && srcUri != null ->
-                ContextMenuState.LinkWithImage(url = linkUri, imageSrcUrl = srcUri)
-
-            linkUri != null -> ContextMenuState.Link(url = linkUri)
-
-            isImage && srcUri != null -> ContextMenuState.Image(srcUrl = srcUri)
-
-            // AUDIO / VIDEO / NONE は未対応
-            else -> null
-        }
+        contextMenuState = contextMenuStateForLongPress(
+            linkUri = element.linkUri,
+            srcUri = element.srcUri,
+            elementType = element.type,
+            linkText = element.linkText,
+        )
     }
 
     override fun onRenderReady() {
