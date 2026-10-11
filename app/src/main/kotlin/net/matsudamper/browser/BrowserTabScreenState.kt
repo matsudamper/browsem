@@ -912,6 +912,9 @@ internal class BrowserTabScreenState(
             message = resolvedError.message,
             failingUrl = resolvedError.failingUrl,
         )
+        if (failedUrl.isNotBlank()) {
+            recordBrowsingHistory(url = failedUrl, title = resolvedError.title)
+        }
     }
 
     override fun onLocationChange(url: String) {
@@ -919,14 +922,10 @@ internal class BrowserTabScreenState(
             return
         }
         if (url.startsWith("javascript:")) return
-        val activeError = pageLoadError
-        if (activeError != null) {
-            // 失敗 URL 以外の location は、背後に残った旧ページや sessionState 復元由来。
-            // 戻る/進む/URL 送信など UI 操作側で明示的にエラーをクリアする。
-            if (url != activeError.failingUrl) {
-                return
-            }
-            clearPageLoadError()
+        if (pageLoadError != null) {
+            // エラー表示中の location は、背後の旧ページや sessionState 復元由来。
+            // 履歴は onLoadError で記録済み。戻る/URL 送信など UI 操作側でエラーをクリアする。
+            return
         }
         // visualViewportScale はここではリセットしない。SPA の pushState 遷移
         // （X のタブ内遷移等）ではピンチズームが維持されたまま onLocationChange が
@@ -959,31 +958,7 @@ internal class BrowserTabScreenState(
             urlInput = url
         }
         translation.onLocationChange(url, isFullPageLoad = wasFullPageLoad)
-        val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
-        val skip = skipHistoryRecordCount > 0
-        if (skip) skipHistoryRecordCount--
-        if (shouldRecord && !skip) {
-            // onHistoryStateChange の発火は遅延するため、楽観的にタブ履歴を更新する
-            val newItem = TabHistoryItem(uri = url, title = "")
-            tabHistoryItems = tabHistoryItems.take(tabHistoryCurrentIndex + 1) + newItem
-            tabHistoryCurrentIndex = tabHistoryItems.lastIndex
-
-            historyRecordSequence++
-            val sequence = historyRecordSequence
-            currentHistoryEntryId = null
-            pendingHistoryTitle = null
-            val callback = onHistoryRecord
-            if (callback != null) {
-                coroutineScope.launch {
-                    val historyEntryId = callback(url, "", ProfileId.fromGeckoContextId(session.settings.contextId).value)
-                    if (historyRecordSequence != sequence) {
-                        return@launch
-                    }
-                    currentHistoryEntryId = historyEntryId
-                    applyPendingHistoryTitle(historyEntryId)
-                }
-            }
-        }
+        recordBrowsingHistory(url = url, title = "")
     }
 
     override fun onTitleChange(title: String) {
@@ -1062,13 +1037,10 @@ internal class BrowserTabScreenState(
     }
 
     override fun onPageStart(url: String) {
-        val activeError = pageLoadError
-        if (activeError != null && url != activeError.failingUrl) {
+        if (pageLoadError != null) {
             return
         }
-        if (activeError != null) {
-            clearPageLoadError()
-        }
+        clearPageLoadError()
         visualViewportScale = 1f
         // previewCaptureReady は false に戻さない。
         // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
@@ -1431,6 +1403,36 @@ internal class BrowserTabScreenState(
     private fun clearPageLoadError() {
         pageLoadError = null
         browserTab.tabPageLoadError = null
+    }
+
+    private fun recordBrowsingHistory(url: String, title: String) {
+        val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
+        val skip = skipHistoryRecordCount > 0
+        if (skip) skipHistoryRecordCount--
+        if (!shouldRecord || skip) return
+        val newItem = TabHistoryItem(uri = url, title = title)
+        tabHistoryItems = tabHistoryItems.take(tabHistoryCurrentIndex + 1) + newItem
+        tabHistoryCurrentIndex = tabHistoryItems.lastIndex
+
+        historyRecordSequence++
+        val sequence = historyRecordSequence
+        currentHistoryEntryId = null
+        pendingHistoryTitle = null
+        val callback = onHistoryRecord
+        if (callback != null) {
+            coroutineScope.launch {
+                val historyEntryId = callback(
+                    url,
+                    title,
+                    ProfileId.fromGeckoContextId(session.settings.contextId).value,
+                )
+                if (historyRecordSequence != sequence) {
+                    return@launch
+                }
+                currentHistoryEntryId = historyEntryId
+                applyPendingHistoryTitle(historyEntryId)
+            }
+        }
     }
 
     private fun applyPendingHistoryTitle(entryId: Long) {
