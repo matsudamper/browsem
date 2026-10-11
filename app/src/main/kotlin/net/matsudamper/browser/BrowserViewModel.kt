@@ -136,6 +136,12 @@ internal class BrowserViewModel(
 
         /** プロファイルの切り替え・タブ移動で、背後の Browser の選択タブを差し替える */
         fun selectTab(tabId: String)
+
+        /**
+         * タブ一覧を残したまま、背後の Browser の選択タブだけを差し替える。
+         * [selectTab] は Tabs destination を外すため、一覧上のプロファイル操作では使わない。
+         */
+        fun replaceSelectedBrowserTab(tabId: String)
     }
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -345,14 +351,26 @@ internal class BrowserViewModel(
 
     private fun switchProfile(profileId: ProfileId) {
         if (browserTabController.activeProfileId == profileId) return
-        viewModelScope.launch { switchProfileNow(profileId) }
+        viewModelScope.launch { switchProfileNow(profileId, ::notifySelectTab) }
+    }
+
+    /**
+     * タブ一覧を開いたままプロファイルを切り替える。
+     * 切り替え先のタブは背後の Browser だけ差し替え、Tabs destination は残す。
+     */
+    fun switchProfileKeepingTabsScreen(profileId: ProfileId) {
+        if (browserTabController.activeProfileId == profileId) return
+        viewModelScope.launch { switchProfileNow(profileId, ::notifyReplaceSelectedBrowserTab) }
     }
 
     /**
      * プロファイルを切り替える。切り替え先にタブがあればそれを選択し、
      * 無ければ新規タブを作って背後の Browser をそれに差し替える。
      */
-    private suspend fun switchProfileNow(profileId: ProfileId) {
+    private suspend fun switchProfileNow(
+        profileId: ProfileId,
+        notifySelectedTab: (String) -> Unit,
+    ) {
         profileRepository.setActiveProfile(profileId)
         val existingTabId = browserTabController.tabStoreState.value.tabs
             .firstOrNull { it.profileId == profileId.value }
@@ -370,7 +388,15 @@ internal class BrowserViewModel(
             ).tabId
         }
         browserTabController.selectTab(targetTabId)
-        eventHandler.trySend { it.selectTab(targetTabId) }
+        notifySelectedTab(targetTabId)
+    }
+
+    private fun notifySelectTab(tabId: String) {
+        eventHandler.trySend { it.selectTab(tabId) }
+    }
+
+    private fun notifyReplaceSelectedBrowserTab(tabId: String) {
+        eventHandler.trySend { it.replaceSelectedBrowserTab(tabId) }
     }
 
     /**
@@ -378,10 +404,22 @@ internal class BrowserViewModel(
      * 属するタブを閉じ、DB の行を消し、Gecko 側のサイトデータを削除する。
      */
     private fun deleteProfile(profileId: ProfileId) {
+        deleteProfile(profileId, ::notifySelectTab)
+    }
+
+    /** タブ一覧を残したままプロファイルを削除する */
+    fun deleteProfileKeepingTabsScreen(profileId: ProfileId) {
+        deleteProfile(profileId, ::notifyReplaceSelectedBrowserTab)
+    }
+
+    private fun deleteProfile(
+        profileId: ProfileId,
+        notifySelectedTab: (String) -> Unit,
+    ) {
         if (profileId == ProfileId.DEFAULT) return
         viewModelScope.launch {
             if (browserTabController.activeProfileId == profileId) {
-                switchProfileNow(ProfileId.DEFAULT)
+                switchProfileNow(ProfileId.DEFAULT, notifySelectedTab)
             }
             browserTabController.closeTabsOfProfile(profileId.value)
             profileRepository.deleteProfile(profileId)
