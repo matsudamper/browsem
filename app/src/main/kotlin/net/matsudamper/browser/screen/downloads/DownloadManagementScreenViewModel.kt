@@ -31,6 +31,7 @@ import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.download.DownloadMediaStoreMimeType
 import net.matsudamper.browser.download.DownloadThumbnail
 import net.matsudamper.browser.download.DownloadThumbnailLoader
 import net.matsudamper.browser.download.DownloadUrl
@@ -365,9 +366,10 @@ internal class DownloadManagementScreenViewModel(
             Toast.makeText(app, "ファイルがありません", Toast.LENGTH_SHORT).show()
             return
         }
+        val displayName = getDisplayName(uri)
         val mimeType = getMimeType(uri) ?: "*/*"
         // MIME タイプが APK でなくても拡張子で判定できるようファイル名も見る
-        val isApk = isApk(mimeType, getDisplayName(uri))
+        val isApk = isApk(mimeType, displayName)
 
         // APKの場合、提供元不明アプリのインストール権限がなければ設定画面へ誘導する
         if (isApk && !app.packageManager.canRequestPackageInstalls()) {
@@ -380,7 +382,10 @@ internal class DownloadManagementScreenViewModel(
         }
 
         // 拡張子でAPKと判定された場合は確実にインストーラーが起動するようMIMEタイプを補正する
-        val effectiveMimeType = if (isApk) MIME_TYPE_APK else mimeType
+        val effectiveMimeType = when {
+            isApk -> MIME_TYPE_APK
+            else -> DownloadMediaStoreMimeType.forViewIntent(displayName, mimeType)
+        }
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, effectiveMimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -490,7 +495,7 @@ internal class DownloadManagementScreenViewModel(
          * MediaStore が application/octet-stream しか返さない場合の判定に使う
          */
         private val ARCHIVE_EXTENSIONS = setOf(
-            "zip", "gz", "tgz", "tar", "bz2", "tbz2", "xz", "zst", "7z", "rar", "lzh", "jar",
+            "zip", "gz", "tgz", "tar", "bz2", "tbz2", "xz", "zst", "zstd", "7z", "rar", "lzh", "jar",
         )
     }
 }
