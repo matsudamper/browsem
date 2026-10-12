@@ -49,4 +49,15 @@ class DownloadMediaStoreMimeTypeTest {
             ),
         )
     }
+
+    @Test
+    fun zstViewIntentRestoresZstdMime() {
+        assertEquals(
+            "application/zstd",
+            DownloadMediaStoreMimeType.forViewIntent(
+                fileName = "app-debug.apk (1).zst",
+                mediaStoreMimeType = "application/octet-stream",
+            ),
+        )
+    }
 }

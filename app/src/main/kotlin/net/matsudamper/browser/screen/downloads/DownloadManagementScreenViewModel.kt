@@ -31,6 +31,7 @@ import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.download.DownloadMediaStoreMimeType
 import net.matsudamper.browser.download.DownloadThumbnail
 import net.matsudamper.browser.download.DownloadThumbnailLoader
 import net.matsudamper.browser.download.DownloadUrl
@@ -383,23 +384,13 @@ internal class DownloadManagementScreenViewModel(
         // 拡張子でAPKと判定された場合は確実にインストーラーが起動するようMIMEタイプを補正する
         val effectiveMimeType = when {
             isApk -> MIME_TYPE_APK
-            isZstd(displayName) -> MIME_TYPE_ZSTD
-            else -> mimeType
+            else -> DownloadMediaStoreMimeType.forViewIntent(displayName, mimeType)
         }
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, effectiveMimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
         runCatching { app.startActivity(intent) }
-    }
-
-    /**
-     * zstd は重複名で拡張子が壊れないよう octet-stream で MediaStore に保存しているため、
-     * 開くときに拡張子から MIME を戻して application/zstd を受け付けるアプリを候補に含める
-     */
-    private fun isZstd(displayName: String?): Boolean {
-        val extension = displayName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
-        return extension == "zst" || extension == "zstd"
     }
 
     private fun openDownloadsFolder() {
@@ -480,8 +471,6 @@ internal class DownloadManagementScreenViewModel(
         private const val MIME_TYPE_APK = "application/vnd.android.package-archive"
 
         private const val MIME_TYPE_PDF = "application/pdf"
-
-        private const val MIME_TYPE_ZSTD = "application/zstd"
 
         private val ARCHIVE_MIME_TYPES = setOf(
             "application/zip",

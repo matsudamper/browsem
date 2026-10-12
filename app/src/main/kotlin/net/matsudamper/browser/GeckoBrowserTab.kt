@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.util.Log
 import android.view.ActionMode
 import android.view.Menu
@@ -93,6 +94,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.WebAppId
 import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.download.DownloadMediaStoreMimeType
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
@@ -1600,7 +1602,13 @@ internal fun GeckoBrowserTab(
             onOpenNewTabRequest = currentOnOpenNewTabRequest,
             onOpenFile = { fileUri ->
                 val uri = fileUri.toUri()
-                val mimeType = context.contentResolver.getType(uri) ?: "*/*"
+                val mediaStoreMimeType = context.contentResolver.getType(uri) ?: "*/*"
+                val displayName = runCatching {
+                    context.contentResolver
+                        .query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)
+                        ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                }.getOrNull()
+                val mimeType = DownloadMediaStoreMimeType.forViewIntent(displayName, mediaStoreMimeType)
                 val intent = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(uri, mimeType)
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION

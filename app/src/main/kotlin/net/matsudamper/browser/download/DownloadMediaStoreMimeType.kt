@@ -14,6 +14,7 @@ package net.matsudamper.browser.download
  */
 object DownloadMediaStoreMimeType {
     private const val OCTET_STREAM = "application/octet-stream"
+    private const val ZSTD = "application/zstd"
 
     fun fromFileName(fileName: String, responseMimeType: String): String {
         val extension = fileName.substringAfterLast('.', missingDelimiterValue = "")
@@ -22,6 +23,18 @@ object DownloadMediaStoreMimeType {
             return responseMimeType.ifBlank { OCTET_STREAM }
         }
         return mimeTypeFromExtension(extension) ?: OCTET_STREAM
+    }
+
+    /**
+     * zstd は MediaStore に octet-stream で保存しているため、開くときは拡張子から
+     * application/zstd に戻し、それだけを受け付ける展開アプリも候補に含める
+     */
+    fun forViewIntent(fileName: String?, mediaStoreMimeType: String): String {
+        val extension = fileName?.substringAfterLast('.', missingDelimiterValue = "")?.lowercase()
+        return when (extension) {
+            "zst", "zstd" -> ZSTD
+            else -> mediaStoreMimeType
+        }
     }
 
     private fun mimeTypeFromExtension(extension: String): String? {
