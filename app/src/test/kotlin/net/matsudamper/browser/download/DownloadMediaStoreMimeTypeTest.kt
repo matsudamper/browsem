@@ -37,4 +37,16 @@ class DownloadMediaStoreMimeTypeTest {
             ),
         )
     }
+
+    @Test
+    fun apkZstUsesOctetStreamToKeepExtensionOnDuplicateName() {
+        // Android の MimeTypeMap が application/zstd を知らず、重複時に foo.apk.zst (1) になる
+        assertEquals(
+            "application/octet-stream",
+            DownloadMediaStoreMimeType.fromFileName(
+                fileName = "app-debug.apk.zst",
+                responseMimeType = "application/vnd.android.package-archive",
+            ),
+        )
+    }
 }
