@@ -495,7 +495,7 @@ internal class DownloadManagementScreenViewModel(
          * MediaStore が application/octet-stream しか返さない場合の判定に使う
          */
         private val ARCHIVE_EXTENSIONS = setOf(
-            "zip", "gz", "tgz", "tar", "bz2", "tbz2", "xz", "zst", "7z", "rar", "lzh", "jar",
+            "zip", "gz", "tgz", "tar", "bz2", "tbz2", "xz", "zst", "zstd", "7z", "rar", "lzh", "jar",
         )
     }
 }
