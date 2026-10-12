@@ -365,9 +365,10 @@ internal class DownloadManagementScreenViewModel(
             Toast.makeText(app, "ファイルがありません", Toast.LENGTH_SHORT).show()
             return
         }
+        val displayName = getDisplayName(uri)
         val mimeType = getMimeType(uri) ?: "*/*"
         // MIME タイプが APK でなくても拡張子で判定できるようファイル名も見る
-        val isApk = isApk(mimeType, getDisplayName(uri))
+        val isApk = isApk(mimeType, displayName)
 
         // APKの場合、提供元不明アプリのインストール権限がなければ設定画面へ誘導する
         if (isApk && !app.packageManager.canRequestPackageInstalls()) {
@@ -380,12 +381,25 @@ internal class DownloadManagementScreenViewModel(
         }
 
         // 拡張子でAPKと判定された場合は確実にインストーラーが起動するようMIMEタイプを補正する
-        val effectiveMimeType = if (isApk) MIME_TYPE_APK else mimeType
+        val effectiveMimeType = when {
+            isApk -> MIME_TYPE_APK
+            isZstd(displayName) -> MIME_TYPE_ZSTD
+            else -> mimeType
+        }
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, effectiveMimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
         runCatching { app.startActivity(intent) }
+    }
+
+    /**
+     * zstd は重複名で拡張子が壊れないよう octet-stream で MediaStore に保存しているため、
+     * 開くときに拡張子から MIME を戻して application/zstd を受け付けるアプリを候補に含める
+     */
+    private fun isZstd(displayName: String?): Boolean {
+        val extension = displayName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
+        return extension == "zst" || extension == "zstd"
     }
 
     private fun openDownloadsFolder() {
@@ -466,6 +480,8 @@ internal class DownloadManagementScreenViewModel(
         private const val MIME_TYPE_APK = "application/vnd.android.package-archive"
 
         private const val MIME_TYPE_PDF = "application/pdf"
+
+        private const val MIME_TYPE_ZSTD = "application/zstd"
 
         private val ARCHIVE_MIME_TYPES = setOf(
             "application/zip",
