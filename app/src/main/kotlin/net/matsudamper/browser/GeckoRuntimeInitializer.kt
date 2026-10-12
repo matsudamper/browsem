@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
+import android.content.ComponentCallbacks
 import android.content.Context
+import android.content.res.Configuration
 import android.util.Log
 import androidx.annotation.OptIn
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +57,22 @@ internal class GeckoRuntimeInitializer(
 ) {
     private val initializeMutex = Mutex()
     private val mutableRuntime = MutableStateFlow<GeckoRuntime?>(null)
+
+    init {
+        // uiMode 変更で Activity が再生成されると、新しい GeckoView は
+        // onConfigurationChanged を受け取らない。Gecko は起動時の night mode を
+        // 保持したまま prefers-color-scheme を返すため、再読込しても配色が変わらない。
+        context.registerComponentCallbacks(
+            object : ComponentCallbacks {
+                override fun onConfigurationChanged(newConfig: Configuration) {
+                    mutableRuntime.value?.configurationChanged(newConfig)
+                }
+
+                @Deprecated("メモリ不足の通知は使わない")
+                override fun onLowMemory() = Unit
+            },
+        )
+    }
 
     /** 初期化が完了すると GeckoRuntime が流れる。完了前は null。 */
     val runtime: StateFlow<GeckoRuntime?> = mutableRuntime.asStateFlow()
@@ -113,6 +131,8 @@ internal class GeckoRuntimeInitializer(
             allowUnsignedExtensions().accept({}, { error ->
                 Log.w(TAG, "署名要求 pref の反映に失敗", error)
             })
+            // 生成中に uiMode が変わっても、公開時点の設定を Gecko に渡す。
+            created.configurationChanged(context.resources.configuration)
             mutableRuntime.value = created
             created
         }
