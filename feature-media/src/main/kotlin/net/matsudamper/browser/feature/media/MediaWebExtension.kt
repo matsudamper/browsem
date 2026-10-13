@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.widget.Toast
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -51,6 +52,9 @@ class MediaWebExtension(
     val playingTabIds: StateFlow<Set<String>> = _playingTabIds.asStateFlow()
     private val artworkRequestSerial = AtomicLong(0L)
     private val backgroundPlaybackGuard = BackgroundPlaybackGuard<GeckoSession>()
+    private val blockedPlaybackNotice = BlockedPlaybackNotice(
+        repeatIntervalMs = BLOCKED_PLAYBACK_NOTICE_INTERVAL_MS,
+    )
     private val artworkTargetSizePx by lazy(LazyThreadSafetyMode.NONE) {
         max(
             context.resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_width),
@@ -308,6 +312,9 @@ class MediaWebExtension(
     /** アプリが前面に戻った。以降の再生開始はページに任せる。 */
     fun onHostEnteredForeground() {
         backgroundPlaybackGuard.onEnteredForeground()
+        if (blockedPlaybackNotice.onEnteredForeground(SystemClock.elapsedRealtime())) {
+            showBlockedPlaybackToast()
+        }
     }
 
     /**
@@ -465,6 +472,9 @@ class MediaWebExtension(
         }
         Log.d(TAG, "画面を閉じている間の再生を止める session=${session.logKey()} src=${snapshot.mediaSrc}")
         MediaTraceLog.d("WX blockBackgroundPlay session=${session.logKey()}")
+        if (blockedPlaybackNotice.onBlocked(SystemClock.elapsedRealtime())) {
+            showBlockedPlaybackToast()
+        }
         val mediaSession = sessionMediaSessions[session]
         if (mediaSession != null) {
             mediaSession.pause()
@@ -472,6 +482,12 @@ class MediaWebExtension(
             MediaSessionBridge.pause()
         }
         return snapshot.copy(isPlaying = false)
+    }
+
+    private fun showBlockedPlaybackToast() {
+        mainHandler.post {
+            Toast.makeText(context, BLOCKED_PLAYBACK_TOAST, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun applySessionState(session: GeckoSession) {
@@ -644,6 +660,8 @@ class MediaWebExtension(
             "resource://android/assets/web_extensions/media_bridge/"
         private const val DEFAULT_ARTWORK_SIZE_PX = 256
         private const val DEACTIVATION_GRACE_PERIOD_MS = 5_000L
+        private const val BLOCKED_PLAYBACK_NOTICE_INTERVAL_MS = 4_000L
+        private const val BLOCKED_PLAYBACK_TOAST = "再生を止めました"
     }
 }
 

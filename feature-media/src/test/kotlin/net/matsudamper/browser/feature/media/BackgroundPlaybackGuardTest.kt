@@ -190,6 +190,32 @@ class BackgroundPlaybackGuardTest {
         assertFalse(pause)
     }
 
+    @Test
+    fun 停止の通知は連続した再試行では一度だけ出す() {
+        val notice = BlockedPlaybackNotice(repeatIntervalMs = 4_000L)
+
+        assertTrue(notice.onBlocked(nowMs = 1_000L))
+        assertFalse(notice.onBlocked(nowMs = 2_000L))
+        assertTrue(notice.onBlocked(nowMs = 5_000L))
+    }
+
+    @Test
+    fun 画面オフ中に止めた再生は前面に戻ったときにも知らせる() {
+        val notice = BlockedPlaybackNotice(repeatIntervalMs = 4_000L)
+        notice.onBlocked(nowMs = 1_000L)
+
+        assertTrue(notice.onEnteredForeground(nowMs = 10_000L))
+        assertFalse(notice.onEnteredForeground(nowMs = 20_000L))
+    }
+
+    @Test
+    fun 直前に出した停止の通知は前面復帰では重ねない() {
+        val notice = BlockedPlaybackNotice(repeatIntervalMs = 4_000L)
+        notice.onBlocked(nowMs = 1_000L)
+
+        assertFalse(notice.onEnteredForeground(nowMs = 2_000L))
+    }
+
     private fun enterBackgroundPlaying(src: String, title: String) {
         guard.onEnteredBackground(
             mapOf("tab" to PlaybackIdentity(mediaSrc = src, title = title)),
