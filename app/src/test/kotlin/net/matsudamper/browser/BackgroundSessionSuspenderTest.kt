@@ -4,12 +4,12 @@ import androidx.lifecycle.LifecycleOwner
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import net.matsudamper.browser.feature.media.MediaWebExtension
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoSession
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import net.matsudamper.browser.feature.media.MediaWebExtension
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
