@@ -390,7 +390,10 @@ internal class DownloadManagementScreenViewModel(
             setDataAndType(uri, effectiveMimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
-        runCatching { app.startActivity(intent) }
+        val launched = runCatching { app.startActivity(intent) }.isSuccess
+        if (!launched) {
+            Toast.makeText(app, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun openDownloadsFolder() {
