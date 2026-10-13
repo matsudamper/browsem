@@ -627,12 +627,12 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
-            SettingSection(title = "クラッシュログ") {
+            SettingSection(title = "アプリログ") {
                 TextButton(
                     onClick = onOpenCrashLogs,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("クラッシュログを確認")
+                    Text("アプリログを確認")
                 }
             }
 
