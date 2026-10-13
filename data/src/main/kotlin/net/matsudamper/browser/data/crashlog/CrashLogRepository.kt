@@ -14,21 +14,34 @@ class CrashLogRepository(context: Context) {
     suspend fun deleteAll() = dao.deleteAll()
 
     fun saveCrashSync(thread: Thread, throwable: Throwable) {
-        val entity = CrashLogEntity(
-            occurredAt = System.currentTimeMillis(),
+        saveSync(
+            tag = TAG_CRASH,
             title = CrashLogFormatter.extractTitle(throwable),
             body = CrashLogFormatter.formatBody(thread, throwable),
         )
-        dao.insert(entity)
     }
 
     fun saveInfoSync(title: String, body: String) {
+        saveSync(
+            tag = TAG_LOG,
+            title = title,
+            body = body,
+        )
+    }
+
+    fun saveSync(tag: String, title: String, body: String) {
         dao.insert(
             CrashLogEntity(
                 occurredAt = System.currentTimeMillis(),
-                title = "INFO: $title",
+                tag = tag,
+                title = title,
                 body = body,
             ),
         )
+    }
+
+    companion object {
+        const val TAG_CRASH = "Crash"
+        const val TAG_LOG = "Log"
     }
 }
