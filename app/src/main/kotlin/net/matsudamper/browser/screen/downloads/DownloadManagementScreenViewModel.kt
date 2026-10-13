@@ -3,6 +3,7 @@ package net.matsudamper.browser.screen.downloads
 import android.app.Application
 import android.app.DownloadManager
 import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
@@ -390,7 +391,15 @@ internal class DownloadManagementScreenViewModel(
             setDataAndType(uri, effectiveMimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
-        runCatching { app.startActivity(intent) }
+        val launchResult = runCatching { app.startActivity(intent) }
+        if (launchResult.isFailure) {
+            val message = if (launchResult.exceptionOrNull() is ActivityNotFoundException) {
+                "対応するアプリが見つかりません"
+            } else {
+                "対応するアプリを開けませんでした"
+            }
+            Toast.makeText(app, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun openDownloadsFolder() {
