@@ -40,20 +40,15 @@ internal class CrashLogsScreenViewModel(
         CrashLogsScreenUiState(
             callbacks = callbacks,
             isLoading = true,
+            selectedTagLabel = ALL_TAGS_LABEL,
+            tagOptions = listOf(),
             entries = listOf(),
             showDeleteAllDialog = false,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
             viewModelStateFlow.collectLatest { state ->
-                uiStateFlow.update {
-                    CrashLogsScreenUiState(
-                        callbacks = callbacks,
-                        isLoading = state.isLoading,
-                        entries = state.entries.map(::toEntryItem),
-                        showDeleteAllDialog = state.showDeleteAllDialog,
-                    )
-                }
+                uiStateFlow.value = toUiState(state)
             }
         }
     }.asStateFlow()
@@ -66,9 +61,61 @@ internal class CrashLogsScreenViewModel(
         }
     }
 
+    private fun toUiState(state: ViewModelState): CrashLogsScreenUiState {
+        val tags = state.entries.map { it.tag }.distinct()
+        val selectedTag = state.selectedTag?.takeIf { selected -> tags.contains(selected) }
+        val visibleEntries = if (selectedTag == null) {
+            state.entries
+        } else {
+            state.entries.filter { it.tag == selectedTag }
+        }
+        return CrashLogsScreenUiState(
+            callbacks = callbacks,
+            isLoading = state.isLoading,
+            selectedTagLabel = selectedTag ?: ALL_TAGS_LABEL,
+            tagOptions = toTagOptions(tags),
+            entries = visibleEntries.map(::toEntryItem),
+            showDeleteAllDialog = state.showDeleteAllDialog,
+        )
+    }
+
+    private fun toTagOptions(tags: List<String>): List<CrashLogsScreenUiState.TagOption> {
+        if (tags.isEmpty()) return listOf()
+        val allTags = tagOption(
+            label = ALL_TAGS_LABEL,
+            onClick = {
+                viewModelStateFlow.update { it.copy(selectedTag = null) }
+            },
+        )
+        val tagItems = tags.map { tag ->
+            tagOption(
+                label = tag,
+                onClick = {
+                    viewModelStateFlow.update { it.copy(selectedTag = tag) }
+                },
+            )
+        }
+        return listOf(allTags) + tagItems
+    }
+
+    private fun tagOption(
+        label: String,
+        onClick: () -> Unit,
+    ): CrashLogsScreenUiState.TagOption {
+        return CrashLogsScreenUiState.TagOption(
+            label = label,
+            listener = object : CrashLogsScreenUiState.TagOption.Listener {
+                override fun onClick() {
+                    onClick()
+                }
+            },
+        )
+    }
+
     private fun toEntryItem(entry: CrashLogListItem): CrashLogsScreenUiState.EntryItem {
         return CrashLogsScreenUiState.EntryItem(
             id = entry.id,
+            tag = entry.tag,
             title = entry.title,
             occurredAt = entry.occurredAt,
             listener = object : CrashLogsScreenUiState.EntryItem.Listener {
@@ -86,6 +133,11 @@ internal class CrashLogsScreenViewModel(
     data class ViewModelState(
         val isLoading: Boolean = true,
         val entries: List<CrashLogListItem> = listOf(),
+        val selectedTag: String? = null,
         val showDeleteAllDialog: Boolean = false,
     )
+
+    private companion object {
+        const val ALL_TAGS_LABEL = "すべて"
+    }
 }

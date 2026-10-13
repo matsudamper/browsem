@@ -38,7 +38,28 @@ class CrashLogRepositoryTest {
 
         val saved = runBlocking { repository.getById(1) }
         assertNotNull(saved)
+        assertEquals(CrashLogRepository.TAG_CRASH, saved?.tag)
         assertEquals(CrashLogFormatter.extractTitle(throwable), saved?.title)
         assertEquals(CrashLogFormatter.formatBody(thread, throwable), saved?.body)
+    }
+
+    @Test
+    fun saveInfoSync_persistsLogType() {
+        repository.saveInfoSync(title = "翻訳診断", body = "stage=scan")
+
+        val saved = runBlocking { repository.getById(1) }
+        assertNotNull(saved)
+        assertEquals(CrashLogRepository.TAG_LOG, saved?.tag)
+        assertEquals("翻訳診断", saved?.title)
+        assertEquals("stage=scan", saved?.body)
+    }
+
+    @Test
+    fun saveSync_persistsGivenType() {
+        repository.saveSync(tag = "Custom", title = "任意ログ", body = "body")
+
+        val saved = runBlocking { repository.getById(1) }
+        assertEquals("Custom", saved?.tag)
+        assertEquals("任意ログ", saved?.title)
     }
 }

@@ -131,7 +131,7 @@ internal fun CrashLogDetailNavContent(
                         context = context,
                         label = "crash log",
                         text = text,
-                        message = "クラッシュログをコピーしました",
+                        message = "アプリログをコピーしました",
                     )
                 }
             })
