@@ -15,7 +15,7 @@ class CrashLogRepository(context: Context) {
 
     fun saveCrashSync(thread: Thread, throwable: Throwable) {
         saveSync(
-            type = TYPE_CRASH,
+            tag = TAG_CRASH,
             title = CrashLogFormatter.extractTitle(throwable),
             body = CrashLogFormatter.formatBody(thread, throwable),
         )
@@ -23,17 +23,17 @@ class CrashLogRepository(context: Context) {
 
     fun saveInfoSync(title: String, body: String) {
         saveSync(
-            type = TYPE_LOG,
+            tag = TAG_LOG,
             title = title,
             body = body,
         )
     }
 
-    fun saveSync(type: String, title: String, body: String) {
+    fun saveSync(tag: String, title: String, body: String) {
         dao.insert(
             CrashLogEntity(
                 occurredAt = System.currentTimeMillis(),
-                type = type,
+                tag = tag,
                 title = title,
                 body = body,
             ),
@@ -41,7 +41,7 @@ class CrashLogRepository(context: Context) {
     }
 
     companion object {
-        const val TYPE_CRASH = "Crash"
-        const val TYPE_LOG = "Log"
+        const val TAG_CRASH = "Crash"
+        const val TAG_LOG = "Log"
     }
 }

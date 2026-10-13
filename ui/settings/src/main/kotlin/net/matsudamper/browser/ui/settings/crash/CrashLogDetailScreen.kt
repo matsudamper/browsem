@@ -110,7 +110,7 @@ internal fun CrashLogDetailScreen(
                         .padding(16.dp),
                 ) {
                     Text(
-                        text = entry.type,
+                        text = entry.tag,
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -153,7 +153,7 @@ private fun PreviewCrashLogDetailScreen() {
             },
             isLoading = false,
             entry = CrashLogDetailScreenUiState.Entry(
-                type = "Crash",
+                tag = "Crash",
                 occurredAt = 1_700_000_000_000,
                 title = "java.lang.RuntimeException: test crash",
                 body = "Thread: main\njava.lang.RuntimeException: test crash\n\tat example.MainActivity.onCreate(MainActivity.kt:10)",

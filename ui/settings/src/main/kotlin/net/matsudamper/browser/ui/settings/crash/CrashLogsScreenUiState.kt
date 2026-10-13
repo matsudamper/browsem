@@ -6,13 +6,13 @@ import androidx.compose.runtime.Stable
 data class CrashLogsScreenUiState(
     val callbacks: Callbacks,
     val isLoading: Boolean,
-    val selectedTypeLabel: String,
-    val typeOptions: List<TypeOption>,
+    val selectedTagLabel: String,
+    val tagOptions: List<TagOption>,
     val entries: List<EntryItem>,
     val showDeleteAllDialog: Boolean,
 ) {
     @Stable
-    data class TypeOption(
+    data class TagOption(
         val label: String,
         val listener: Listener,
     ) {
@@ -25,7 +25,7 @@ data class CrashLogsScreenUiState(
     @Stable
     data class EntryItem(
         val id: Long,
-        val type: String,
+        val tag: String,
         val title: String,
         val occurredAt: Long,
         val listener: Listener,
@@ -47,6 +47,6 @@ internal object PreviewCrashLogEntryListener : CrashLogsScreenUiState.EntryItem.
     override fun onClick() = Unit
 }
 
-internal object PreviewCrashLogTypeOptionListener : CrashLogsScreenUiState.TypeOption.Listener {
+internal object PreviewCrashLogTagOptionListener : CrashLogsScreenUiState.TagOption.Listener {
     override fun onClick() = Unit
 }

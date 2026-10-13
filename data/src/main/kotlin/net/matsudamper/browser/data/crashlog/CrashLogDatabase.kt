@@ -16,21 +16,21 @@ abstract class CrashLogDatabase : RoomDatabase() {
     abstract fun crashLogDao(): CrashLogDao
 
     companion object {
-        const val SCHEMA_VERSION: Int = 2
+        const val SCHEMA_VERSION: Int = 3
 
         @Volatile
         private var instance: CrashLogDatabase? = null
 
-        /** v1→v2: 種別を文字列で持つ type 列を追加。既存の INFO 診断ログは Log、それ以外は Crash */
+        /** v1→v2: TAG を文字列で持つ type 列を追加。既存の INFO 診断ログは Log、それ以外は Crash */
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 val legacyInfoPrefix = "INFO: "
                 val titleWithoutPrefixStart = legacyInfoPrefix.length + 1
                 db.execSQL(
-                    "ALTER TABLE crash_log ADD COLUMN type TEXT NOT NULL DEFAULT '${CrashLogRepository.TYPE_CRASH}'",
+                    "ALTER TABLE crash_log ADD COLUMN type TEXT NOT NULL DEFAULT '${CrashLogRepository.TAG_CRASH}'",
                 )
                 db.execSQL(
-                    "UPDATE crash_log SET type = '${CrashLogRepository.TYPE_LOG}' WHERE title LIKE '$legacyInfoPrefix%'",
+                    "UPDATE crash_log SET type = '${CrashLogRepository.TAG_LOG}' WHERE title LIKE '$legacyInfoPrefix%'",
                 )
                 db.execSQL(
                     "UPDATE crash_log SET title = substr(title, $titleWithoutPrefixStart) WHERE title LIKE '$legacyInfoPrefix%'",
@@ -38,7 +38,14 @@ abstract class CrashLogDatabase : RoomDatabase() {
             }
         }
 
-        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+        /** v2→v3: 列名 type を tag に改名する */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE crash_log RENAME COLUMN type TO tag")
+            }
+        }
+
+        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
         fun getInstance(context: Context): CrashLogDatabase {
             return instance ?: synchronized(this) {

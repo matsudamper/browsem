@@ -55,12 +55,12 @@ sealed interface CrashLogsScreenTestTags {
         override val id = "entry_$crashLogId"
     }
 
-    data object TypeMenu : CrashLogsScreenTestTags {
-        override val id = "type_menu"
+    data object TagMenu : CrashLogsScreenTestTags {
+        override val id = "tag_menu"
     }
 
-    data class TypeOption(val label: String) : CrashLogsScreenTestTags {
-        override val id = "type_$label"
+    data class TagOption(val label: String) : CrashLogsScreenTestTags {
+        override val id = "tag_$label"
     }
 }
 
@@ -100,10 +100,10 @@ internal fun CrashLogsScreen(
                 .padding(paddingValues)
                 .fillMaxSize(),
         ) {
-            if (uiState.typeOptions.isNotEmpty()) {
-                CrashLogTypeMenu(
-                    selectedLabel = uiState.selectedTypeLabel,
-                    options = uiState.typeOptions,
+            if (uiState.tagOptions.isNotEmpty()) {
+                CrashLogTagMenu(
+                    selectedLabel = uiState.selectedTagLabel,
+                    options = uiState.tagOptions,
                 )
             }
             when {
@@ -161,9 +161,9 @@ internal fun CrashLogsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CrashLogTypeMenu(
+private fun CrashLogTagMenu(
     selectedLabel: String,
-    options: List<CrashLogsScreenUiState.TypeOption>,
+    options: List<CrashLogsScreenUiState.TagOption>,
 ) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
@@ -178,7 +178,7 @@ private fun CrashLogTypeMenu(
             onValueChange = {},
             readOnly = true,
             singleLine = true,
-            label = { Text("種別") },
+            label = { Text("TAG") },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
             },
@@ -186,7 +186,7 @@ private fun CrashLogTypeMenu(
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth()
-                .testTag(CrashLogsScreenTestTags.TypeMenu.testTag),
+                .testTag(CrashLogsScreenTestTags.TagMenu.testTag),
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -200,7 +200,7 @@ private fun CrashLogTypeMenu(
                         option.listener.onClick()
                     },
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                    modifier = Modifier.testTag(CrashLogsScreenTestTags.TypeOption(option.label).testTag),
+                    modifier = Modifier.testTag(CrashLogsScreenTestTags.TagOption(option.label).testTag),
                 )
             }
         }
@@ -222,7 +222,7 @@ private fun CrashLogSummaryListItem(
         },
         supportingContent = {
             Text(
-                text = "${entry.type}  ${dateFormat.format(Date(entry.occurredAt))}",
+                text = "${entry.tag}  ${dateFormat.format(Date(entry.occurredAt))}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -246,25 +246,25 @@ private fun PreviewCrashLogsScreen() {
         uiState = CrashLogsScreenUiState(
             callbacks = previewCallbacks,
             isLoading = false,
-            selectedTypeLabel = "Crash",
-            typeOptions = listOf(
-                CrashLogsScreenUiState.TypeOption(
+            selectedTagLabel = "Crash",
+            tagOptions = listOf(
+                CrashLogsScreenUiState.TagOption(
                     label = "すべて",
-                    listener = PreviewCrashLogTypeOptionListener,
+                    listener = PreviewCrashLogTagOptionListener,
                 ),
-                CrashLogsScreenUiState.TypeOption(
+                CrashLogsScreenUiState.TagOption(
                     label = "Crash",
-                    listener = PreviewCrashLogTypeOptionListener,
+                    listener = PreviewCrashLogTagOptionListener,
                 ),
-                CrashLogsScreenUiState.TypeOption(
+                CrashLogsScreenUiState.TagOption(
                     label = "Log",
-                    listener = PreviewCrashLogTypeOptionListener,
+                    listener = PreviewCrashLogTagOptionListener,
                 ),
             ),
             entries = listOf(
                 CrashLogsScreenUiState.EntryItem(
                     id = 1,
-                    type = "Crash",
+                    tag = "Crash",
                     occurredAt = 1_700_000_000_000,
                     title = "java.lang.RuntimeException: Something went wrong in the browser",
                     listener = PreviewCrashLogEntryListener,
@@ -283,8 +283,8 @@ private fun PreviewCrashLogsScreenEmpty() {
         uiState = CrashLogsScreenUiState(
             callbacks = previewCallbacks,
             isLoading = false,
-            selectedTypeLabel = "すべて",
-            typeOptions = listOf(),
+            selectedTagLabel = "すべて",
+            tagOptions = listOf(),
             entries = listOf(),
             showDeleteAllDialog = false,
         ),

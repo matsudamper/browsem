@@ -9,7 +9,7 @@ data class CrashLogDetailScreenUiState(
     val entry: Entry?,
 ) {
     data class Entry(
-        val type: String,
+        val tag: String,
         val occurredAt: Long,
         val title: String,
         val body: String,

@@ -40,8 +40,8 @@ internal class CrashLogsScreenViewModel(
         CrashLogsScreenUiState(
             callbacks = callbacks,
             isLoading = true,
-            selectedTypeLabel = ALL_TYPES_LABEL,
-            typeOptions = listOf(),
+            selectedTagLabel = ALL_TAGS_LABEL,
+            tagOptions = listOf(),
             entries = listOf(),
             showDeleteAllDialog = false,
         ),
@@ -62,49 +62,49 @@ internal class CrashLogsScreenViewModel(
     }
 
     private fun toUiState(state: ViewModelState): CrashLogsScreenUiState {
-        val types = state.entries.map { it.type }.distinct()
-        val selectedType = state.selectedType?.takeIf { selected -> types.contains(selected) }
-        val visibleEntries = if (selectedType == null) {
+        val tags = state.entries.map { it.tag }.distinct()
+        val selectedTag = state.selectedTag?.takeIf { selected -> tags.contains(selected) }
+        val visibleEntries = if (selectedTag == null) {
             state.entries
         } else {
-            state.entries.filter { it.type == selectedType }
+            state.entries.filter { it.tag == selectedTag }
         }
         return CrashLogsScreenUiState(
             callbacks = callbacks,
             isLoading = state.isLoading,
-            selectedTypeLabel = selectedType ?: ALL_TYPES_LABEL,
-            typeOptions = toTypeOptions(types),
+            selectedTagLabel = selectedTag ?: ALL_TAGS_LABEL,
+            tagOptions = toTagOptions(tags),
             entries = visibleEntries.map(::toEntryItem),
             showDeleteAllDialog = state.showDeleteAllDialog,
         )
     }
 
-    private fun toTypeOptions(types: List<String>): List<CrashLogsScreenUiState.TypeOption> {
-        if (types.isEmpty()) return listOf()
-        val allTypes = typeOption(
-            label = ALL_TYPES_LABEL,
+    private fun toTagOptions(tags: List<String>): List<CrashLogsScreenUiState.TagOption> {
+        if (tags.isEmpty()) return listOf()
+        val allTags = tagOption(
+            label = ALL_TAGS_LABEL,
             onClick = {
-                viewModelStateFlow.update { it.copy(selectedType = null) }
+                viewModelStateFlow.update { it.copy(selectedTag = null) }
             },
         )
-        val typeItems = types.map { type ->
-            typeOption(
-                label = type,
+        val tagItems = tags.map { tag ->
+            tagOption(
+                label = tag,
                 onClick = {
-                    viewModelStateFlow.update { it.copy(selectedType = type) }
+                    viewModelStateFlow.update { it.copy(selectedTag = tag) }
                 },
             )
         }
-        return listOf(allTypes) + typeItems
+        return listOf(allTags) + tagItems
     }
 
-    private fun typeOption(
+    private fun tagOption(
         label: String,
         onClick: () -> Unit,
-    ): CrashLogsScreenUiState.TypeOption {
-        return CrashLogsScreenUiState.TypeOption(
+    ): CrashLogsScreenUiState.TagOption {
+        return CrashLogsScreenUiState.TagOption(
             label = label,
-            listener = object : CrashLogsScreenUiState.TypeOption.Listener {
+            listener = object : CrashLogsScreenUiState.TagOption.Listener {
                 override fun onClick() {
                     onClick()
                 }
@@ -115,7 +115,7 @@ internal class CrashLogsScreenViewModel(
     private fun toEntryItem(entry: CrashLogListItem): CrashLogsScreenUiState.EntryItem {
         return CrashLogsScreenUiState.EntryItem(
             id = entry.id,
-            type = entry.type,
+            tag = entry.tag,
             title = entry.title,
             occurredAt = entry.occurredAt,
             listener = object : CrashLogsScreenUiState.EntryItem.Listener {
@@ -133,11 +133,11 @@ internal class CrashLogsScreenViewModel(
     data class ViewModelState(
         val isLoading: Boolean = true,
         val entries: List<CrashLogListItem> = listOf(),
-        val selectedType: String? = null,
+        val selectedTag: String? = null,
         val showDeleteAllDialog: Boolean = false,
     )
 
     private companion object {
-        const val ALL_TYPES_LABEL = "すべて"
+        const val ALL_TAGS_LABEL = "すべて"
     }
 }

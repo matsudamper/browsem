@@ -39,10 +39,33 @@ class CrashLogDatabaseMigrationTest {
             db.query("SELECT title, type FROM crash_log ORDER BY occurredAt ASC").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 assertEquals("java.lang.RuntimeException: boom", cursor.getString(0))
-                assertEquals(CrashLogRepository.TYPE_CRASH, cursor.getString(1))
+                assertEquals(CrashLogRepository.TAG_CRASH, cursor.getString(1))
                 assertTrue(cursor.moveToNext())
                 assertEquals("翻訳診断", cursor.getString(0))
-                assertEquals(CrashLogRepository.TYPE_LOG, cursor.getString(1))
+                assertEquals(CrashLogRepository.TAG_LOG, cursor.getString(1))
+            }
+        }
+    }
+
+    @Test
+    fun migrate2To3_renamesTypeColumnToTag() {
+        helper.createDatabase(TEST_DB, 2).apply {
+            execSQL(
+                "INSERT INTO crash_log (occurredAt, type, title, body) VALUES (1000, 'Crash', 'boom', 'stack')",
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(
+            TEST_DB,
+            3,
+            true,
+            *CrashLogDatabase.ALL_MIGRATIONS,
+        ).use { db ->
+            db.query("SELECT tag, title FROM crash_log").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(CrashLogRepository.TAG_CRASH, cursor.getString(0))
+                assertEquals("boom", cursor.getString(1))
             }
         }
     }
