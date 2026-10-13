@@ -14,7 +14,7 @@ val useCiDebugKeystore = ciDebugKeystoreFile != null && ciDebugKeystoreFile.exis
 android {
     namespace = "net.matsudamper.browser"
     compileSdk = 37
-    compileSdkMinor = 1
+    compileSdkMinor = 2
 
     defaultConfig {
         applicationId = "net.matsudamper.browser"
