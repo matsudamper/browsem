@@ -82,16 +82,23 @@ internal class CrashLogsScreenViewModel(
         selectedType: String?,
     ): List<CrashLogsScreenUiState.TypeFilterItem> {
         if (types.isEmpty()) return listOf()
-        return buildList {
-            add(typeFilterItem(label = ALL_TYPES_LABEL, isSelected = selectedType == null) {
+        val allTypes = typeFilterItem(
+            label = ALL_TYPES_LABEL,
+            isSelected = selectedType == null,
+            onClick = {
                 viewModelStateFlow.update { it.copy(selectedType = null) }
-            })
-            types.forEach { type ->
-                add(typeFilterItem(label = type, isSelected = type == selectedType) {
+            },
+        )
+        val typeItems = types.map { type ->
+            typeFilterItem(
+                label = type,
+                isSelected = type == selectedType,
+                onClick = {
                     viewModelStateFlow.update { it.copy(selectedType = type) }
-                })
-            }
+                },
+            )
         }
+        return listOf(allTypes) + typeItems
     }
 
     private fun typeFilterItem(
