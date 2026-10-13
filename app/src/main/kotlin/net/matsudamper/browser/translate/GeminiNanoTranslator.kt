@@ -328,7 +328,7 @@ class GeminiNanoTranslator(
 
     private fun saveInfo(title: String, body: String) {
         try {
-            crashLogRepository.saveSync(tag = TAG, title = title, body = body)
+            crashLogRepository.saveInfoSync(title, body)
         } catch (error: RuntimeException) {
             Log.w(TAG, "翻訳診断ログの保存に失敗", error)
         }
