@@ -5,6 +5,7 @@
   ],
   "packageRules": [
     {
+      "groupName": "mozilla",
       "matchPackageNames": [
         "org.mozilla.components:**",
         "org.mozilla.geckoview:**"
