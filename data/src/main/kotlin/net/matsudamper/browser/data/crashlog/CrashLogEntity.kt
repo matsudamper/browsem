@@ -13,6 +13,7 @@ import androidx.room.PrimaryKey
 data class CrashLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val occurredAt: Long,
+    val type: String,
     val title: String,
     val body: String,
 )

@@ -10,7 +10,7 @@ interface CrashLogDao {
     @Insert
     fun insert(entity: CrashLogEntity): Long
 
-    @Query("SELECT id, occurredAt, title FROM crash_log ORDER BY occurredAt DESC, id DESC")
+    @Query("SELECT id, occurredAt, type, title FROM crash_log ORDER BY occurredAt DESC, id DESC")
     fun observeAllSummaries(): Flow<List<CrashLogListItem>>
 
     @Query("SELECT * FROM crash_log WHERE id = :id")

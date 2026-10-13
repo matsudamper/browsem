@@ -40,20 +40,14 @@ internal class CrashLogsScreenViewModel(
         CrashLogsScreenUiState(
             callbacks = callbacks,
             isLoading = true,
+            typeFilters = listOf(),
             entries = listOf(),
             showDeleteAllDialog = false,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
             viewModelStateFlow.collectLatest { state ->
-                uiStateFlow.update {
-                    CrashLogsScreenUiState(
-                        callbacks = callbacks,
-                        isLoading = state.isLoading,
-                        entries = state.entries.map(::toEntryItem),
-                        showDeleteAllDialog = state.showDeleteAllDialog,
-                    )
-                }
+                uiStateFlow.value = toUiState(state)
             }
         }
     }.asStateFlow()
@@ -66,9 +60,60 @@ internal class CrashLogsScreenViewModel(
         }
     }
 
+    private fun toUiState(state: ViewModelState): CrashLogsScreenUiState {
+        val types = state.entries.map { it.type }.distinct()
+        val selectedType = state.selectedType?.takeIf { selected -> types.contains(selected) }
+        val visibleEntries = if (selectedType == null) {
+            state.entries
+        } else {
+            state.entries.filter { it.type == selectedType }
+        }
+        return CrashLogsScreenUiState(
+            callbacks = callbacks,
+            isLoading = state.isLoading,
+            typeFilters = toTypeFilters(types, selectedType),
+            entries = visibleEntries.map(::toEntryItem),
+            showDeleteAllDialog = state.showDeleteAllDialog,
+        )
+    }
+
+    private fun toTypeFilters(
+        types: List<String>,
+        selectedType: String?,
+    ): List<CrashLogsScreenUiState.TypeFilterItem> {
+        if (types.isEmpty()) return listOf()
+        return buildList {
+            add(typeFilterItem(label = ALL_TYPES_LABEL, isSelected = selectedType == null) {
+                viewModelStateFlow.update { it.copy(selectedType = null) }
+            })
+            types.forEach { type ->
+                add(typeFilterItem(label = type, isSelected = type == selectedType) {
+                    viewModelStateFlow.update { it.copy(selectedType = type) }
+                })
+            }
+        }
+    }
+
+    private fun typeFilterItem(
+        label: String,
+        isSelected: Boolean,
+        onClick: () -> Unit,
+    ): CrashLogsScreenUiState.TypeFilterItem {
+        return CrashLogsScreenUiState.TypeFilterItem(
+            label = label,
+            isSelected = isSelected,
+            listener = object : CrashLogsScreenUiState.TypeFilterItem.Listener {
+                override fun onClick() {
+                    onClick()
+                }
+            },
+        )
+    }
+
     private fun toEntryItem(entry: CrashLogListItem): CrashLogsScreenUiState.EntryItem {
         return CrashLogsScreenUiState.EntryItem(
             id = entry.id,
+            type = entry.type,
             title = entry.title,
             occurredAt = entry.occurredAt,
             listener = object : CrashLogsScreenUiState.EntryItem.Listener {
@@ -86,6 +131,11 @@ internal class CrashLogsScreenViewModel(
     data class ViewModelState(
         val isLoading: Boolean = true,
         val entries: List<CrashLogListItem> = listOf(),
+        val selectedType: String? = null,
         val showDeleteAllDialog: Boolean = false,
     )
+
+    private companion object {
+        const val ALL_TYPES_LABEL = "すべて"
+    }
 }

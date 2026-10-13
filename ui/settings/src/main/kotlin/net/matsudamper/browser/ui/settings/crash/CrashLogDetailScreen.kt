@@ -59,7 +59,7 @@ internal fun CrashLogDetailScreen(
         modifier = modifier.testTag(CrashLogDetailScreenTestTags.Root.testTag),
         topBar = {
             TopAppBar(
-                title = { Text("クラッシュログ詳細") },
+                title = { Text("アプリログ詳細") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -92,7 +92,7 @@ internal fun CrashLogDetailScreen(
 
             entry == null -> {
                 Text(
-                    text = "クラッシュログが見つかりません",
+                    text = "アプリログが見つかりません",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
@@ -110,9 +110,15 @@ internal fun CrashLogDetailScreen(
                         .padding(16.dp),
                 ) {
                     Text(
+                        text = entry.type,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
                         text = dateFormat.format(Date(entry.occurredAt)),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                     Text(
                         text = entry.title,
@@ -147,6 +153,7 @@ private fun PreviewCrashLogDetailScreen() {
             },
             isLoading = false,
             entry = CrashLogDetailScreenUiState.Entry(
+                type = "Crash",
                 occurredAt = 1_700_000_000_000,
                 title = "java.lang.RuntimeException: test crash",
                 body = "Thread: main\njava.lang.RuntimeException: test crash\n\tat example.MainActivity.onCreate(MainActivity.kt:10)",
