@@ -131,6 +131,9 @@ val appModule = module {
             onBlockedPlayback = { tag, title, body ->
                 crashLogRepository.saveSync(tag = tag, title = title, body = body)
             },
+            onSessionActivated = { session ->
+                get<BackgroundSessionSuspender>().noteSessionActivated(session)
+            },
         ).also { it.install(get()) }
     }
     single {

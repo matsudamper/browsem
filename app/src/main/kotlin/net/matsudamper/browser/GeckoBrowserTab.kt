@@ -440,7 +440,7 @@ internal fun GeckoBrowserTab(
         gecko.setSession(session)
         addressAutofillDelegate.bind(session)
         if (session.isOpen) {
-            session.setActive(true)
+            browserTab.setSessionActive(true)
             // ポップアップを閉じて戻った直後は、拡張機能側のアクティブタブが閉じた子のまま残る
             browserSessionLifecycleController.notifyExtensionsActiveTab(session)
             // 別画面へ渡した子が閉じていれば、ここで opener の保持を解く

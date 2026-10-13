@@ -29,6 +29,7 @@ import org.mozilla.geckoview.WebExtension
 class MediaWebExtension(
     private val context: Context,
     private val onBlockedPlayback: (tag: String, title: String, body: String) -> Unit,
+    private val onSessionActivated: (GeckoSession) -> Unit,
 ) {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -441,6 +442,7 @@ class MediaWebExtension(
         }
         backgroundPlaybackGuard.onUserTransportCommand(session, SystemClock.elapsedRealtime())
         if (session.isOpen) {
+            onSessionActivated(session)
             session.setActive(true)
         }
     }

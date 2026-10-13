@@ -199,12 +199,28 @@ class BrowserSessionLifecycleControllerTest {
         val session = mockk<GeckoSession>(relaxed = true)
         every { session.isOpen } returns true
         val tab = createTab(session)
+        tab.setSessionActive(true)
         val controller = BrowserSessionLifecycleController(runtime)
 
         val suspended = controller.suspendWhileHostStopped(tab, isPlaying = false)
 
         assertTrue(suspended)
+        assertFalse(tab.isSessionActive)
         verify { session.setActive(false) }
+    }
+
+    @Test
+    fun `既に inactive のタブは画面外で復帰対象にしない`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+        val tab = createTab(session)
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        val suspended = controller.suspendWhileHostStopped(tab, isPlaying = false)
+
+        assertFalse(suspended)
+        verify(exactly = 0) { session.setActive(false) }
     }
 
     @Test
@@ -213,11 +229,13 @@ class BrowserSessionLifecycleControllerTest {
         val session = mockk<GeckoSession>(relaxed = true)
         every { session.isOpen } returns true
         val tab = createTab(session)
+        tab.setSessionActive(true)
         val controller = BrowserSessionLifecycleController(runtime)
 
         val suspended = controller.suspendWhileHostStopped(tab, isPlaying = true)
 
         assertFalse(suspended)
+        assertTrue(tab.isSessionActive)
         verify(exactly = 0) { session.setActive(false) }
     }
 

@@ -4,6 +4,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import net.matsudamper.browser.feature.media.MediaWebExtension
+import org.mozilla.geckoview.GeckoSession
 
 internal class BackgroundSessionHost(
     val tabs: () -> List<BrowserTab>,
@@ -27,6 +28,16 @@ internal class BackgroundSessionSuspender(
     fun untrack(host: BackgroundSessionHost) {
         hosts.remove(host)
         suspendedByHost.remove(host)
+    }
+
+    /** 通知操作でセッションを起こしたとき、画面復帰の判定に active だと伝える。 */
+    fun noteSessionActivated(session: GeckoSession) {
+        hosts.forEach { host ->
+            val tab = host.tabs().firstOrNull { it.session === session }
+            if (tab != null) {
+                tab.setSessionActive(true)
+            }
+        }
     }
 
     override fun onStop(owner: LifecycleOwner) {
