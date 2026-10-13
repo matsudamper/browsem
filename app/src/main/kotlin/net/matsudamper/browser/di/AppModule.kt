@@ -1,9 +1,11 @@
 package net.matsudamper.browser.di
 
+import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
+import net.matsudamper.browser.BackgroundSessionSuspender
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.CustomTabsWarmupStore
 import net.matsudamper.browser.DownloadWorker
@@ -123,6 +125,11 @@ val appModule = module {
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
     single { ThemeColorWebExtension().also { it.install(get()) } }
     single { MediaWebExtension(androidContext()).also { it.install(get()) } }
+    single {
+        BackgroundSessionSuspender(mediaWebExtension = get()).also { suspender ->
+            ProcessLifecycleOwner.get().lifecycle.addObserver(suspender)
+        }
+    }
     single { FindInPageWebExtension().also { it.install(get()) } }
     single { DevToolsWebExtension().also { it.install(get()) } }
     single { MockLocationWebExtension().also { it.install(get()) } }
@@ -139,7 +146,7 @@ val appModule = module {
     single { PublicSuffixList(androidContext()) }
     single { WebAppShortcutManager(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     // 画面の ViewModel は生成を Koin に集約し、画面側は koinViewModel() で解決する
     viewModel {
         SettingsScreenViewModel(
@@ -229,6 +236,7 @@ val appModule = module {
             mediaWebExtension = get(),
             pageTranslationWebExtension = get(),
             applicationScope = get(),
+            backgroundSessionSuspender = get(),
         )
     }
     viewModel { WebAppScreenViewModel(get(), get(), get(), get()) }

@@ -95,6 +95,7 @@ internal class BrowserViewModel(
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val applicationScope: CoroutineScope,
+    private val backgroundSessionSuspender: BackgroundSessionSuspender,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
@@ -121,6 +122,11 @@ internal class BrowserViewModel(
             mediaWebExtension.releaseSession(session)
             pageTranslationWebExtension.unregisterSession(session)
         }
+        trackBackgroundSessions(
+            suspender = backgroundSessionSuspender,
+            browserTabController = browserTabController,
+            lifecycleController = browserSessionLifecycleController,
+        )
     }
 
     // タブ復元完了シグナル。BrowserTabController が内部で管理し、構成変更後も有効。

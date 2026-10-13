@@ -24,6 +24,7 @@ internal class CustomTabBrowserViewModel(
     private val mediaWebExtension: MediaWebExtension,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     applicationScope: CoroutineScope,
+    private val backgroundSessionSuspender: BackgroundSessionSuspender,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
@@ -81,6 +82,11 @@ internal class CustomTabBrowserViewModel(
             mediaWebExtension.releaseSession(session)
             pageTranslationWebExtension.unregisterSession(session)
         }
+        trackBackgroundSessions(
+            suspender = backgroundSessionSuspender,
+            browserTabController = browserTabController,
+            lifecycleController = browserSessionLifecycleController,
+        )
     }
 
     override fun onCleared() {

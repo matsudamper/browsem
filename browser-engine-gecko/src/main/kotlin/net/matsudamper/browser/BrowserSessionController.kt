@@ -161,6 +161,28 @@ class BrowserSessionLifecycleController(
     }
 
     /**
+     * アプリが画面から外れている間、このタブの JS を止める。
+     *
+     * 再生中のタブは音と通知操作を続けるため止めない。
+     * live popup の opener は決済などの window.opener を維持するため止めない。
+     *
+     * @return 止めたとき true。前面へ戻したら [resumeSuspendedWhileHostStopped] で戻す。
+     */
+    fun suspendWhileHostStopped(tab: BrowserTab, isPlaying: Boolean): Boolean {
+        if (isPlaying) return false
+        if (tab.retainForLivePopup) return false
+        if (!tab.session.isOpen) return false
+        tab.session.setActive(false)
+        return true
+    }
+
+    /** [suspendWhileHostStopped] で止めたタブを、拡張機能のアクティブタブは変えずに戻す。 */
+    fun resumeSuspendedWhileHostStopped(tab: BrowserTab) {
+        if (!tab.session.isOpen) return
+        tab.session.setActive(true)
+    }
+
+    /**
      * onNewSession 由来の子タブが生きている opener は、GeckoView から外れても
      * JS を止めない。Surface 解放後に GeckoView が inactive にしても、ここで戻す。
      *
