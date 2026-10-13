@@ -124,7 +124,15 @@ val appModule = module {
     single<GeckoRuntime> { get<GeckoRuntimeInitializer>().requireInitialized() }
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
     single { ThemeColorWebExtension().also { it.install(get()) } }
-    single { MediaWebExtension(androidContext()).also { it.install(get()) } }
+    single {
+        val crashLogRepository = get<CrashLogRepository>()
+        MediaWebExtension(
+            context = androidContext(),
+            onBlockedPlayback = { tag, title, body ->
+                crashLogRepository.saveSync(tag = tag, title = title, body = body)
+            },
+        ).also { it.install(get()) }
+    }
     single {
         BackgroundSessionSuspender(mediaWebExtension = get()).also { suspender ->
             ProcessLifecycleOwner.get().lifecycle.addObserver(suspender)

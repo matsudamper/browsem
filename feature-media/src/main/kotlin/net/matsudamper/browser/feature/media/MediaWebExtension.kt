@@ -28,6 +28,7 @@ import org.mozilla.geckoview.WebExtension
  */
 class MediaWebExtension(
     private val context: Context,
+    private val onBlockedPlayback: (tag: String, title: String, body: String) -> Unit,
 ) {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -474,6 +475,7 @@ class MediaWebExtension(
         MediaTraceLog.d("WX blockBackgroundPlay session=${session.logKey()}")
         if (blockedPlaybackNotice.onBlocked(SystemClock.elapsedRealtime())) {
             showBlockedPlaybackToast()
+            saveBlockedPlayback(snapshot)
         }
         val mediaSession = sessionMediaSessions[session]
         if (mediaSession != null) {
@@ -487,6 +489,20 @@ class MediaWebExtension(
     private fun showBlockedPlaybackToast() {
         mainHandler.post {
             Toast.makeText(context, BLOCKED_PLAYBACK_TOAST, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun saveBlockedPlayback(snapshot: SessionPlaybackSnapshot) {
+        val body = buildString {
+            appendLine("title=${snapshot.title}")
+            appendLine("src=${snapshot.mediaSrc}")
+            appendLine("artist=${snapshot.artist}")
+            append("album=${snapshot.album}")
+        }
+        try {
+            onBlockedPlayback(TAG, BLOCKED_PLAYBACK_TOAST, body)
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "再生停止ログの保存に失敗", error)
         }
     }
 
