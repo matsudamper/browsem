@@ -40,7 +40,8 @@ internal class CrashLogsScreenViewModel(
         CrashLogsScreenUiState(
             callbacks = callbacks,
             isLoading = true,
-            typeFilters = listOf(),
+            selectedTypeLabel = ALL_TYPES_LABEL,
+            typeOptions = listOf(),
             entries = listOf(),
             showDeleteAllDialog = false,
         ),
@@ -71,28 +72,24 @@ internal class CrashLogsScreenViewModel(
         return CrashLogsScreenUiState(
             callbacks = callbacks,
             isLoading = state.isLoading,
-            typeFilters = toTypeFilters(types, selectedType),
+            selectedTypeLabel = selectedType ?: ALL_TYPES_LABEL,
+            typeOptions = toTypeOptions(types),
             entries = visibleEntries.map(::toEntryItem),
             showDeleteAllDialog = state.showDeleteAllDialog,
         )
     }
 
-    private fun toTypeFilters(
-        types: List<String>,
-        selectedType: String?,
-    ): List<CrashLogsScreenUiState.TypeFilterItem> {
+    private fun toTypeOptions(types: List<String>): List<CrashLogsScreenUiState.TypeOption> {
         if (types.isEmpty()) return listOf()
-        val allTypes = typeFilterItem(
+        val allTypes = typeOption(
             label = ALL_TYPES_LABEL,
-            isSelected = selectedType == null,
             onClick = {
                 viewModelStateFlow.update { it.copy(selectedType = null) }
             },
         )
         val typeItems = types.map { type ->
-            typeFilterItem(
+            typeOption(
                 label = type,
-                isSelected = type == selectedType,
                 onClick = {
                     viewModelStateFlow.update { it.copy(selectedType = type) }
                 },
@@ -101,15 +98,13 @@ internal class CrashLogsScreenViewModel(
         return listOf(allTypes) + typeItems
     }
 
-    private fun typeFilterItem(
+    private fun typeOption(
         label: String,
-        isSelected: Boolean,
         onClick: () -> Unit,
-    ): CrashLogsScreenUiState.TypeFilterItem {
-        return CrashLogsScreenUiState.TypeFilterItem(
+    ): CrashLogsScreenUiState.TypeOption {
+        return CrashLogsScreenUiState.TypeOption(
             label = label,
-            isSelected = isSelected,
-            listener = object : CrashLogsScreenUiState.TypeFilterItem.Listener {
+            listener = object : CrashLogsScreenUiState.TypeOption.Listener {
                 override fun onClick() {
                     onClick()
                 }
