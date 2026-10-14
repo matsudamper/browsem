@@ -346,36 +346,42 @@ private fun CustomTabScreen(
         // 既存タブを再利用する。WebAppScreen と同様、破棄は ViewModel に任せる。
         // プロファイル移動でタブを差し替えたあとも、ここで作り直さない。
         if (browserTabController.tabs.isNotEmpty()) return@LaunchedEffect
-        profileRepository.createDefaultProfileIfEmpty()
-        val activeProfileId = profileRepository.observeProfiles().first()
-            .firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
-        when {
-            handedOffPopupSession != null && handedOffPopupTabId != null -> {
-                browserTabController.createTabWithHandedOffPopupSession(
-                    session = handedOffPopupSession,
-                    tabId = handedOffPopupTabId,
-                    initialUrl = currentHandedOffPopupInitialUrl().orEmpty(),
-                )
-                currentOnHandedOffPopupSessionAttached()
-            }
-
-            prewarmedSession != null &&
-                ProfileId.fromGeckoContextId(prewarmedSession.settings.contextId) == activeProfileId -> {
-                browserTabController.createAndAppendTabWithSession(
-                    session = prewarmedSession,
-                    initialUrl = initialUrl,
-                )
-            }
-
-            else -> {
-                // 準備済みセッションの contextId が有効プロファイルと違うときは引き継がない。
-                if (prewarmedSession != null && prewarmedSession.isOpen) {
-                    prewarmedSession.close()
+        // プロファイルの読み出し中に画面が終わると、ストアから取り出したセッションは
+        // タブにもストアにも残らず開きっぱなしになる。載せていないときだけ閉じる。
+        var attachedPrewarmedSession = false
+        try {
+            profileRepository.createDefaultProfileIfEmpty()
+            val activeProfileId = profileRepository.observeProfiles().first()
+                .firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+            when {
+                handedOffPopupSession != null && handedOffPopupTabId != null -> {
+                    browserTabController.createTabWithHandedOffPopupSession(
+                        session = handedOffPopupSession,
+                        tabId = handedOffPopupTabId,
+                        initialUrl = currentHandedOffPopupInitialUrl().orEmpty(),
+                    )
+                    currentOnHandedOffPopupSessionAttached()
                 }
-                browserTabController.createAndAppendTab(
-                    initialUrl = initialUrl,
-                    profileId = activeProfileId,
-                )
+
+                prewarmedSession != null &&
+                    ProfileId.fromGeckoContextId(prewarmedSession.settings.contextId) == activeProfileId -> {
+                    browserTabController.createAndAppendTabWithSession(
+                        session = prewarmedSession,
+                        initialUrl = initialUrl,
+                    )
+                    attachedPrewarmedSession = true
+                }
+
+                else -> {
+                    browserTabController.createAndAppendTab(
+                        initialUrl = initialUrl,
+                        profileId = activeProfileId,
+                    )
+                }
+            }
+        } finally {
+            if (!attachedPrewarmedSession && prewarmedSession != null && prewarmedSession.isOpen) {
+                prewarmedSession.close()
             }
         }
     }
