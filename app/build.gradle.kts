@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.koin.compiler)
     alias(libs.plugins.paparazzi)
     id("detekt-compose-convention")
     id("instrumentation-failures-report-convention")
@@ -176,6 +177,7 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
+    implementation(libs.koin.annotations)
     implementation(libs.koinAndroidWorkManager)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
