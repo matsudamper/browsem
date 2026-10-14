@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.core.TabStoreState
@@ -257,7 +258,7 @@ internal class CustomTabBrowserViewModel(
 
     private fun addProfile() {
         viewModelScope.launch {
-            val profileCount = profileSwitcher.value.profiles.size
+            val profileCount = profileRepository.observeProfiles().first().size
             profileRepository.addProfile(
                 name = "プロファイル ${profileCount + 1}",
                 icon = ProfileIcon.PERSON,
