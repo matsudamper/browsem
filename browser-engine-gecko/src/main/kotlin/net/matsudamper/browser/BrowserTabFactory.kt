@@ -67,12 +67,21 @@ internal class BrowserTabFactory(
          * contextId は open 後に変更できないため、セッション生成時にプロファイルを確定させる。
          */
         fun createSessionForProfile(profileId: ProfileId): GeckoSession {
-            val contextId = profileId.geckoContextId
-            return if (contextId == null) {
-                GeckoSession()
-            } else {
-                GeckoSession(GeckoSessionSettings.Builder().contextId(contextId).build())
-            }
+            return createGeckoSessionForProfile(profileId)
         }
+    }
+}
+
+/**
+ * プロファイルの contextId を持つ未 open の GeckoSession を作る。
+ * contextId は open 後に変更できない。
+ * カスタムタブの事前読み込みなど、BrowserTabController を持たない経路からも同じ分離にする。
+ */
+fun createGeckoSessionForProfile(profileId: ProfileId): GeckoSession {
+    val contextId = profileId.geckoContextId
+    return if (contextId == null) {
+        GeckoSession()
+    } else {
+        GeckoSession(GeckoSessionSettings.Builder().contextId(contextId).build())
     }
 }

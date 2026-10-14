@@ -7,10 +7,12 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.BackgroundSessionSuspender
 import net.matsudamper.browser.BrowserTabController
 import net.matsudamper.browser.BrowserViewModel
+import net.matsudamper.browser.CustomTabProfileDeletionNotifier
 import net.matsudamper.browser.CustomTabsWarmupStore
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.ExtensionRuntimeCoordinator
@@ -21,6 +23,7 @@ import net.matsudamper.browser.WebAppLaunchRequest
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.WebExtensionActionController
 import net.matsudamper.browser.data.BackupRepository
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.ProfileRepositoryImpl
 import net.matsudamper.browser.data.SettingsRepository
@@ -194,15 +197,23 @@ internal fun geckoRuntimeInitializer(
     )
 }
 
+// 本体とカスタムタブは別 Activity のタブ管理を持つ。プロファイル削除を両方へ届ける。
+@Single
+internal fun customTabProfileDeletionNotifier(): CustomTabProfileDeletionNotifier {
+    return CustomTabProfileDeletionNotifier()
+}
+
 // カスタムタブのプリウォームはプロセス生存中いつでも来るため single で持つ。
 @Single
 internal fun customTabsWarmupStore(
     geckoRuntimeInitializer: GeckoRuntimeInitializer,
     webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    profileRepository: ProfileRepository,
 ): CustomTabsWarmupStore {
     return CustomTabsWarmupStore(
         geckoRuntimeInitializer = geckoRuntimeInitializer,
         webAuthnCompatWebExtension = webAuthnCompatWebExtension,
+        profileRepository = profileRepository,
     )
 }
 
@@ -324,6 +335,7 @@ internal fun browserViewModel(
     siteSettingsRepository: SiteSettingsRepository,
     applicationCoroutineScope: CoroutineScope,
     backgroundSessionSuspender: BackgroundSessionSuspender,
+    customTabProfileDeletionNotifier: CustomTabProfileDeletionNotifier,
 ): BrowserViewModel {
     return BrowserViewModel(
         runtime = runtime,
@@ -338,6 +350,7 @@ internal fun browserViewModel(
         siteSettingsRepository = siteSettingsRepository,
         applicationScope = applicationCoroutineScope,
         backgroundSessionSuspender = backgroundSessionSuspender,
+        customTabProfileDeletionNotifier = customTabProfileDeletionNotifier,
     )
 }
 
@@ -520,12 +533,14 @@ internal fun customTabScreenViewModel(
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
     webAppRepository: WebAppRepository,
+    @InjectedParam displayedProfileId: Flow<ProfileId>,
 ): CustomTabScreenViewModel {
     return CustomTabScreenViewModel(
         historyRepository = historyRepository,
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
         webAppRepository = webAppRepository,
+        displayedProfileId = displayedProfileId,
     )
 }
 

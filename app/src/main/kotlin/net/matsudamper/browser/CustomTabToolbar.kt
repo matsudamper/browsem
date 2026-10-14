@@ -41,9 +41,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 
 internal sealed interface CustomTabToolbarTestTags {
     val id: String
@@ -95,6 +97,9 @@ internal fun CustomTabToolbar(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    profileSwitcher: ProfileSwitcherUiState?,
+    currentTabProfileId: ProfileId?,
+    onMoveTabToProfile: ((ProfileId) -> Unit)?,
     isPageLoading: Boolean = false,
     onStopLoading: () -> Unit = {},
     showCloseButton: Boolean = true,
@@ -237,10 +242,10 @@ internal fun CustomTabToolbar(
                     onOpenSiteSettings = onOpenSiteSettings,
                     onOpenDownloads = null,
                     onOpenDevTools = null,
-                    // カスタムタブ・Web アプリではプロファイル切り替えを提供しない
-                    profileSwitcher = null,
-                    currentTabProfileId = null,
-                    onMoveTabToProfile = null,
+                    // Web アプリは起動時のプロファイルに固定する。カスタムタブだけ切り替える
+                    profileSwitcher = profileSwitcher,
+                    currentTabProfileId = currentTabProfileId,
+                    onMoveTabToProfile = onMoveTabToProfile,
                 )
             }
         }
@@ -300,6 +305,9 @@ private fun PreviewCustomTabToolbar(
             onPageZoomIn = {},
             onPageZoomOut = {},
             onResetPageZoom = {},
+            profileSwitcher = null,
+            currentTabProfileId = null,
+            onMoveTabToProfile = null,
             showCloseButton = showCloseButton,
             showHome = showHome,
         )

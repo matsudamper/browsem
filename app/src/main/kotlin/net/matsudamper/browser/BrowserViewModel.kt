@@ -96,6 +96,7 @@ internal class BrowserViewModel(
     private val siteSettingsRepository: SiteSettingsRepository,
     private val applicationScope: CoroutineScope,
     private val backgroundSessionSuspender: BackgroundSessionSuspender,
+    private val customTabProfileDeletionNotifier: CustomTabProfileDeletionNotifier,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
@@ -428,6 +429,8 @@ internal class BrowserViewModel(
                 switchProfileNow(ProfileId.DEFAULT, notifySelectedTab)
             }
             browserTabController.closeTabsOfProfile(profileId.value)
+            // サイトデータ削除の前に、別 Activity のカスタムタブをその contextId から外す
+            customTabProfileDeletionNotifier.notifyProfileDeleted(profileId)
             profileRepository.deleteProfile(profileId)
             val contextId = profileId.geckoContextId
             if (contextId != null) {
