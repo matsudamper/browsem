@@ -6,7 +6,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.core.TabStoreState
@@ -32,7 +31,7 @@ import org.mozilla.geckoview.GeckoSession
  */
 internal class CustomTabBrowserViewModel(
     tabRepository: TabRepository,
-    private val runtime: GeckoRuntime,
+    runtime: GeckoRuntime,
     handoffToken: String?,
     private val mediaWebExtension: MediaWebExtension,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
@@ -85,6 +84,22 @@ internal class CustomTabBrowserViewModel(
             addProfile()
         }
     }
+
+    /**
+     * 履歴サジェストに使うプロファイル。
+     * タブがあるときはその contextId を使い、移動や引き渡されたポップアップでも本体の有効プロファイルには寄せない。
+     * タブを載せる前だけ、これから開く有効プロファイルに合わせる。
+     */
+    val displayedProfileId: StateFlow<ProfileId> = combine(
+        browserTabController.tabStoreState,
+        profileRepository.observeProfiles(),
+    ) { store, profiles ->
+        currentProfileId(store, profiles)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = ProfileId.DEFAULT,
+    )
 
     /**
      * カスタムタブのメニューに出すプロファイル。
@@ -176,7 +191,8 @@ internal class CustomTabBrowserViewModel(
                     icon = profile.icon,
                     tabCount = tabCounts[profile.id] ?: 0,
                     isActive = profile.id == currentProfileId,
-                    isDeletable = profile.id != ProfileId.DEFAULT,
+                    // 削除は他画面のセッションも閉じる必要がある。このコントローラーだけでは止められない
+                    isDeletable = false,
                     listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
                         override fun onSelect() {
                             moveSelectedTabToProfile(profile.id)
@@ -194,9 +210,7 @@ internal class CustomTabBrowserViewModel(
                             }
                         }
 
-                        override fun onDelete() {
-                            deleteProfile(profile.id)
-                        }
+                        override fun onDelete() = Unit
                     },
                 )
             },
@@ -230,32 +244,6 @@ internal class CustomTabBrowserViewModel(
                 icon = ProfileIcon.PERSON,
                 sortOrder = profileCount,
             )
-        }
-    }
-
-    /**
-     * プロファイルを削除する。このカスタムタブが使っていれば先にデフォルトへ開き直してから、
-     * DB の行と Gecko 側のサイトデータを消す。
-     */
-    private fun deleteProfile(profileId: ProfileId) {
-        if (profileId == ProfileId.DEFAULT) return
-        viewModelScope.launch {
-            val currentTab = browserTabController.tabs.firstOrNull { it.tabId == browserTabController.selectedTabId }
-                ?: browserTabController.tabs.firstOrNull()
-            if (currentTab != null &&
-                ProfileId.fromGeckoContextId(currentTab.session.settings.contextId) == profileId
-            ) {
-                moveTabToProfileNow(currentTab.tabId, currentTab.currentUrl, ProfileId.DEFAULT)
-            }
-            val activeId = profileRepository.observeProfiles().first().firstOrNull { it.isActive }?.id
-            if (activeId == profileId) {
-                profileRepository.setActiveProfile(ProfileId.DEFAULT)
-            }
-            profileRepository.deleteProfile(profileId)
-            val contextId = profileId.geckoContextId
-            if (contextId != null) {
-                runtime.storageController.clearDataForSessionContext(contextId)
-            }
         }
     }
 

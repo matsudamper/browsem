@@ -43,6 +43,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -66,6 +67,7 @@ import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import org.koin.core.parameter.parametersOf
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -202,6 +204,7 @@ class CustomTabActivity : ComponentActivity() {
                                 },
                                 profileSwitcher = profileSwitcher,
                                 onMoveTabToProfile = browserViewModel::moveTabToProfile,
+                                displayedProfileId = browserViewModel.displayedProfileId,
                             )
                         }
                     }
@@ -317,8 +320,9 @@ private fun CustomTabScreen(
     onRequestDownloadNotificationPermission: suspend () -> Unit,
     profileSwitcher: ProfileSwitcherUiState,
     onMoveTabToProfile: (tabId: String, url: String, profileId: ProfileId) -> Unit,
+    displayedProfileId: Flow<ProfileId>,
 ) {
-    val viewModel: CustomTabScreenViewModel = koinViewModel()
+    val viewModel: CustomTabScreenViewModel = koinViewModel { parametersOf(displayedProfileId) }
     val uiState by viewModel.uiState.collectAsState()
     val currentOnHandedOffPopupSessionAttached by rememberUpdatedState(onHandedOffPopupSessionAttached)
     val currentHandedOffPopupInitialUrl by rememberUpdatedState(handedOffPopupInitialUrl)

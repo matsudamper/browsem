@@ -2,15 +2,14 @@ package net.matsudamper.browser.screen.browser
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ProfileId
-import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.history.HistoryRepository
@@ -23,7 +22,7 @@ class CustomTabScreenViewModel(
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
     webAppRepository: WebAppRepository,
-    profileRepository: ProfileRepository,
+    displayedProfileId: Flow<ProfileId>,
 ) : ViewModel() {
     private val urlBarSuggestionsStateOwner = UrlBarSuggestionsStateOwner(
         scope = viewModelScope,
@@ -31,10 +30,8 @@ class CustomTabScreenViewModel(
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
         webAppRepository = webAppRepository,
-        // カスタムタブは有効プロファイルの contextId で開く。履歴サジェストもそれに合わせる
-        activeProfileIdFlow = profileRepository.observeProfiles().map { profiles ->
-            profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
-        },
+        // 選択中タブの contextId。本体の有効プロファイルへ切り替えても、このタブの履歴だけを出す
+        activeProfileIdFlow = displayedProfileId,
     )
     private val callbacks = urlBarSuggestionsStateOwner.callbacks
 

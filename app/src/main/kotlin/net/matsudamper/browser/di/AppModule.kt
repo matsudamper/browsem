@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.BackgroundSessionSuspender
 import net.matsudamper.browser.BrowserTabController
@@ -21,6 +22,7 @@ import net.matsudamper.browser.WebAppLaunchRequest
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.WebExtensionActionController
 import net.matsudamper.browser.data.BackupRepository
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.ProfileRepositoryImpl
 import net.matsudamper.browser.data.SettingsRepository
@@ -522,14 +524,14 @@ internal fun customTabScreenViewModel(
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
     webAppRepository: WebAppRepository,
-    profileRepository: ProfileRepository,
+    @InjectedParam displayedProfileId: Flow<ProfileId>,
 ): CustomTabScreenViewModel {
     return CustomTabScreenViewModel(
         historyRepository = historyRepository,
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
         webAppRepository = webAppRepository,
-        profileRepository = profileRepository,
+        displayedProfileId = displayedProfileId,
     )
 }
 
