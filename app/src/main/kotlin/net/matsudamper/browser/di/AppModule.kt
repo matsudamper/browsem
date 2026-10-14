@@ -1,11 +1,15 @@
 package net.matsudamper.browser.di
 
+import android.app.Application
+import android.content.Context
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.work.WorkerParameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.BackgroundSessionSuspender
+import net.matsudamper.browser.BrowserTabController
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.CustomTabsWarmupStore
 import net.matsudamper.browser.DownloadWorker
@@ -16,7 +20,6 @@ import net.matsudamper.browser.WebAppBrowserViewModel
 import net.matsudamper.browser.WebAppLaunchRequest
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.WebExtensionActionController
-import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.ProfileRepositoryImpl
@@ -71,185 +74,505 @@ import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.screen.webapp.WebAppsScreenViewModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
-import org.koin.android.ext.koin.androidApplication
-import org.koin.android.ext.koin.androidContext
-import org.koin.androidx.workmanager.dsl.worker
-import org.koin.core.module.dsl.viewModel
-import org.koin.dsl.module
+import org.koin.android.annotation.KoinWorker
+import org.koin.core.annotation.ComponentScan
+import org.koin.core.annotation.Configuration
+import org.koin.core.annotation.Factory
+import org.koin.core.annotation.InjectedParam
+import org.koin.core.annotation.KoinApplication
+import org.koin.core.annotation.KoinViewModel
+import org.koin.core.annotation.Module
+import org.koin.core.annotation.Single
 import org.mozilla.geckoview.GeckoRuntime
 
-val dataModule = module {
-    single { BackupRepository(androidContext()) }
-    single { SettingsRepository(androidContext()) }
-    single { SiteSettingsRepository(androidContext()) }
-    single { TabRepository(androidContext()) }
-    single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }
-    single<ProfileRepository> { ProfileRepositoryImpl(androidContext()) }
-    single { HistoryRepository(androidContext()) }
-    single { DownloadRepository(androidContext()) }
-    single { AddressRepository(androidContext()) }
-    single { FormInputRepository(androidContext()) }
-    single { CrashLogRepository(androidContext()) }
-    single { WebAppRepository(androidContext()) }
-    single<WebSuggestionRepository> { HttpWebSuggestionRepository() }
+@KoinApplication
+class BrowserKoinApplication
+
+/**
+ * 定義関数はこのクラスと同じパッケージに置く。別パッケージへ移すと ComponentScan から外れる。
+ */
+@Module
+@ComponentScan
+@Configuration
+class BrowserAppModule
+
+@Single
+internal fun backupRepository(context: Context): BackupRepository = BackupRepository(context)
+
+@Single
+internal fun settingsRepository(context: Context): SettingsRepository = SettingsRepository(context)
+
+@Single
+internal fun siteSettingsRepository(context: Context): SiteSettingsRepository = SiteSettingsRepository(context)
+
+@Single
+internal fun tabRepository(context: Context): TabRepository = TabRepository(context)
+
+@Single
+internal fun tabGroupRepository(context: Context): TabGroupRepository = TabGroupRepositoryImpl(context)
+
+@Single
+internal fun profileRepository(context: Context): ProfileRepository = ProfileRepositoryImpl(context)
+
+@Single
+internal fun historyRepository(context: Context): HistoryRepository = HistoryRepository(context)
+
+@Single
+internal fun downloadRepository(context: Context): DownloadRepository = DownloadRepository(context)
+
+@Single
+internal fun addressRepository(context: Context): AddressRepository = AddressRepository(context)
+
+@Single
+internal fun formInputRepository(context: Context): FormInputRepository = FormInputRepository(context)
+
+@Single
+internal fun crashLogRepository(context: Context): CrashLogRepository = CrashLogRepository(context)
+
+@Single
+internal fun webAppRepository(context: Context): WebAppRepository = WebAppRepository(context)
+
+@Single
+internal fun webSuggestionRepository(): WebSuggestionRepository = HttpWebSuggestionRepository()
+
+// プロセスと同じ寿命で動く CoroutineScope。GeckoRuntime に紐づく delegate など、
+// 画面より長く生きる処理から共有する。
+@Single
+internal fun applicationCoroutineScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+@Single
+internal fun addressAutofillWebExtension(): AddressAutofillWebExtension = AddressAutofillWebExtension()
+
+@Single
+internal fun formInputAutofillWebExtension(): FormInputAutofillWebExtension = FormInputAutofillWebExtension()
+
+@Single
+internal fun webAuthnCompatWebExtension(): WebAuthnCompatWebExtension = WebAuthnCompatWebExtension()
+
+@Single
+internal fun webAuthnSettingsUpdateQueue(
+    applicationCoroutineScope: CoroutineScope,
+): WebAuthnSettingsUpdateQueue = WebAuthnSettingsUpdateQueue(applicationCoroutineScope)
+
+@Single
+internal fun pageTranslationWebExtension(
+    crashLogRepository: CrashLogRepository,
+): PageTranslationWebExtension = PageTranslationWebExtension(crashLogRepository)
+
+@Single
+internal fun addressAutofillCoordinator(
+    addressAutofillWebExtension: AddressAutofillWebExtension,
+): AddressAutofillCoordinator = AddressAutofillCoordinator(addressAutofillWebExtension)
+
+@Factory
+internal fun formInputAutofillCoordinator(
+    formInputAutofillWebExtension: FormInputAutofillWebExtension,
+): FormInputAutofillCoordinator = FormInputAutofillCoordinator(formInputAutofillWebExtension)
+
+@Single
+internal fun geckoRuntimeInitializer(
+    context: Context,
+    settingsRepository: SettingsRepository,
+    addressRepository: AddressRepository,
+    addressAutofillWebExtension: AddressAutofillWebExtension,
+    formInputAutofillWebExtension: FormInputAutofillWebExtension,
+    pageTranslationWebExtension: PageTranslationWebExtension,
+    webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    addressAutofillCoordinator: AddressAutofillCoordinator,
+    applicationCoroutineScope: CoroutineScope,
+): GeckoRuntimeInitializer {
+    return GeckoRuntimeInitializer(
+        context = context,
+        settingsRepository = settingsRepository,
+        addressRepository = addressRepository,
+        addressAutofillWebExtension = addressAutofillWebExtension,
+        formInputAutofillWebExtension = formInputAutofillWebExtension,
+        pageTranslationWebExtension = pageTranslationWebExtension,
+        webAuthnCompatWebExtension = webAuthnCompatWebExtension,
+        addressAutofillCoordinator = addressAutofillCoordinator,
+        autocompleteCoroutineScope = applicationCoroutineScope,
+    )
 }
 
-val appModule = module {
-    // プロセスと同じ寿命で動く CoroutineScope。GeckoRuntime に紐づく delegate など、
-    // 画面より長く生きる処理から共有する。
-    single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
-    single { AddressAutofillWebExtension() }
-    single { FormInputAutofillWebExtension() }
-    single { WebAuthnCompatWebExtension() }
-    single { WebAuthnSettingsUpdateQueue(applicationScope = get()) }
-    single { PageTranslationWebExtension(get()) }
-    single { AddressAutofillCoordinator(get()) }
-    factory { FormInputAutofillCoordinator(get()) }
-    single {
-        GeckoRuntimeInitializer(
-            context = androidContext(),
-            settingsRepository = get(),
-            addressRepository = get(),
-            addressAutofillWebExtension = get(),
-            formInputAutofillWebExtension = get(),
-            pageTranslationWebExtension = get(),
-            webAuthnCompatWebExtension = get(),
-            addressAutofillCoordinator = get(),
-            autocompleteCoroutineScope = get(),
-        )
-    }
-    // カスタムタブのプリウォームはプロセス生存中いつでも来るため single で持つ。
-    single { CustomTabsWarmupStore(geckoRuntimeInitializer = get(), webAuthnCompatWebExtension = get()) }
-    // 初期化は GeckoRuntimeInitializer が行う。ここでは初期化済みのインスタンスを配るだけにする。
-    single<GeckoRuntime> { get<GeckoRuntimeInitializer>().requireInitialized() }
-    // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
-    single { ThemeColorWebExtension().also { it.install(get()) } }
-    single {
-        val crashLogRepository = get<CrashLogRepository>()
-        MediaWebExtension(
-            context = androidContext(),
-            onBlockedPlayback = { tag, title, body ->
-                crashLogRepository.saveSync(tag = tag, title = title, body = body)
-            },
-            onSessionActivated = { session ->
-                get<BackgroundSessionSuspender>().noteSessionActivated(session)
-            },
-        ).also { it.install(get()) }
-    }
-    single {
-        BackgroundSessionSuspender(mediaWebExtension = get()).also { suspender ->
-            ProcessLifecycleOwner.get().lifecycle.addObserver(suspender)
-        }
-    }
-    single { FindInPageWebExtension().also { it.install(get()) } }
-    single { DevToolsWebExtension().also { it.install(get()) } }
-    single { MockLocationWebExtension().also { it.install(get()) } }
-    // 通信ログはランタイム単位で収集するため、ストア・拡張機能ともに single で管理
-    single { NetworkLogStore() }
-    single { NetworkLogWebExtension(get()).also { it.install(get()) } }
-    single { ViewportScaleWebExtension().also { it.install(get()) } }
-    single { TwitterShareWebExtension().also { it.install(get()) } }
-    single { WebShareFilesWebExtension().also { it.install(get()) } }
-    // 拡張機能のツールバーアクションはランタイム単位で受け取るため single
-    single { WebExtensionActionController(get()) }
-    single { ExtensionRuntimeCoordinator(get()) }
-    // eTLD+1 (基底ドメイン) の算出に使用する Public Suffix List。初回ロードを共有するため single
-    single { PublicSuffixList(androidContext()) }
-    single { WebAppShortcutManager(androidContext()) }
-    factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
-    // 画面の ViewModel は生成を Koin に集約し、画面側は koinViewModel() で解決する
-    viewModel {
-        SettingsScreenViewModel(
-            settingsRepository = get(),
-            runtime = get(),
-            webAuthnCompatWebExtension = get(),
-            webAuthnSettingsUpdateQueue = get(),
-        )
-    }
-    viewModel { SiteSettingsListScreenViewModel(get()) }
-    viewModel { (params: SiteSettingsScreenParams) ->
-        SiteSettingsScreenViewModel(
-            host = params.host,
-            formInputOrigin = params.formInputOrigin,
-            siteSettingsRepository = get(),
-            formInputRepository = get(),
-            geckoRuntime = get(),
-            publicSuffixList = get(),
-            securityInfo = params.securityInfo,
-        )
-    }
-    viewModel { (origin: FormInputOrigin) ->
-        SiteFormInputPathsScreenViewModel(origin = origin, formInputRepository = get())
-    }
-    viewModel { (origin: FormInputOrigin, path: String) ->
-        SiteFormInputPathScreenViewModel(origin = origin, path = path, formInputRepository = get())
-    }
-    viewModel { (origin: FormInputOrigin, path: String, fieldKey: String) ->
-        SiteFormInputFieldScreenViewModel(
-            origin = origin,
-            path = path,
-            fieldKey = fieldKey,
-            formInputRepository = get(),
-        )
-    }
-    viewModel { HistoryScreenViewModel(get(), get()) }
-    viewModel { AddressesScreenViewModel(get()) }
-    viewModel { (addressId: Long) ->
-        AddressEditScreenViewModel(addressRepository = get(), addressId = addressId)
-    }
-    viewModel { CrashLogsScreenViewModel(get()) }
-    viewModel {
-        WebAppsScreenViewModel(
-            webAppRepository = get(),
-            profileRepository = get(),
-            webAppShortcutManager = get(),
-        )
-    }
-    viewModel { (crashLogId: Long) ->
-        CrashLogDetailScreenViewModel(crashLogRepository = get(), crashLogId = crashLogId)
-    }
-    viewModel {
-        ExtensionsScreenViewModel(
-            application = androidApplication(),
-            runtime = get(),
-            settingsRepository = get(),
-            extensionRuntimeCoordinator = get(),
-        )
-    }
-    viewModel { (extensionName: String, optionsPageUrl: String) ->
-        ExtensionSettingsScreenViewModel(
-            extensionName = extensionName,
-            optionsPageUrl = optionsPageUrl,
-            runtime = get(),
-        )
-    }
-    viewModel { DownloadManagementScreenViewModel(androidApplication()) }
-    viewModel { (isImport: Boolean) -> BackupProgressViewModel(isImport, get()) }
-    viewModel { (tabStore: TabStore) ->
-        TabsScreenViewModel(
-            tabStore = tabStore,
-            tabGroupRepository = get(),
-            profileRepository = get(),
-            playingTabIds = get<MediaWebExtension>().playingTabIds,
-        )
-    }
-    viewModel { CustomTabScreenViewModel(get(), get(), get(), get()) }
-    viewModel { (launchRequest: WebAppLaunchRequest) ->
-        WebAppBrowserViewModel(
-            launchRequest = launchRequest,
-            tabRepository = get(),
-            webAppRepository = get(),
-            settingsRepository = get(),
-            profileRepository = get(),
-            webAppShortcutManager = get(),
-            runtime = get(),
-            mediaWebExtension = get(),
-            pageTranslationWebExtension = get(),
-            applicationScope = get(),
-            backgroundSessionSuspender = get(),
-        )
-    }
-    viewModel { WebAppScreenViewModel(get(), get(), get(), get()) }
-    worker { DownloadWorker(get(), get(), get()) }
+// カスタムタブのプリウォームはプロセス生存中いつでも来るため single で持つ。
+@Single
+internal fun customTabsWarmupStore(
+    geckoRuntimeInitializer: GeckoRuntimeInitializer,
+    webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+): CustomTabsWarmupStore {
+    return CustomTabsWarmupStore(
+        geckoRuntimeInitializer = geckoRuntimeInitializer,
+        webAuthnCompatWebExtension = webAuthnCompatWebExtension,
+    )
 }
+
+// 初期化は GeckoRuntimeInitializer が行う。ここでは初期化済みのインスタンスを配るだけにする。
+@Single
+internal fun geckoRuntime(geckoRuntimeInitializer: GeckoRuntimeInitializer): GeckoRuntime {
+    return geckoRuntimeInitializer.requireInitialized()
+}
+
+// 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理する。
+@Single
+internal fun themeColorWebExtension(runtime: GeckoRuntime): ThemeColorWebExtension {
+    return ThemeColorWebExtension().also { it.install(runtime) }
+}
+
+@Single
+internal fun mediaWebExtension(
+    context: Context,
+    runtime: GeckoRuntime,
+    crashLogRepository: CrashLogRepository,
+): MediaWebExtension {
+    return MediaWebExtension(
+        context = context,
+        onBlockedPlayback = { tag, title, body ->
+            crashLogRepository.saveSync(tag = tag, title = title, body = body)
+        },
+    ).also { it.install(runtime) }
+}
+
+@Single
+internal fun backgroundSessionSuspender(
+    mediaWebExtension: MediaWebExtension,
+): BackgroundSessionSuspender {
+    return BackgroundSessionSuspender(mediaWebExtension).also { suspender ->
+        mediaWebExtension.onSessionActivated = { session ->
+            suspender.noteSessionActivated(session)
+        }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(suspender)
+    }
+}
+
+@Single
+internal fun findInPageWebExtension(runtime: GeckoRuntime): FindInPageWebExtension {
+    return FindInPageWebExtension().also { it.install(runtime) }
+}
+
+@Single
+internal fun devToolsWebExtension(runtime: GeckoRuntime): DevToolsWebExtension {
+    return DevToolsWebExtension().also { it.install(runtime) }
+}
+
+@Single
+internal fun mockLocationWebExtension(runtime: GeckoRuntime): MockLocationWebExtension {
+    return MockLocationWebExtension().also { it.install(runtime) }
+}
+
+// 通信ログはランタイム単位で収集するため、ストア・拡張機能ともに single で管理する。
+@Single
+internal fun networkLogStore(): NetworkLogStore = NetworkLogStore()
+
+@Single
+internal fun networkLogWebExtension(store: NetworkLogStore, runtime: GeckoRuntime): NetworkLogWebExtension {
+    return NetworkLogWebExtension(store).also { it.install(runtime) }
+}
+
+@Single
+internal fun viewportScaleWebExtension(runtime: GeckoRuntime): ViewportScaleWebExtension {
+    return ViewportScaleWebExtension().also { it.install(runtime) }
+}
+
+@Single
+internal fun twitterShareWebExtension(runtime: GeckoRuntime): TwitterShareWebExtension {
+    return TwitterShareWebExtension().also { it.install(runtime) }
+}
+
+@Single
+internal fun webShareFilesWebExtension(runtime: GeckoRuntime): WebShareFilesWebExtension {
+    return WebShareFilesWebExtension().also { it.install(runtime) }
+}
+
+// 拡張機能のツールバーアクションはランタイム単位で受け取るため single
+@Single
+internal fun webExtensionActionController(runtime: GeckoRuntime): WebExtensionActionController {
+    return WebExtensionActionController(runtime)
+}
+
+@Single
+internal fun extensionRuntimeCoordinator(runtime: GeckoRuntime): ExtensionRuntimeCoordinator {
+    return ExtensionRuntimeCoordinator(runtime)
+}
+
+// eTLD+1 (基底ドメイン) の算出に使用する Public Suffix List。初回ロードを共有するため single
+@Single
+internal fun publicSuffixList(context: Context): PublicSuffixList = PublicSuffixList(context)
+
+@Single
+internal fun webAppShortcutManager(context: Context): WebAppShortcutManager = WebAppShortcutManager(context)
+
+@Factory
+internal fun geckoDownloadManager(
+    context: Context,
+    downloadRepository: DownloadRepository,
+): GeckoDownloadManager = GeckoDownloadManager(context, downloadRepository)
+
+@KoinViewModel
+internal fun browserViewModel(
+    runtime: GeckoRuntime,
+    themeColorExtension: ThemeColorWebExtension,
+    mediaWebExtension: MediaWebExtension,
+    settingsRepository: SettingsRepository,
+    tabRepository: TabRepository,
+    tabGroupRepository: TabGroupRepository,
+    profileRepository: ProfileRepository,
+    mockLocationWebExtension: MockLocationWebExtension,
+    pageTranslationWebExtension: PageTranslationWebExtension,
+    siteSettingsRepository: SiteSettingsRepository,
+    applicationCoroutineScope: CoroutineScope,
+    backgroundSessionSuspender: BackgroundSessionSuspender,
+): BrowserViewModel {
+    return BrowserViewModel(
+        runtime = runtime,
+        themeColorExtension = themeColorExtension,
+        mediaWebExtension = mediaWebExtension,
+        settingsRepository = settingsRepository,
+        tabRepository = tabRepository,
+        tabGroupRepository = tabGroupRepository,
+        profileRepository = profileRepository,
+        mockLocationWebExtension = mockLocationWebExtension,
+        pageTranslationWebExtension = pageTranslationWebExtension,
+        siteSettingsRepository = siteSettingsRepository,
+        applicationScope = applicationCoroutineScope,
+        backgroundSessionSuspender = backgroundSessionSuspender,
+    )
+}
+
+@KoinViewModel
+internal fun settingsScreenViewModel(
+    settingsRepository: SettingsRepository,
+    runtime: GeckoRuntime,
+    webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    webAuthnSettingsUpdateQueue: WebAuthnSettingsUpdateQueue,
+): SettingsScreenViewModel {
+    return SettingsScreenViewModel(
+        settingsRepository = settingsRepository,
+        runtime = runtime,
+        webAuthnCompatWebExtension = webAuthnCompatWebExtension,
+        webAuthnSettingsUpdateQueue = webAuthnSettingsUpdateQueue,
+    )
+}
+
+@KoinViewModel
+internal fun siteSettingsListScreenViewModel(
+    siteSettingsRepository: SiteSettingsRepository,
+): SiteSettingsListScreenViewModel = SiteSettingsListScreenViewModel(siteSettingsRepository)
+
+@KoinViewModel
+internal fun siteSettingsScreenViewModel(
+    @InjectedParam params: SiteSettingsScreenParams,
+    siteSettingsRepository: SiteSettingsRepository,
+    formInputRepository: FormInputRepository,
+    geckoRuntime: GeckoRuntime,
+    publicSuffixList: PublicSuffixList,
+): SiteSettingsScreenViewModel {
+    return SiteSettingsScreenViewModel(
+        host = params.host,
+        formInputOrigin = params.formInputOrigin,
+        siteSettingsRepository = siteSettingsRepository,
+        formInputRepository = formInputRepository,
+        geckoRuntime = geckoRuntime,
+        publicSuffixList = publicSuffixList,
+        securityInfo = params.securityInfo,
+    )
+}
+
+@KoinViewModel
+internal fun siteFormInputPathsScreenViewModel(
+    @InjectedParam origin: FormInputOrigin,
+    formInputRepository: FormInputRepository,
+): SiteFormInputPathsScreenViewModel {
+    return SiteFormInputPathsScreenViewModel(
+        origin = origin,
+        formInputRepository = formInputRepository,
+    )
+}
+
+@KoinViewModel
+internal fun siteFormInputPathScreenViewModel(
+    @InjectedParam origin: FormInputOrigin,
+    @InjectedParam path: String,
+    formInputRepository: FormInputRepository,
+): SiteFormInputPathScreenViewModel {
+    return SiteFormInputPathScreenViewModel(
+        origin = origin,
+        path = path,
+        formInputRepository = formInputRepository,
+    )
+}
+
+@KoinViewModel
+internal fun siteFormInputFieldScreenViewModel(
+    @InjectedParam origin: FormInputOrigin,
+    @InjectedParam path: String,
+    @InjectedParam fieldKey: String,
+    formInputRepository: FormInputRepository,
+): SiteFormInputFieldScreenViewModel {
+    return SiteFormInputFieldScreenViewModel(
+        origin = origin,
+        path = path,
+        fieldKey = fieldKey,
+        formInputRepository = formInputRepository,
+    )
+}
+
+@KoinViewModel
+internal fun historyScreenViewModel(
+    historyRepository: HistoryRepository,
+    profileRepository: ProfileRepository,
+): HistoryScreenViewModel = HistoryScreenViewModel(historyRepository, profileRepository)
+
+@KoinViewModel
+internal fun addressesScreenViewModel(addressRepository: AddressRepository): AddressesScreenViewModel {
+    return AddressesScreenViewModel(addressRepository)
+}
+
+@KoinViewModel
+internal fun addressEditScreenViewModel(
+    @InjectedParam addressId: Long,
+    addressRepository: AddressRepository,
+): AddressEditScreenViewModel = AddressEditScreenViewModel(addressRepository, addressId)
+
+@KoinViewModel
+internal fun crashLogsScreenViewModel(crashLogRepository: CrashLogRepository): CrashLogsScreenViewModel {
+    return CrashLogsScreenViewModel(crashLogRepository)
+}
+
+@KoinViewModel
+internal fun webAppsScreenViewModel(
+    webAppRepository: WebAppRepository,
+    profileRepository: ProfileRepository,
+    webAppShortcutManager: WebAppShortcutManager,
+): WebAppsScreenViewModel {
+    return WebAppsScreenViewModel(
+        webAppRepository = webAppRepository,
+        profileRepository = profileRepository,
+        webAppShortcutManager = webAppShortcutManager,
+    )
+}
+
+@KoinViewModel
+internal fun crashLogDetailScreenViewModel(
+    @InjectedParam crashLogId: Long,
+    crashLogRepository: CrashLogRepository,
+): CrashLogDetailScreenViewModel = CrashLogDetailScreenViewModel(crashLogRepository, crashLogId)
+
+@KoinViewModel
+internal fun extensionsScreenViewModel(
+    application: Application,
+    runtime: GeckoRuntime,
+    settingsRepository: SettingsRepository,
+    extensionRuntimeCoordinator: ExtensionRuntimeCoordinator,
+): ExtensionsScreenViewModel {
+    return ExtensionsScreenViewModel(
+        application = application,
+        runtime = runtime,
+        settingsRepository = settingsRepository,
+        extensionRuntimeCoordinator = extensionRuntimeCoordinator,
+    )
+}
+
+@KoinViewModel
+internal fun extensionSettingsScreenViewModel(
+    @InjectedParam extensionName: String,
+    @InjectedParam optionsPageUrl: String,
+    runtime: GeckoRuntime,
+): ExtensionSettingsScreenViewModel {
+    return ExtensionSettingsScreenViewModel(
+        extensionName = extensionName,
+        optionsPageUrl = optionsPageUrl,
+        runtime = runtime,
+    )
+}
+
+@KoinViewModel
+internal fun downloadManagementScreenViewModel(application: Application): DownloadManagementScreenViewModel {
+    return DownloadManagementScreenViewModel(application)
+}
+
+@KoinViewModel
+internal fun backupProgressViewModel(
+    @InjectedParam isImport: Boolean,
+    backupRepository: BackupRepository,
+): BackupProgressViewModel = BackupProgressViewModel(isImport, backupRepository)
+
+@KoinViewModel
+internal fun tabsScreenViewModel(
+    @InjectedParam tabStore: BrowserTabController,
+    tabGroupRepository: TabGroupRepository,
+    profileRepository: ProfileRepository,
+    mediaWebExtension: MediaWebExtension,
+): TabsScreenViewModel {
+    return TabsScreenViewModel(
+        tabStore = tabStore,
+        tabGroupRepository = tabGroupRepository,
+        profileRepository = profileRepository,
+        playingTabIds = mediaWebExtension.playingTabIds,
+    )
+}
+
+@KoinViewModel
+internal fun customTabScreenViewModel(
+    historyRepository: HistoryRepository,
+    settingsRepository: SettingsRepository,
+    webSuggestionRepository: WebSuggestionRepository,
+    webAppRepository: WebAppRepository,
+): CustomTabScreenViewModel {
+    return CustomTabScreenViewModel(
+        historyRepository = historyRepository,
+        settingsRepository = settingsRepository,
+        webSuggestionRepository = webSuggestionRepository,
+        webAppRepository = webAppRepository,
+    )
+}
+
+@KoinViewModel
+internal fun webAppBrowserViewModel(
+    @InjectedParam launchRequest: WebAppLaunchRequest,
+    tabRepository: TabRepository,
+    webAppRepository: WebAppRepository,
+    settingsRepository: SettingsRepository,
+    profileRepository: ProfileRepository,
+    webAppShortcutManager: WebAppShortcutManager,
+    runtime: GeckoRuntime,
+    mediaWebExtension: MediaWebExtension,
+    pageTranslationWebExtension: PageTranslationWebExtension,
+    applicationCoroutineScope: CoroutineScope,
+    backgroundSessionSuspender: BackgroundSessionSuspender,
+): WebAppBrowserViewModel {
+    return WebAppBrowserViewModel(
+        launchRequest = launchRequest,
+        tabRepository = tabRepository,
+        webAppRepository = webAppRepository,
+        settingsRepository = settingsRepository,
+        profileRepository = profileRepository,
+        webAppShortcutManager = webAppShortcutManager,
+        runtime = runtime,
+        mediaWebExtension = mediaWebExtension,
+        pageTranslationWebExtension = pageTranslationWebExtension,
+        applicationScope = applicationCoroutineScope,
+        backgroundSessionSuspender = backgroundSessionSuspender,
+    )
+}
+
+@KoinViewModel
+internal fun webAppScreenViewModel(
+    historyRepository: HistoryRepository,
+    settingsRepository: SettingsRepository,
+    webSuggestionRepository: WebSuggestionRepository,
+    webAppRepository: WebAppRepository,
+): WebAppScreenViewModel {
+    return WebAppScreenViewModel(
+        historyRepository = historyRepository,
+        settingsRepository = settingsRepository,
+        webSuggestionRepository = webSuggestionRepository,
+        webAppRepository = webAppRepository,
+    )
+}
+
+@KoinWorker
+internal fun downloadWorker(
+    context: Context,
+    workerParameters: WorkerParameters,
+    geckoRuntimeInitializer: GeckoRuntimeInitializer,
+): DownloadWorker = DownloadWorker(context, workerParameters, geckoRuntimeInitializer)

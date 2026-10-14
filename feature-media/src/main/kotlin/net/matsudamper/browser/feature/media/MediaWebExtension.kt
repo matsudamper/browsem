@@ -29,8 +29,8 @@ import org.mozilla.geckoview.WebExtension
 class MediaWebExtension(
     private val context: Context,
     private val onBlockedPlayback: (tag: String, title: String, body: String) -> Unit,
-    private val onSessionActivated: (GeckoSession) -> Unit,
 ) {
+    var onSessionActivated: (GeckoSession) -> Unit = {}
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessionStates =
