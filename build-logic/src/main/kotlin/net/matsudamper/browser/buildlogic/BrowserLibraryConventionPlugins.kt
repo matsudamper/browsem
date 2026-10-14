@@ -23,11 +23,16 @@ class BrowserAndroidLibraryConventionPlugin : Plugin<Project> {
         with(target) {
             pluginManager.apply("com.android.library")
 
+            val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
+            val compileSdkVersion = libs.findVersion("compileSdk").get().requiredVersion.toInt()
+            val compileSdkMinorVersion = libs.findVersion("compileSdkMinor").get().requiredVersion.toInt()
+            val minSdkVersion = libs.findVersion("minSdk").get().requiredVersion.toInt()
+
             extensions.configure<LibraryExtension> {
-                compileSdk = COMPILE_SDK
-                compileSdkMinor = COMPILE_SDK_MINOR
+                compileSdk = compileSdkVersion
+                compileSdkMinor = compileSdkMinorVersion
                 defaultConfig {
-                    minSdk = MIN_SDK
+                    minSdk = minSdkVersion
                 }
                 compileOptions {
                     sourceCompatibility = JAVA_VERSION
@@ -40,9 +45,6 @@ class BrowserAndroidLibraryConventionPlugin : Plugin<Project> {
     }
 
     internal companion object {
-        const val COMPILE_SDK = 37
-        const val COMPILE_SDK_MINOR = 1
-        const val MIN_SDK = 30
         val JAVA_VERSION = JavaVersion.VERSION_25
         val JVM_TARGET = JvmTarget.JVM_25
     }

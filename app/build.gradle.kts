@@ -13,14 +13,14 @@ val useCiDebugKeystore = ciDebugKeystoreFile != null && ciDebugKeystoreFile.exis
 
 android {
     namespace = "net.matsudamper.browser"
-    compileSdk = 37
-    compileSdkMinor = 1
+    compileSdk = libs.versions.compileSdk.get().toInt()
+    compileSdkMinor = libs.versions.compileSdkMinor.get().toInt()
 
     defaultConfig {
         applicationId = "net.matsudamper.browser"
         testApplicationId = "net.matsudamper.browser.androidtest"
-        minSdk = 30
-        targetSdk = 36
+        minSdk = libs.versions.minSdk.get().toInt()
+        targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
 
