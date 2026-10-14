@@ -2,11 +2,13 @@ package net.matsudamper.browser.di
 
 import android.app.Application
 import android.content.Context
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
+import net.matsudamper.browser.BackgroundSessionSuspender
 import net.matsudamper.browser.BrowserTabController
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.CustomTabsWarmupStore
@@ -217,8 +219,32 @@ internal fun themeColorWebExtension(runtime: GeckoRuntime): ThemeColorWebExtensi
 }
 
 @Single
-internal fun mediaWebExtension(context: Context, runtime: GeckoRuntime): MediaWebExtension {
-    return MediaWebExtension(context).also { it.install(runtime) }
+internal fun mediaWebExtension(
+    context: Context,
+    runtime: GeckoRuntime,
+    crashLogRepository: CrashLogRepository,
+): MediaWebExtension {
+    return MediaWebExtension(
+        context = context,
+        onBlockedPlayback = { tag, title, body ->
+            crashLogRepository.saveSync(tag = tag, title = title, body = body)
+        },
+    ).also { it.install(runtime) }
+}
+
+@Single
+internal fun backgroundSessionSuspender(
+    mediaWebExtension: MediaWebExtension,
+): BackgroundSessionSuspender {
+    return BackgroundSessionSuspender(mediaWebExtension).also { suspender ->
+        mediaWebExtension.onSessionActivated = { session ->
+            suspender.noteSessionActivated(session)
+        }
+        mediaWebExtension.addBackgroundPlaybackStoppedListener { session ->
+            suspender.onPlaybackStopped(session)
+        }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(suspender)
+    }
 }
 
 @Single
@@ -297,6 +323,7 @@ internal fun browserViewModel(
     pageTranslationWebExtension: PageTranslationWebExtension,
     siteSettingsRepository: SiteSettingsRepository,
     applicationCoroutineScope: CoroutineScope,
+    backgroundSessionSuspender: BackgroundSessionSuspender,
 ): BrowserViewModel {
     return BrowserViewModel(
         runtime = runtime,
@@ -310,6 +337,7 @@ internal fun browserViewModel(
         pageTranslationWebExtension = pageTranslationWebExtension,
         siteSettingsRepository = siteSettingsRepository,
         applicationScope = applicationCoroutineScope,
+        backgroundSessionSuspender = backgroundSessionSuspender,
     )
 }
 
@@ -513,6 +541,7 @@ internal fun webAppBrowserViewModel(
     mediaWebExtension: MediaWebExtension,
     pageTranslationWebExtension: PageTranslationWebExtension,
     applicationCoroutineScope: CoroutineScope,
+    backgroundSessionSuspender: BackgroundSessionSuspender,
 ): WebAppBrowserViewModel {
     return WebAppBrowserViewModel(
         launchRequest = launchRequest,
@@ -525,6 +554,7 @@ internal fun webAppBrowserViewModel(
         mediaWebExtension = mediaWebExtension,
         pageTranslationWebExtension = pageTranslationWebExtension,
         applicationScope = applicationCoroutineScope,
+        backgroundSessionSuspender = backgroundSessionSuspender,
     )
 }
 

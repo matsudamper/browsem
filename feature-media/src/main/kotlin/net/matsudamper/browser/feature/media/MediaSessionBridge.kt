@@ -16,6 +16,18 @@ object MediaSessionBridge {
 
     var activeGeckoMediaSession: MediaSession? = null
 
+    /**
+     * 通知の再生・次へ・前へ。
+     * 画面を閉じている間の勝手な再生と区別するため、Gecko へコマンドを渡す前に通知する。
+     */
+    var userTransportCommandListener: (() -> Unit)? = null
+
+    /**
+     * 通知の一時停止・停止。
+     * 画面を閉じている間の継続再生と区別し、同じメディアの再 play() を勝手な再生として止める。
+     */
+    var userPauseCommandListener: (() -> Unit)? = null
+
     private val _playbackState = MutableStateFlow(MediaPlaybackState())
 
     val playbackState: StateFlow<MediaPlaybackState> = _playbackState.asStateFlow()
@@ -74,29 +86,42 @@ object MediaSessionBridge {
     fun play() {
         Log.d(TAG, "play: hasMediaSession=${activeGeckoMediaSession != null}")
         MediaTraceLog.d("BRIDGE command play hasMediaSession=${activeGeckoMediaSession != null}")
+        notifyUserTransportCommand()
         activeGeckoMediaSession?.play()
     }
     fun pause() {
         Log.d(TAG, "pause: hasMediaSession=${activeGeckoMediaSession != null}")
         MediaTraceLog.d("BRIDGE command pause hasMediaSession=${activeGeckoMediaSession != null}")
+        notifyUserPauseCommand()
         activeGeckoMediaSession?.pause()
     }
     fun stop() {
         Log.d(TAG, "stop: hasMediaSession=${activeGeckoMediaSession != null}")
+        notifyUserPauseCommand()
         activeGeckoMediaSession?.stop()
     }
     fun nextTrack() {
         Log.d(TAG, "nextTrack: hasMediaSession=${activeGeckoMediaSession != null}")
+        notifyUserTransportCommand()
         activeGeckoMediaSession?.nextTrack()
     }
     fun previousTrack() {
         Log.d(TAG, "previousTrack: hasMediaSession=${activeGeckoMediaSession != null}")
+        notifyUserTransportCommand()
         activeGeckoMediaSession?.previousTrack()
     }
     fun seekTo(positionSeconds: Double) {
         Log.d(TAG, "seekTo: positionSeconds=$positionSeconds hasMediaSession=${activeGeckoMediaSession != null}")
         MediaTraceLog.d("BRIDGE command seekTo positionSeconds=$positionSeconds hasMediaSession=${activeGeckoMediaSession != null}")
         activeGeckoMediaSession?.seekTo(positionSeconds, true)
+    }
+
+    private fun notifyUserTransportCommand() {
+        userTransportCommandListener?.invoke()
+    }
+
+    private fun notifyUserPauseCommand() {
+        userPauseCommandListener?.invoke()
     }
 
     private const val TAG = "MediaSessionBridge"

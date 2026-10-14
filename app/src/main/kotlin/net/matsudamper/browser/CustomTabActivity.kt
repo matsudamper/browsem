@@ -76,6 +76,7 @@ class CustomTabActivity : ComponentActivity() {
     private val settingsRepository: SettingsRepository by inject()
     private val tabRepository: TabRepository by inject()
     private val applicationScope: CoroutineScope by inject()
+    private val backgroundSessionSuspender: BackgroundSessionSuspender by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -89,6 +90,7 @@ class CustomTabActivity : ComponentActivity() {
                     mediaWebExtension = mediaWebExtensionInstance,
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     applicationScope = applicationScope,
+                    backgroundSessionSuspender = backgroundSessionSuspender,
                 )
             }
         }

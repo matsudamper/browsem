@@ -35,6 +35,7 @@ internal class WebAppBrowserViewModel(
     private val mediaWebExtension: MediaWebExtension,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     applicationScope: CoroutineScope,
+    private val backgroundSessionSuspender: BackgroundSessionSuspender,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
@@ -68,6 +69,11 @@ internal class WebAppBrowserViewModel(
             mediaWebExtension.releaseSession(session)
             pageTranslationWebExtension.unregisterSession(session)
         }
+        trackBackgroundSessions(
+            suspender = backgroundSessionSuspender,
+            browserTabController = browserTabController,
+            lifecycleController = browserSessionLifecycleController,
+        )
         // Activity再生成（フォルダブル開閉等）では ViewModel ごとタブが残るため、タブの作成はここで一度だけ行う。
         // タブの破棄は onCleared() で行う。
         viewModelScope.launch {

@@ -31,12 +31,14 @@ class MediaWebExtensionSnapshotTest {
                     album = "Album",
                     durationMs = 120_000L,
                     positionMs = 10_000L,
+                    mediaSrc = "https://example.com/a",
                 ),
             )
 
         assertEquals(120_000L, snapshot.durationMs)
         assertEquals(10_000L, snapshot.positionMs)
         assertEquals(123L, snapshot.features)
+        assertEquals("https://example.com/a", snapshot.mediaSrc)
     }
 
     @Test
@@ -64,6 +66,7 @@ class MediaWebExtensionSnapshotTest {
                     album = "Album",
                     durationMs = 0L,
                     positionMs = 0L,
+                    mediaSrc = "",
                 ),
             )
 
