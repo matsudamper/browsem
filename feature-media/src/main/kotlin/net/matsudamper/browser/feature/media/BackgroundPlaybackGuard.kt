@@ -36,7 +36,12 @@ internal class BackgroundPlaybackGuard<Session> {
      */
     fun onExplicitStop(session: Session) {
         continuationBySession.remove(session)
+        if (allowedCommandSession == session) {
+            allowedCommandSession = null
+        }
     }
+
+    fun isInBackground(): Boolean = inBackground
 
     fun forget(session: Session) {
         continuationBySession.remove(session)

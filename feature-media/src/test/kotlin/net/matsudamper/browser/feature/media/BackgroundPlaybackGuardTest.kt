@@ -224,6 +224,23 @@ class BackgroundPlaybackGuardTest {
     }
 
     @Test
+    fun 明示停止は届く前の再生許可も消す() {
+        enterBackgroundPlaying(src = "https://example.com/a", title = "A")
+        guard.onUserTransportCommand(session = "tab", nowMs = 1_000L)
+        guard.onExplicitStop("tab")
+
+        val pause = guard.shouldPause(
+            session = "tab",
+            isPlaying = true,
+            mediaSrc = "https://example.com/b",
+            title = "B",
+            nowMs = 2_000L,
+        )
+
+        assertTrue(pause)
+    }
+
+    @Test
     fun 停止の通知は連続した再試行では一度だけ出す() {
         val notice = BlockedPlaybackNotice(repeatIntervalMs = 4_000L)
 
