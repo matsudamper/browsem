@@ -22,6 +22,12 @@ object MediaSessionBridge {
      */
     var userTransportCommandListener: (() -> Unit)? = null
 
+    /**
+     * 通知の一時停止・停止。
+     * 画面を閉じている間の継続再生と区別し、同じメディアの再 play() を勝手な再生として止める。
+     */
+    var userPauseCommandListener: (() -> Unit)? = null
+
     private val _playbackState = MutableStateFlow(MediaPlaybackState())
 
     val playbackState: StateFlow<MediaPlaybackState> = _playbackState.asStateFlow()
@@ -86,10 +92,12 @@ object MediaSessionBridge {
     fun pause() {
         Log.d(TAG, "pause: hasMediaSession=${activeGeckoMediaSession != null}")
         MediaTraceLog.d("BRIDGE command pause hasMediaSession=${activeGeckoMediaSession != null}")
+        notifyUserPauseCommand()
         activeGeckoMediaSession?.pause()
     }
     fun stop() {
         Log.d(TAG, "stop: hasMediaSession=${activeGeckoMediaSession != null}")
+        notifyUserPauseCommand()
         activeGeckoMediaSession?.stop()
     }
     fun nextTrack() {
@@ -110,6 +118,10 @@ object MediaSessionBridge {
 
     private fun notifyUserTransportCommand() {
         userTransportCommandListener?.invoke()
+    }
+
+    private fun notifyUserPauseCommand() {
+        userPauseCommandListener?.invoke()
     }
 
     private const val TAG = "MediaSessionBridge"

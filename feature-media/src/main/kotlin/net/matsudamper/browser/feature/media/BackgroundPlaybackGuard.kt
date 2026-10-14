@@ -30,6 +30,14 @@ internal class BackgroundPlaybackGuard<Session> {
         allowedCommandAtMs = nowMs
     }
 
+    /**
+     * 通知の一時停止・停止、またはメディアの終了。
+     * 同じ URL のまま後から play() されても、閉じていたあいだの継続とは扱わない。
+     */
+    fun onExplicitStop(session: Session) {
+        continuationBySession.remove(session)
+    }
+
     fun forget(session: Session) {
         continuationBySession.remove(session)
         if (allowedCommandSession == session) {

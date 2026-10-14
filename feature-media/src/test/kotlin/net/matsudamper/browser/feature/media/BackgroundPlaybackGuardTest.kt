@@ -191,6 +191,39 @@ class BackgroundPlaybackGuardTest {
     }
 
     @Test
+    fun 明示的に止めたあとの同じ再生は許さない() {
+        enterBackgroundPlaying(src = "https://example.com/a", title = "A")
+        guard.onExplicitStop("tab")
+
+        val pause = guard.shouldPause(
+            session = "tab",
+            isPlaying = true,
+            mediaSrc = "https://example.com/a",
+            title = "A",
+            nowMs = 2_000L,
+        )
+
+        assertTrue(pause)
+    }
+
+    @Test
+    fun 明示的に止めたあとに通知から再生したら許す() {
+        enterBackgroundPlaying(src = "https://example.com/a", title = "A")
+        guard.onExplicitStop("tab")
+        guard.onUserTransportCommand(session = "tab", nowMs = 2_000L)
+
+        val pause = guard.shouldPause(
+            session = "tab",
+            isPlaying = true,
+            mediaSrc = "https://example.com/a",
+            title = "A",
+            nowMs = 2_100L,
+        )
+
+        assertFalse(pause)
+    }
+
+    @Test
     fun 停止の通知は連続した再試行では一度だけ出す() {
         val notice = BlockedPlaybackNotice(repeatIntervalMs = 4_000L)
 

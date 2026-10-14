@@ -71,6 +71,7 @@ class MediaWebExtension(
 
     init {
         MediaSessionBridge.userTransportCommandListener = ::onUserTransportCommand
+        MediaSessionBridge.userPauseCommandListener = ::onUserPauseCommand
     }
 
     fun install(runtime: GeckoRuntime) {
@@ -417,6 +418,9 @@ class MediaWebExtension(
                             "snapshot: session=${session.logKey()} isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
                                 "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}, activeSession=${activeSession?.logKey()}",
                         )
+                        if (!snapshot.isPlaying && json.optBoolean("debugMediaEnded", false)) {
+                            backgroundPlaybackGuard.onExplicitStop(session)
+                        }
                         val published = suppressUnexpectedBackgroundPlayback(session, snapshot)
                         if (published.isActive) {
                             cancelPendingDeactivation(session)
@@ -433,6 +437,14 @@ class MediaWebExtension(
             },
             NATIVE_APP_ID,
         )
+    }
+
+    private fun onUserPauseCommand() {
+        val session = sessionForUserTransport()
+        if (session == null) {
+            return
+        }
+        backgroundPlaybackGuard.onExplicitStop(session)
     }
 
     private fun onUserTransportCommand() {
