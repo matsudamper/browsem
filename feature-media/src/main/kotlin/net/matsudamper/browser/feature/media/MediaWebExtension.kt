@@ -30,6 +30,8 @@ class MediaWebExtension(
     private val context: Context,
     private val onBlockedPlayback: (tag: String, title: String, body: String) -> Unit,
 ) {
+    private val backgroundPlaybackStoppedListeners =
+        mutableListOf<(GeckoSession) -> Unit>()
     var onSessionActivated: (GeckoSession) -> Unit = {}
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -72,6 +74,23 @@ class MediaWebExtension(
     init {
         MediaSessionBridge.userTransportCommandListener = ::onUserTransportCommand
         MediaSessionBridge.userPauseCommandListener = ::onUserPauseCommand
+    }
+
+    fun addBackgroundPlaybackStoppedListener(listener: (GeckoSession) -> Unit) {
+        backgroundPlaybackStoppedListeners.add(listener)
+    }
+
+    fun removeBackgroundPlaybackStoppedListener(listener: (GeckoSession) -> Unit) {
+        backgroundPlaybackStoppedListeners.remove(listener)
+    }
+
+    private fun notifyBackgroundPlaybackStopped(session: GeckoSession) {
+        if (!backgroundPlaybackGuard.isInBackground()) {
+            return
+        }
+        backgroundPlaybackStoppedListeners.toList().forEach { listener ->
+            listener(session)
+        }
     }
 
     fun install(runtime: GeckoRuntime) {
@@ -420,6 +439,7 @@ class MediaWebExtension(
                         )
                         if (!snapshot.isPlaying && json.optBoolean("debugMediaEnded", false)) {
                             backgroundPlaybackGuard.onExplicitStop(session)
+                            notifyBackgroundPlaybackStopped(session)
                         }
                         val published = suppressUnexpectedBackgroundPlayback(session, snapshot)
                         if (published.isActive) {
@@ -445,6 +465,7 @@ class MediaWebExtension(
             return
         }
         backgroundPlaybackGuard.onExplicitStop(session)
+        notifyBackgroundPlaybackStopped(session)
     }
 
     private fun onUserTransportCommand() {

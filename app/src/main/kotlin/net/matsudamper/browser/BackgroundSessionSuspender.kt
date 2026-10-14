@@ -20,6 +20,7 @@ internal class BackgroundSessionSuspender(
 ) : DefaultLifecycleObserver {
     private val hosts = mutableSetOf<BackgroundSessionHost>()
     private val suspendedByHost = mutableMapOf<BackgroundSessionHost, List<BrowserTab>>()
+    private var inBackground = false
 
     fun track(host: BackgroundSessionHost) {
         hosts.add(host)
@@ -40,7 +41,31 @@ internal class BackgroundSessionSuspender(
         }
     }
 
+    fun onPlaybackStopped(session: GeckoSession) {
+        if (!inBackground) {
+            return
+        }
+        hosts.forEach { host ->
+            val tab = host.tabs().firstOrNull { it.session === session }
+            if (tab == null) {
+                return@forEach
+            }
+            val suspended = host.lifecycleController.suspendWhileHostStopped(
+                tab = tab,
+                isPlaying = false,
+            )
+            if (!suspended) {
+                return@forEach
+            }
+            val current = suspendedByHost[host].orEmpty()
+            if (tab !in current) {
+                suspendedByHost[host] = current + tab
+            }
+        }
+    }
+
     override fun onStop(owner: LifecycleOwner) {
+        inBackground = true
         // 止める前に、鳴っている再生を継続扱いに残す。
         mediaWebExtension.onHostEnteredBackground()
         hosts.forEach { host ->
@@ -57,6 +82,7 @@ internal class BackgroundSessionSuspender(
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        inBackground = false
         // タブを起こす前に判定を外す。戻したページの再生開始まで止めない。
         mediaWebExtension.onHostEnteredForeground()
         val pending = suspendedByHost.toMap()

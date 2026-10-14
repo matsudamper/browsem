@@ -668,6 +668,39 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    fun releaseSurfaceAfterBackgroundPlaybackStopped() {
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            return
+        }
+        if (surfaceResumeState == SurfaceResumeState.RELEASED) {
+            return
+        }
+        val target = geckoView ?: return
+        Log.d(
+            TAG_SURFACE_RESUME,
+            "playback stopped while stopped: releaseSession + INVISIBLE" +
+                " state=$surfaceResumeState session=${session.logKey()}",
+        )
+        browserSessionLifecycleController.pauseSession(browserTab)
+        addressAutofillDelegate.unbindBeforeViewRelease(session)
+        target.releaseSession()
+        currentOnReevaluateOpenerRetention()
+        target.visibility = View.INVISIBLE
+        surfaceResumeState = SurfaceResumeState.RELEASED
+    }
+
+    DisposableEffect(session, mediaWebExtension) {
+        val listener: (GeckoSession) -> Unit = { stoppedSession ->
+            if (stoppedSession === session) {
+                releaseSurfaceAfterBackgroundPlaybackStopped()
+            }
+        }
+        mediaWebExtension.addBackgroundPlaybackStoppedListener(listener)
+        onDispose {
+            mediaWebExtension.removeBackgroundPlaybackStoppedListener(listener)
+        }
+    }
+
     DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
             val gv = geckoView

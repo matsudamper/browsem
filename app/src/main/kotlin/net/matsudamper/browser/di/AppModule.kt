@@ -240,6 +240,9 @@ internal fun backgroundSessionSuspender(
         mediaWebExtension.onSessionActivated = { session ->
             suspender.noteSessionActivated(session)
         }
+        mediaWebExtension.addBackgroundPlaybackStoppedListener { session ->
+            suspender.onPlaybackStopped(session)
+        }
         ProcessLifecycleOwner.get().lifecycle.addObserver(suspender)
     }
 }
