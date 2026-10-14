@@ -1369,6 +1369,7 @@ internal fun GeckoBrowserTab(
             )
         } else {
             if (customTabMode || webAppMode) {
+                val moveTabToProfile = onMoveTabToProfile
                 CustomTabToolbar(
                     title = state.currentPageTitle.ifBlank { "ページ" },
                     url = state.currentPageUrl,
@@ -1419,6 +1420,19 @@ internal fun GeckoBrowserTab(
                     onResetPageZoom = state::resetPageZoom,
                     showCloseButton = customTabMode,
                     showHome = webAppMode,
+                    profileSwitcher = if (customTabMode) profileSwitcher else null,
+                    currentTabProfileId = if (customTabMode) {
+                        ProfileId.fromGeckoContextId(browserTab.session.settings.contextId)
+                    } else {
+                        null
+                    },
+                    onMoveTabToProfile = if (customTabMode && moveTabToProfile != null) {
+                        { profileId ->
+                            moveTabToProfile(browserTab.tabId, state.currentPageUrl, profileId)
+                        }
+                    } else {
+                        null
+                    },
                 )
             } else {
                 BrowserToolBar(

@@ -199,10 +199,12 @@ internal fun geckoRuntimeInitializer(
 internal fun customTabsWarmupStore(
     geckoRuntimeInitializer: GeckoRuntimeInitializer,
     webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    profileRepository: ProfileRepository,
 ): CustomTabsWarmupStore {
     return CustomTabsWarmupStore(
         geckoRuntimeInitializer = geckoRuntimeInitializer,
         webAuthnCompatWebExtension = webAuthnCompatWebExtension,
+        profileRepository = profileRepository,
     )
 }
 
@@ -520,12 +522,14 @@ internal fun customTabScreenViewModel(
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
     webAppRepository: WebAppRepository,
+    profileRepository: ProfileRepository,
 ): CustomTabScreenViewModel {
     return CustomTabScreenViewModel(
         historyRepository = historyRepository,
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
         webAppRepository = webAppRepository,
+        profileRepository = profileRepository,
     )
 }
 

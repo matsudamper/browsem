@@ -1,10 +1,23 @@
 package net.matsudamper.browser
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import net.matsudamper.browser.core.TabStoreState
+import net.matsudamper.browser.data.ProfileData
+import net.matsudamper.browser.data.ProfileIcon
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -19,17 +32,18 @@ import org.mozilla.geckoview.GeckoSession
  */
 internal class CustomTabBrowserViewModel(
     tabRepository: TabRepository,
-    runtime: GeckoRuntime,
+    private val runtime: GeckoRuntime,
     handoffToken: String?,
     private val mediaWebExtension: MediaWebExtension,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     applicationScope: CoroutineScope,
     private val backgroundSessionSuspender: BackgroundSessionSuspender,
+    private val profileRepository: ProfileRepository,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
         tabGroupRepository = null,
-        profileRepository = null,
+        profileRepository = profileRepository,
         isSinglePage = true,
         persistenceScope = applicationScope,
     )
@@ -66,7 +80,40 @@ internal class CustomTabBrowserViewModel(
         return closeRequested
     }
 
+    private val profileCallbacks = object : ProfileSwitcherUiState.Callbacks {
+        override fun onAddProfile() {
+            addProfile()
+        }
+    }
+
+    /**
+     * カスタムタブのメニューに出すプロファイル。
+     * 強調するのはこのタブの contextId で、本体ブラウザの有効プロファイルとは別に持つ。
+     */
+    val profileSwitcher: StateFlow<ProfileSwitcherUiState> = combine(
+        profileRepository.observeProfiles(),
+        profileRepository.observeTabCounts(),
+        browserTabController.tabStoreState,
+    ) { profiles, tabCounts, store ->
+        buildProfileSwitcher(
+            profiles = profiles,
+            tabCounts = tabCounts,
+            currentProfileId = currentProfileId(store, profiles),
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = buildProfileSwitcher(
+            profiles = listOf(),
+            tabCounts = mapOf(),
+            currentProfileId = ProfileId.DEFAULT,
+        ),
+    )
+
     init {
+        viewModelScope.launch {
+            profileRepository.createDefaultProfileIfEmpty()
+        }
         browserTabController.onTabListChanged = {
             browserSessionLifecycleController.retainOpenersOfLivePopups(
                 tabs = browserTabController.tabs,
@@ -87,6 +134,129 @@ internal class CustomTabBrowserViewModel(
             browserTabController = browserTabController,
             lifecycleController = browserSessionLifecycleController,
         )
+    }
+
+    /**
+     * このカスタムタブを指定プロファイルで開き直す。
+     * GeckoSession の contextId は open 後に変えられないため、同じ URL のセッションを作り直す。
+     * 本体ブラウザの有効プロファイルは変えない。
+     */
+    fun moveTabToProfile(tabId: String, url: String, profileId: ProfileId) {
+        viewModelScope.launch {
+            moveTabToProfileNow(tabId, url, profileId)
+        }
+    }
+
+    private suspend fun moveTabToProfileNow(tabId: String, url: String, profileId: ProfileId) {
+        val tab = browserTabController.findTab(tabId) ?: return
+        if (ProfileId.fromGeckoContextId(tab.session.settings.contextId) == profileId) return
+        val pageUrl = url.ifBlank { tab.currentUrl }.ifBlank { "about:blank" }
+        val newTab = browserTabController.createAndAppendTab(
+            initialUrl = pageUrl,
+            profileId = profileId,
+            insertAfterSelectedTab = false,
+        )
+        browserTabController.selectTab(newTab.tabId)
+        browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = newTab.tabId)
+        browserTabController.confirmClosedTab()
+    }
+
+    private fun buildProfileSwitcher(
+        profiles: List<ProfileData>,
+        tabCounts: Map<ProfileId, Int>,
+        currentProfileId: ProfileId,
+    ): ProfileSwitcherUiState {
+        val currentProfile = profiles.firstOrNull { it.id == currentProfileId }
+        return ProfileSwitcherUiState(
+            activeProfileIcon = currentProfile?.icon ?: ProfileIcon.PERSON,
+            profiles = profiles.map { profile ->
+                ProfileSwitcherUiState.ProfileItem(
+                    id = profile.id,
+                    name = profile.name,
+                    icon = profile.icon,
+                    tabCount = tabCounts[profile.id] ?: 0,
+                    isActive = profile.id == currentProfileId,
+                    isDeletable = profile.id != ProfileId.DEFAULT,
+                    listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
+                        override fun onSelect() {
+                            moveSelectedTabToProfile(profile.id)
+                        }
+
+                        override fun onRename(newName: String) {
+                            viewModelScope.launch {
+                                profileRepository.renameProfile(profile.id, newName)
+                            }
+                        }
+
+                        override fun onChangeIcon(icon: ProfileIcon) {
+                            viewModelScope.launch {
+                                profileRepository.updateProfileIcon(profile.id, icon)
+                            }
+                        }
+
+                        override fun onDelete() {
+                            deleteProfile(profile.id)
+                        }
+                    },
+                )
+            },
+            callbacks = profileCallbacks,
+        )
+    }
+
+    private fun currentProfileId(
+        store: TabStoreState,
+        profiles: List<ProfileData>,
+    ): ProfileId {
+        val tabProfileId = store.selectedTabId?.let { selectedId ->
+            store.tabs.firstOrNull { it.id == selectedId }?.profileId
+        }
+        if (tabProfileId != null) return ProfileId(tabProfileId)
+        return profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+    }
+
+    private fun moveSelectedTabToProfile(profileId: ProfileId) {
+        val tab = browserTabController.tabs.firstOrNull { it.tabId == browserTabController.selectedTabId }
+            ?: browserTabController.tabs.firstOrNull()
+            ?: return
+        moveTabToProfile(tab.tabId, tab.currentUrl, profileId)
+    }
+
+    private fun addProfile() {
+        viewModelScope.launch {
+            val profileCount = profileSwitcher.value.profiles.size
+            profileRepository.addProfile(
+                name = "プロファイル ${profileCount + 1}",
+                icon = ProfileIcon.PERSON,
+                sortOrder = profileCount,
+            )
+        }
+    }
+
+    /**
+     * プロファイルを削除する。このカスタムタブが使っていれば先にデフォルトへ開き直してから、
+     * DB の行と Gecko 側のサイトデータを消す。
+     */
+    private fun deleteProfile(profileId: ProfileId) {
+        if (profileId == ProfileId.DEFAULT) return
+        viewModelScope.launch {
+            val currentTab = browserTabController.tabs.firstOrNull { it.tabId == browserTabController.selectedTabId }
+                ?: browserTabController.tabs.firstOrNull()
+            if (currentTab != null &&
+                ProfileId.fromGeckoContextId(currentTab.session.settings.contextId) == profileId
+            ) {
+                moveTabToProfileNow(currentTab.tabId, currentTab.currentUrl, ProfileId.DEFAULT)
+            }
+            val activeId = profileRepository.observeProfiles().first().firstOrNull { it.isActive }?.id
+            if (activeId == profileId) {
+                profileRepository.setActiveProfile(ProfileId.DEFAULT)
+            }
+            profileRepository.deleteProfile(profileId)
+            val contextId = profileId.geckoContextId
+            if (contextId != null) {
+                runtime.storageController.clearDataForSessionContext(contextId)
+            }
+        }
     }
 
     override fun onCleared() {

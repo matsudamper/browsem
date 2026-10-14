@@ -26,7 +26,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -47,6 +46,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
@@ -61,6 +62,7 @@ import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -77,6 +79,7 @@ class CustomTabActivity : ComponentActivity() {
     private val tabRepository: TabRepository by inject()
     private val applicationScope: CoroutineScope by inject()
     private val backgroundSessionSuspender: BackgroundSessionSuspender by inject()
+    private val profileRepository: ProfileRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -91,6 +94,7 @@ class CustomTabActivity : ComponentActivity() {
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     applicationScope = applicationScope,
                     backgroundSessionSuspender = backgroundSessionSuspender,
+                    profileRepository = profileRepository,
                 )
             }
         }
@@ -147,6 +151,7 @@ class CustomTabActivity : ComponentActivity() {
                 runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
             }
 
+            val profileSwitcher by browserViewModel.profileSwitcher.collectAsState()
             BrowserTheme(themeMode = browserSettings.themeMode) {
                 WebAuthnCompatStartupGate(runtime = runtime) {
                     BrowserAppShell(
@@ -195,6 +200,8 @@ class CustomTabActivity : ComponentActivity() {
                                 onRequestDownloadNotificationPermission = {
                                     requestDownloadNotificationPermission()
                                 },
+                                profileSwitcher = profileSwitcher,
+                                onMoveTabToProfile = browserViewModel::moveTabToProfile,
                             )
                         }
                     }
@@ -308,12 +315,15 @@ private fun CustomTabScreen(
     onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
     onOpenPopupInCustomTab: (uri: String, openerTabId: String) -> GeckoSession,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
+    profileSwitcher: ProfileSwitcherUiState,
+    onMoveTabToProfile: (tabId: String, url: String, profileId: ProfileId) -> Unit,
 ) {
     val viewModel: CustomTabScreenViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsState()
     val currentOnHandedOffPopupSessionAttached by rememberUpdatedState(onHandedOffPopupSessionAttached)
     val currentHandedOffPopupInitialUrl by rememberUpdatedState(handedOffPopupInitialUrl)
     val customTabsWarmupStore: CustomTabsWarmupStore = koinInject()
+    val profileRepository: ProfileRepository = koinInject()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         if (handedOffPopupSession != null) {
             null
@@ -326,32 +336,47 @@ private fun CustomTabScreen(
             }
         }
     }
-    val browserTab by produceState<BrowserTab?>(
-        initialValue = null,
-        key1 = browserTabController,
-        key2 = initialUrl,
-        key3 = prewarmedSession,
-    ) {
+    val tabStoreState by browserTabController.tabStoreState.collectAsState()
+    LaunchedEffect(browserTabController, initialUrl, prewarmedSession, handedOffPopupSession, handedOffPopupTabId) {
         // BrowserAppShell の外側ナビ（サイトの設定など）で Root が一時的に外れるため、
         // 既存タブを再利用する。WebAppScreen と同様、破棄は ViewModel に任せる。
-        value = browserTabController.tabs.firstOrNull()
-            ?: when {
-                handedOffPopupSession != null && handedOffPopupTabId != null ->
-                    browserTabController.createTabWithHandedOffPopupSession(
-                        session = handedOffPopupSession,
-                        tabId = handedOffPopupTabId,
-                        initialUrl = currentHandedOffPopupInitialUrl().orEmpty(),
-                    ).also { currentOnHandedOffPopupSessionAttached() }
+        // プロファイル移動でタブを差し替えたあとも、ここで作り直さない。
+        if (browserTabController.tabs.isNotEmpty()) return@LaunchedEffect
+        profileRepository.createDefaultProfileIfEmpty()
+        val activeProfileId = profileRepository.observeProfiles().first()
+            .firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+        when {
+            handedOffPopupSession != null && handedOffPopupTabId != null -> {
+                browserTabController.createTabWithHandedOffPopupSession(
+                    session = handedOffPopupSession,
+                    tabId = handedOffPopupTabId,
+                    initialUrl = currentHandedOffPopupInitialUrl().orEmpty(),
+                )
+                currentOnHandedOffPopupSessionAttached()
+            }
 
-                prewarmedSession != null -> browserTabController.createAndAppendTabWithSession(
+            prewarmedSession != null &&
+                ProfileId.fromGeckoContextId(prewarmedSession.settings.contextId) == activeProfileId -> {
+                browserTabController.createAndAppendTabWithSession(
                     session = prewarmedSession,
                     initialUrl = initialUrl,
                 )
-
-                else -> browserTabController.createAndAppendTab(initialUrl = initialUrl)
             }
+
+            else -> {
+                // 準備済みセッションの contextId が有効プロファイルと違うときは引き継がない。
+                if (prewarmedSession != null && prewarmedSession.isOpen) {
+                    prewarmedSession.close()
+                }
+                browserTabController.createAndAppendTab(
+                    initialUrl = initialUrl,
+                    profileId = activeProfileId,
+                )
+            }
+        }
     }
-    val activeTab = browserTab
+    val activeTab = browserTabController.tabs.firstOrNull { it.tabId == tabStoreState.selectedTabId }
+        ?: browserTabController.tabs.firstOrNull()
     if (activeTab == null) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -437,8 +462,8 @@ private fun CustomTabScreen(
         urlBarSuggestions = uiState.urlBarSuggestions,
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
         onReevaluateOpenerRetention = reevaluateOpenerRetention,
-        profileSwitcher = null,
-        onMoveTabToProfile = null,
+        profileSwitcher = profileSwitcher,
+        onMoveTabToProfile = onMoveTabToProfile,
     )
 }
 
@@ -499,6 +524,9 @@ private fun PreviewCustomTabOpaqueShell() {
                 onPageZoomIn = {},
                 onPageZoomOut = {},
                 onResetPageZoom = {},
+                profileSwitcher = null,
+                currentTabProfileId = null,
+                onMoveTabToProfile = null,
             )
         }
     }

@@ -6,10 +6,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.history.HistoryRepository
@@ -22,6 +23,7 @@ class CustomTabScreenViewModel(
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
     webAppRepository: WebAppRepository,
+    profileRepository: ProfileRepository,
 ) : ViewModel() {
     private val urlBarSuggestionsStateOwner = UrlBarSuggestionsStateOwner(
         scope = viewModelScope,
@@ -29,8 +31,10 @@ class CustomTabScreenViewModel(
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
         webAppRepository = webAppRepository,
-        // カスタムタブ・WebApp のセッションは contextId を持たないデフォルトプロファイルで開く
-        activeProfileIdFlow = flowOf(ProfileId.DEFAULT),
+        // カスタムタブは有効プロファイルの contextId で開く。履歴サジェストもそれに合わせる
+        activeProfileIdFlow = profileRepository.observeProfiles().map { profiles ->
+            profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+        },
     )
     private val callbacks = urlBarSuggestionsStateOwner.callbacks
 

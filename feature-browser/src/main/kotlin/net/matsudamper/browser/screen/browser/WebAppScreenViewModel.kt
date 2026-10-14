@@ -29,7 +29,7 @@ class WebAppScreenViewModel(
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
         webAppRepository = webAppRepository,
-        // カスタムタブ・WebApp のセッションは contextId を持たないデフォルトプロファイルで開く
+        // WebApp の URL サジェストはデフォルトプロファイルの履歴を使う
         activeProfileIdFlow = flowOf(ProfileId.DEFAULT),
     )
     private val callbacks = urlBarSuggestionsStateOwner.callbacks
