@@ -3,6 +3,7 @@ package net.matsudamper.browser.data.crashlog
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -66,6 +67,39 @@ class CrashLogDatabaseMigrationTest {
                 assertTrue(cursor.moveToFirst())
                 assertEquals(CrashLogRepository.TAG_CRASH, cursor.getString(0))
                 assertEquals("boom", cursor.getString(1))
+            }
+        }
+    }
+
+    @Test
+    fun migrate3To4_removesOnlyExternalAppNavigationLogs() {
+        helper.createDatabase(TEST_DB, 3).apply {
+            execSQL(
+                "INSERT INTO crash_log (occurredAt, tag, title, body) VALUES (1000, 'Log', '外部アプリ遷移', 'uri=example')",
+            )
+            execSQL(
+                "INSERT INTO crash_log (occurredAt, tag, title, body) VALUES (2000, 'Log', '翻訳診断', 'stage=scan')",
+            )
+            execSQL(
+                "INSERT INTO crash_log (occurredAt, tag, title, body) VALUES (3000, 'Crash', '外部アプリ遷移', 'stack')",
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(
+            TEST_DB,
+            4,
+            true,
+            *CrashLogDatabase.ALL_MIGRATIONS,
+        ).use { db ->
+            db.query("SELECT tag, title FROM crash_log ORDER BY occurredAt ASC").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(CrashLogRepository.TAG_LOG, cursor.getString(0))
+                assertEquals("翻訳診断", cursor.getString(1))
+                assertTrue(cursor.moveToNext())
+                assertEquals(CrashLogRepository.TAG_CRASH, cursor.getString(0))
+                assertEquals("外部アプリ遷移", cursor.getString(1))
+                assertFalse(cursor.moveToNext())
             }
         }
     }

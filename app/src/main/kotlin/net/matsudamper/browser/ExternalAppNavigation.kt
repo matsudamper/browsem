@@ -257,26 +257,6 @@ private fun buildExternalIntent(
     }
 }
 
-/**
- * 診断ログへ残す URL を scheme とホストだけに切り詰める。
- *
- * 認証の受け渡しではパス・クエリ・フラグメントに認可コードやトークンが載る。ログは全文コピー
- * できるため、そのまま残すと診断情報の共有で認証情報まで渡ってしまう。
- */
-internal fun redactUrlForLog(url: String): String {
-    // 区切りは最初の : で決める。"://" を探すと、クエリに絶対 URL を持つ独自スキーム
-    // (myapp:cb?redirect=https://example.com) の内側を区切りと誤認して中身が残る。
-    val schemeEnd = url.indexOf(':')
-    if (schemeEnd <= 0) return "(スキームなし)"
-    val scheme = url.take(schemeEnd)
-    val rest = url.drop(schemeEnd + 1)
-    if (!rest.startsWith("//")) return "$scheme:"
-    val authority = rest.drop("//".length)
-        .takeWhile { it != '/' && it != '?' && it != '#' }
-        .substringAfterLast('@')
-    return "$scheme://$authority"
-}
-
 private const val INTENT_SCHEME = "intent"
 private const val EXTRA_BROWSER_FALLBACK_URL = "browser_fallback_url"
 

@@ -16,7 +16,7 @@ abstract class CrashLogDatabase : RoomDatabase() {
     abstract fun crashLogDao(): CrashLogDao
 
     companion object {
-        const val SCHEMA_VERSION: Int = 3
+        const val SCHEMA_VERSION: Int = 4
 
         @Volatile
         private var instance: CrashLogDatabase? = null
@@ -45,7 +45,16 @@ abstract class CrashLogDatabase : RoomDatabase() {
             }
         }
 
-        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /** v3→v4: 以前のバージョンで保存した外部アプリ遷移の診断ログだけを削除する */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "DELETE FROM crash_log WHERE tag = '${CrashLogRepository.TAG_LOG}' AND title = '外部アプリ遷移'",
+                )
+            }
+        }
+
+        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
         fun getInstance(context: Context): CrashLogDatabase {
             return instance ?: synchronized(this) {

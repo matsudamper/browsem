@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,20 +62,6 @@ class ExternalAppNavigationTest {
                 isRedirect = true,
             ),
         )
-    }
-
-    @Test
-    fun `ログ用 URL は scheme とホストだけになる`() {
-        assertEquals(
-            "https://example.okta.com",
-            redactUrlForLog("https://example.okta.com/app/github/abc/sso/saml?SAMLRequest=secret#token=1"),
-        )
-        assertEquals("https://example.com", redactUrlForLog("https://user:pass@example.com/path"))
-        assertEquals("okta-verify:", redactUrlForLog("okta-verify:token"))
-        // クエリに絶対 URL を持つ独自スキームでも、内側の :// を区切りと誤認しない
-        assertEquals("myapp:", redactUrlForLog("myapp:callback?code=secret&redirect=https://example.com/"))
-        assertEquals("(スキームなし)", redactUrlForLog(""))
-        assertEquals("(スキームなし)", redactUrlForLog("example.com"))
     }
 
     @Test
