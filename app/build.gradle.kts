@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.koin.compiler)
     alias(libs.plugins.paparazzi)
     id("detekt-compose-convention")
     id("instrumentation-failures-report-convention")
@@ -13,14 +14,14 @@ val useCiDebugKeystore = ciDebugKeystoreFile != null && ciDebugKeystoreFile.exis
 
 android {
     namespace = "net.matsudamper.browser"
-    compileSdk = 37
-    compileSdkMinor = 1
+    compileSdk = libs.versions.compileSdk.get().toInt()
+    compileSdkMinor = libs.versions.compileSdkMinor.get().toInt()
 
     defaultConfig {
         applicationId = "net.matsudamper.browser"
         testApplicationId = "net.matsudamper.browser.androidtest"
-        minSdk = 30
-        targetSdk = 36
+        minSdk = libs.versions.minSdk.get().toInt()
+        targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
 
@@ -176,6 +177,7 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
+    implementation(libs.koin.annotations)
     implementation(libs.koinAndroidWorkManager)
 
     debugImplementation(libs.androidx.compose.ui.tooling)

@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.paparazzi) apply false
+    alias(libs.plugins.koin.compiler) apply false
     alias(libs.plugins.ktlint.gradle) apply false
     id("ktlint-convention")
 }

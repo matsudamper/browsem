@@ -395,7 +395,7 @@ class LocalAITranslator(
 
     private fun saveInfo(title: String, body: String) {
         try {
-            crashLogRepository.saveInfoSync(title, body)
+            crashLogRepository.saveSync(tag = TAG, title = title, body = body)
         } catch (error: RuntimeException) {
             Log.w(TAG, "翻訳診断ログの保存に失敗", error)
         }
