@@ -38,6 +38,7 @@ internal class CustomTabBrowserViewModel(
     applicationScope: CoroutineScope,
     private val backgroundSessionSuspender: BackgroundSessionSuspender,
     private val profileRepository: ProfileRepository,
+    private val profileDeletionNotifier: CustomTabProfileDeletionNotifier,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
@@ -77,6 +78,10 @@ internal class CustomTabBrowserViewModel(
         val closeRequested = pendingHandoff?.holdingDelegate?.isCloseRequested == true
         pendingHandoff = null
         return closeRequested
+    }
+
+    private val onProfileDeleted: suspend (ProfileId) -> Unit = { deletedProfileId ->
+        moveTabsOffDeletedProfile(deletedProfileId)
     }
 
     private val profileCallbacks = object : ProfileSwitcherUiState.Callbacks {
@@ -126,6 +131,7 @@ internal class CustomTabBrowserViewModel(
     )
 
     init {
+        profileDeletionNotifier.addListener(onProfileDeleted)
         viewModelScope.launch {
             profileRepository.createDefaultProfileIfEmpty()
         }
@@ -229,6 +235,19 @@ internal class CustomTabBrowserViewModel(
         return profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
     }
 
+    /**
+     * 削除されたプロファイルのセッションをデフォルトへ開き直す。
+     * contextId は差し替えられないため、サイトデータ削除の前にこのセッションを手放す。
+     */
+    private suspend fun moveTabsOffDeletedProfile(profileId: ProfileId) {
+        val targets = browserTabController.tabs
+            .filter { ProfileId.fromGeckoContextId(it.session.settings.contextId) == profileId }
+            .map { it.tabId to it.currentUrl }
+        targets.forEach { (tabId, url) ->
+            moveTabToProfileNow(tabId, url, ProfileId.DEFAULT)
+        }
+    }
+
     private fun moveSelectedTabToProfile(profileId: ProfileId) {
         val tab = browserTabController.tabs.firstOrNull { it.tabId == browserTabController.selectedTabId }
             ?: browserTabController.tabs.firstOrNull()
@@ -248,6 +267,7 @@ internal class CustomTabBrowserViewModel(
     }
 
     override fun onCleared() {
+        profileDeletionNotifier.removeListener(onProfileDeleted)
         pendingHandoff?.session?.let { session ->
             HandedOffPopupRegistry.unregister(session)
             if (session.isOpen) {

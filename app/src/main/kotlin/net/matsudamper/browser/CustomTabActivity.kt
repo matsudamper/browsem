@@ -82,6 +82,7 @@ class CustomTabActivity : ComponentActivity() {
     private val applicationScope: CoroutineScope by inject()
     private val backgroundSessionSuspender: BackgroundSessionSuspender by inject()
     private val profileRepository: ProfileRepository by inject()
+    private val profileDeletionNotifier: CustomTabProfileDeletionNotifier by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -97,6 +98,7 @@ class CustomTabActivity : ComponentActivity() {
                     applicationScope = applicationScope,
                     backgroundSessionSuspender = backgroundSessionSuspender,
                     profileRepository = profileRepository,
+                    profileDeletionNotifier = profileDeletionNotifier,
                 )
             }
         }
