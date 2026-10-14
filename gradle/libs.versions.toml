@@ -25,6 +25,7 @@ workManager = "2.12.0"
 room = "2.8.5"
 ksp = "2.3.12"
 koin = "4.2.2"
+koinPlugin = "1.2.1"
 androidxBrowser = "1.10.0"
 uiautomator = "2.4.0"
 detekt = "2.0.0-alpha.6"
@@ -78,6 +79,7 @@ androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
 koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = "koin" }
+koin-annotations = { module = "io.insert-koin:koin-annotations", version.ref = "koin" }
 koinAndroidWorkManager = { module = "io.insert-koin:koin-androidx-workmanager", version.ref = "koin" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "androidxBrowser" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
@@ -105,3 +107,4 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 paparazzi = { id = "app.cash.paparazzi", version.ref = "paparazzi" }
 detekt = { id = "dev.detekt", version.ref = "detekt" }
 ktlint-gradle = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintGradle" }
+koin-compiler = { id = "io.insert-koin.compiler.plugin", version.ref = "koinPlugin" }
