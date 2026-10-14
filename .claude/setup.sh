@@ -16,11 +16,11 @@ CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-lin
 BUILD_TOOLS_VERSION="36.0.0"
 SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
 
-convention_plugin="build-logic/src/main/kotlin/net/matsudamper/browser/buildlogic/BrowserLibraryConventionPlugins.kt"
-compile_sdk="$(sed -n 's/.*COMPILE_SDK = \([0-9][0-9]*\).*/\1/p' "${convention_plugin}" | head -n 1)"
-compile_sdk_minor="$(sed -n 's/.*COMPILE_SDK_MINOR = \([0-9][0-9]*\).*/\1/p' "${convention_plugin}" | head -n 1)"
+versions_toml="gradle/libs.versions.toml"
+compile_sdk="$(sed -n 's/^[[:space:]]*compileSdk[[:space:]]*=[[:space:]]*"\([0-9][0-9]*\)".*/\1/p' "${versions_toml}" | head -n 1)"
+compile_sdk_minor="$(sed -n 's/^[[:space:]]*compileSdkMinor[[:space:]]*=[[:space:]]*"\([0-9][0-9]*\)".*/\1/p' "${versions_toml}" | head -n 1)"
 if [ -z "${compile_sdk}" ] || [ -z "${compile_sdk_minor}" ]; then
-  echo "${convention_plugin} から COMPILE_SDK / COMPILE_SDK_MINOR を読めなかった" >&2
+  echo "${versions_toml} から compileSdk / compileSdkMinor を読めなかった" >&2
   exit 1
 fi
 platform_package="platforms;android-${compile_sdk}.${compile_sdk_minor}"

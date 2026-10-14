@@ -4,11 +4,11 @@ plugins {
 
 android {
     namespace = "net.matsudamper.browser.feature.readability"
-    compileSdk = 37
-    compileSdkMinor = 1
+    compileSdk = libs.versions.compileSdk.get().toInt()
+    compileSdkMinor = libs.versions.compileSdkMinor.get().toInt()
 
     defaultConfig {
-        minSdk = 30
+        minSdk = libs.versions.minSdk.get().toInt()
     }
 
     compileOptions {
