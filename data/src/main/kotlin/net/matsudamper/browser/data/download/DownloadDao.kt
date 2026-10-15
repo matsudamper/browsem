@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -33,6 +34,16 @@ interface DownloadDao {
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセルする。完了済みの上書きを防ぐ */
     @Query("UPDATE download SET status = 'CANCELLED' WHERE currentWorkerId = :currentWorkerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
     suspend fun cancelIfActive(currentWorkerId: String): Int
+
+    @Query("UPDATE download SET status = 'CANCELLED' WHERE workerId = :workerId AND status IN ('ENQUEUED', 'RUNNING', 'PAUSED')")
+    suspend fun cancelIfActiveByWorkerId(workerId: String): Int
+
+    /** 最新の currentWorkerId を取得し、同一トランザクションでキャンセルする。 */
+    @Transaction
+    suspend fun cancelByWorkerId(workerId: String): DownloadEntity? {
+        val record = getByWorkerId(workerId) ?: return null
+        return if (cancelIfActiveByWorkerId(workerId) > 0) record else null
+    }
 
     /** 実行中（ENQUEUED/RUNNING）のときのみ一時停止する。完了・失敗・キャンセル済みの上書きを防ぐ */
     @Query("UPDATE download SET status = 'PAUSED' WHERE currentWorkerId = :currentWorkerId AND status IN ('ENQUEUED', 'RUNNING')")
@@ -117,7 +128,7 @@ interface DownloadDao {
      */
     @Query(
         "UPDATE download SET currentWorkerId = :newWorkerId, status = 'ENQUEUED', failureReason = NULL " +
-            "WHERE workerId = :workerId",
+            "WHERE workerId = :workerId AND status IN ('FAILED', 'PAUSED')",
     )
     suspend fun updateResumed(workerId: String, newWorkerId: String)
 
@@ -127,7 +138,7 @@ interface DownloadDao {
      */
     @Query(
         "UPDATE download SET currentWorkerId = :previousWorkerId, status = :previousStatus " +
-            "WHERE workerId = :workerId AND currentWorkerId = :newWorkerId",
+            "WHERE workerId = :workerId AND currentWorkerId = :newWorkerId AND status = 'ENQUEUED'",
     )
     suspend fun revertResumed(
         workerId: String,

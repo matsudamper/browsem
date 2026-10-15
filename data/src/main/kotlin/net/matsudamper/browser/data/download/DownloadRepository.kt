@@ -166,6 +166,11 @@ class DownloadRepository(context: Context) {
         return dao.cancelIfActive(currentWorkerId) > 0
     }
 
+    /** 再開後も変わらない workerId から、実際に停止すべき Worker を特定してキャンセルする。 */
+    suspend fun cancelByWorkerId(workerId: String): DownloadRecord? {
+        return dao.cancelByWorkerId(workerId)?.toRecord()
+    }
+
     /** ENQUEUED/RUNNING のときのみ一時停止状態に更新する */
     suspend fun updatePaused(currentWorkerId: String) {
         dao.pauseIfActive(currentWorkerId)

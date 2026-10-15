@@ -289,25 +289,15 @@ internal class DownloadManagementScreenViewModel(
     }
 
     private fun cancelDownload(id: UUID) {
-        val record = currentRecords.find { it.workerId == id } ?: return
-        // WorkManager・通知・DB はいずれも現在のワーカーID（currentWorkerId）で識別する
-        val currentWorkerId = record.currentWorkerId
-        // 一時停止中のレコードは Worker が存在しないため、残った部分ファイルをここで削除する
-        val pausedPartialFileUri = record.partialFileUri.takeIf { record.status == DownloadRecordStatus.PAUSED }
-        // suspend を挟むと viewModelScope の破棄でキャンセル要求自体が消えるため、即時に発行する
-        workManager.cancelWorkById(currentWorkerId)
-        // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、明示的に消す
-        val notificationId = DownloadNotificationId.progress(currentWorkerId)
-        getApplication<Application>()
-            .getSystemService(NotificationManager::class.java)
-            ?.cancel(notificationId)
         viewModelScope.launch {
-            // Worker の CancellationException ハンドラに依存せず無条件で CANCELLED に更新する。
-            // SUCCEEDED/FAILED の上書きは DAO 側のガードで防がれる。
-            // WorkManager の割り込みが届かない場合でも、Worker が進捗更新時に
-            // この CANCELLED 状態を検知して自力で停止する
-            downloadRepository.updateCancelled(currentWorkerId.toString())
-            pausedPartialFileUri?.let { uri ->
+            // 安定IDでDBを更新してからWorkerを停止するため、既に停止した進捗も取り消せる。
+            val record = downloadRepository.cancelByWorkerId(id.toString()) ?: return@launch
+            val currentWorkerId = record.currentWorkerId
+            workManager.cancelWorkById(currentWorkerId)
+            getApplication<Application>()
+                .getSystemService(NotificationManager::class.java)
+                ?.cancel(DownloadNotificationId.progress(currentWorkerId))
+            record.partialFileUri?.let { uri ->
                 runCatching {
                     getApplication<Application>().contentResolver.delete(uri.toUri(), null, null)
                 }
