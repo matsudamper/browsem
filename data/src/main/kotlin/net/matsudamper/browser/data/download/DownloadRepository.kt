@@ -166,6 +166,11 @@ class DownloadRepository(context: Context) {
         return dao.cancelIfActive(currentWorkerId) > 0
     }
 
+    /** WorkManager の失敗を確認したキャンセル扱いの未開始レコードを復旧する */
+    suspend fun restoreUnstartedFailure(currentWorkerId: String, failureReason: String): Boolean {
+        return dao.restoreUnstartedFailure(currentWorkerId, failureReason) > 0
+    }
+
     /** ENQUEUED/RUNNING のときのみ一時停止状態に更新する */
     suspend fun updatePaused(currentWorkerId: String) {
         dao.pauseIfActive(currentWorkerId)

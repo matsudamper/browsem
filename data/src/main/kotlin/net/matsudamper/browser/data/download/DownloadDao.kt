@@ -30,6 +30,15 @@ interface DownloadDao {
     )
     suspend fun updateFailed(currentWorkerId: String, failureReason: String?): Int
 
+    /** WorkManager の起動失敗でキャンセル扱いになった未開始レコードだけを復旧する */
+    @Query(
+        "UPDATE download SET status = 'FAILED', failureReason = :failureReason " +
+            "WHERE currentWorkerId = :currentWorkerId " +
+            "AND status = 'CANCELLED' AND fileName = '' AND totalRead = 0 " +
+            "AND fileUri IS NULL AND partialFileUri IS NULL",
+    )
+    suspend fun restoreUnstartedFailure(currentWorkerId: String, failureReason: String): Int
+
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセルする。完了済みの上書きを防ぐ */
     @Query("UPDATE download SET status = 'CANCELLED' WHERE currentWorkerId = :currentWorkerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
     suspend fun cancelIfActive(currentWorkerId: String): Int

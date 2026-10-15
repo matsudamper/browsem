@@ -216,7 +216,7 @@ internal class DownloadManagementScreenViewModel(
             DownloadRecordStatus.FAILED -> {
                 DownloadManagementScreenUiState.DownloadStatus.Failed(
                     // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
-                    canResume = partialFileUri != null && DownloadUrl.isRefetchable(url),
+                    canResume = DownloadUrl.isRefetchable(url),
                     reason = failureReason,
                 )
             }
@@ -411,19 +411,38 @@ internal class DownloadManagementScreenViewModel(
     }
 
     /**
-     * WorkManager 上で終了済みの ENQUEUED/RUNNING レコードを CANCELLED に同期する。
-     * バックアップ開始時の一括取消などで Worker が起動せず DB だけ残るケースを解消する。
+     * WorkManager の FAILED を確認した実行中レコードを失敗扱いに修復する。
+     * 以前の同期処理が CANCELLED にした未開始レコードも、失敗したワーカーに限り復旧する。
+     * 他の終了状態は従来どおりキャンセルとして扱う。
      *
      * @return DB を更新した場合は true。呼び出し元は更新後の Flow 再発火を待つこと。
      */
     private suspend fun reconcileInactiveWorkRecords(records: List<DownloadRecord>): Boolean {
         var updated = false
         for (record in records) {
-            if (record.status !in ACTIVE_DOWNLOAD_STATUSES) continue
+            val isActive = record.status in ACTIVE_DOWNLOAD_STATUSES
+            val isUnstartedCancelled = record.status == DownloadRecordStatus.CANCELLED &&
+                record.fileName.isEmpty() &&
+                record.totalRead == 0L &&
+                record.fileUri == null &&
+                record.partialFileUri == null
+            if (!isActive && !isUnstartedCancelled) continue
+
             val workState = runCatching {
                 workManager.getWorkInfoById(record.currentWorkerId).get()?.state
             }.getOrNull() ?: WorkInfo.State.CANCELLED
-            if (workState.isFinished) {
+            if (workState == WorkInfo.State.FAILED) {
+                if (isUnstartedCancelled) {
+                    val restored = downloadRepository.restoreUnstartedFailure(
+                        currentWorkerId = record.currentWorkerId.toString(),
+                        failureReason = WORKER_FAILURE_REASON,
+                    )
+                    updated = restored || updated
+                } else if (isActive) {
+                    downloadRepository.updateFailed(record.currentWorkerId.toString(), WORKER_FAILURE_REASON)
+                    updated = true
+                }
+            } else if (isActive && workState.isFinished) {
                 downloadRepository.updateCancelled(record.currentWorkerId.toString())
                 updated = true
             }
@@ -467,7 +486,9 @@ internal class DownloadManagementScreenViewModel(
         eventHandler.trySend { it.highlightItem(id) }
     }
 
-    companion object {
+        companion object {
+        private const val WORKER_FAILURE_REASON = "バックグラウンド処理が失敗しました。再試行してください"
+
         /** 履歴クリアの対象外。実行中のダウンロードは残す */
         private val ACTIVE_DOWNLOAD_STATUSES = setOf(
             DownloadRecordStatus.ENQUEUED,
