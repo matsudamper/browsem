@@ -15,12 +15,11 @@ class DownloadUnstartedFailureRecoveryTest {
     private val repository = DownloadRepository(ApplicationProvider.getApplicationContext())
 
     @Test
-    fun `起動前に失敗してキャンセル扱いになった履歴を復旧する`() = runBlocking {
+    fun `起動前に失敗した履歴を失敗状態へ同期できる`() = runBlocking {
         val workerId = UUID.randomUUID().toString()
         repository.insertEnqueued(workerId, "https://example.com/file", "", 0L)
-        repository.updateCancelled(workerId)
 
-        assertTrue(repository.restoreUnstartedFailure(workerId, FAILURE_REASON))
+        assertTrue(repository.markFailedIfActive(workerId, FAILURE_REASON))
 
         val record = repository.getByCurrentWorkerId(UUID.fromString(workerId))
         assertEquals(DownloadRecordStatus.FAILED.name, record?.status)
@@ -28,13 +27,37 @@ class DownloadUnstartedFailureRecoveryTest {
     }
 
     @Test
-    fun `進捗があったキャンセル済み履歴は変更しない`() = runBlocking {
+    fun `失敗確定後も明示的なキャンセルは上書きしない`() = runBlocking {
         val workerId = UUID.randomUUID().toString()
-        repository.insertDownload(workerId, "https://example.com/file", "", 0L)
-        repository.updateProgress(workerId, "file", 25, 25L, 100L)
+        repository.insertEnqueued(workerId, "https://example.com/file", "", 0L)
         repository.updateCancelled(workerId)
 
-        assertFalse(repository.restoreUnstartedFailure(workerId, FAILURE_REASON))
+        assertFalse(repository.markFailedIfActive(workerId, FAILURE_REASON))
+        assertFalse(repository.cancelInactiveIfActive(workerId))
+
+        val record = repository.getByCurrentWorkerId(UUID.fromString(workerId))
+        assertEquals(DownloadRecordStatus.CANCELLED.name, record?.status)
+    }
+
+    @Test
+    fun `同期中に一時停止された履歴は上書きしない`() = runBlocking {
+        val workerId = UUID.randomUUID().toString()
+        repository.insertDownload(workerId, "https://example.com/file", "", 0L)
+        repository.updatePaused(workerId)
+
+        assertFalse(repository.markFailedIfActive(workerId, FAILURE_REASON))
+        assertFalse(repository.cancelInactiveIfActive(workerId))
+
+        val record = repository.getByCurrentWorkerId(UUID.fromString(workerId))
+        assertEquals(DownloadRecordStatus.PAUSED.name, record?.status)
+    }
+
+    @Test
+    fun `終了済みワークの実行中履歴はキャンセルへ同期する`() = runBlocking {
+        val workerId = UUID.randomUUID().toString()
+        repository.insertEnqueued(workerId, "https://example.com/file", "", 0L)
+
+        assertTrue(repository.cancelInactiveIfActive(workerId))
 
         val record = repository.getByCurrentWorkerId(UUID.fromString(workerId))
         assertEquals(DownloadRecordStatus.CANCELLED.name, record?.status)

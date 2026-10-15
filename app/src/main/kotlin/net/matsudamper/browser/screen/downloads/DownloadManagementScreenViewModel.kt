@@ -411,43 +411,40 @@ internal class DownloadManagementScreenViewModel(
     }
 
     /**
-     * WorkManager の FAILED を確認した実行中レコードを失敗扱いに修復する。
-     * 以前の同期処理が CANCELLED にした未開始レコードも、失敗したワーカーに限り復旧する。
-     * 他の終了状態は従来どおりキャンセルとして扱う。
+     * WorkManager が終了済みの実行中ダウンロードを Room の状態へ同期する。
+     * ユーザー操作による PAUSED/CANCELLED への変更とは競合させない。
      *
      * @return DB を更新した場合は true。呼び出し元は更新後の Flow 再発火を待つこと。
      */
     private suspend fun reconcileInactiveWorkRecords(records: List<DownloadRecord>): Boolean {
-        var updated = false
-        for (record in records) {
-            val isActive = record.status in ACTIVE_DOWNLOAD_STATUSES
-            val isUnstartedCancelled = record.status == DownloadRecordStatus.CANCELLED &&
-                record.fileName.isEmpty() &&
-                record.totalRead == 0L &&
-                record.fileUri == null &&
-                record.partialFileUri == null
-            if (!isActive && !isUnstartedCancelled) continue
+        return withContext(Dispatchers.IO) {
+            var updated = false
+            for (record in records) {
+                if (record.status !in ACTIVE_DOWNLOAD_STATUSES) continue
 
-            val workState = runCatching {
-                workManager.getWorkInfoById(record.currentWorkerId).get()?.state
-            }.getOrNull() ?: WorkInfo.State.CANCELLED
-            if (workState == WorkInfo.State.FAILED) {
-                if (isUnstartedCancelled) {
-                    val restored = downloadRepository.restoreUnstartedFailure(
-                        currentWorkerId = record.currentWorkerId.toString(),
-                        failureReason = WORKER_FAILURE_REASON,
-                    )
-                    updated = restored || updated
-                } else if (isActive) {
-                    downloadRepository.updateFailed(record.currentWorkerId.toString(), WORKER_FAILURE_REASON)
-                    updated = true
+                val workState = runCatching {
+                    workManager.getWorkInfoById(record.currentWorkerId).get()?.state
+                }.getOrNull() ?: WorkInfo.State.CANCELLED
+                val changed = when (workState) {
+                    WorkInfo.State.FAILED -> {
+                        downloadRepository.markFailedIfActive(
+                            currentWorkerId = record.currentWorkerId.toString(),
+                            failureReason = WORKER_FAILURE_REASON,
+                        )
+                    }
+
+                    else -> {
+                        if (workState.isFinished) {
+                            downloadRepository.cancelInactiveIfActive(record.currentWorkerId.toString())
+                        } else {
+                            false
+                        }
+                    }
                 }
-            } else if (isActive && workState.isFinished) {
-                downloadRepository.updateCancelled(record.currentWorkerId.toString())
-                updated = true
+                updated = changed || updated
             }
+            updated
         }
-        return updated
     }
 
     private suspend fun clearDownloadHistory() {
