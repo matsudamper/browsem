@@ -486,7 +486,7 @@ internal class DownloadManagementScreenViewModel(
         eventHandler.trySend { it.highlightItem(id) }
     }
 
-        companion object {
+    companion object {
         private const val WORKER_FAILURE_REASON = "バックグラウンド処理が失敗しました。再試行してください"
 
         /** 履歴クリアの対象外。実行中のダウンロードは残す */
