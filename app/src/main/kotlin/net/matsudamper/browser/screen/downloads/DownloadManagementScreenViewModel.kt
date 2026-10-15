@@ -290,7 +290,11 @@ internal class DownloadManagementScreenViewModel(
     }
 
     private fun cancelDownload(id: UUID) {
-        // ViewModelの破棄後もキャンセルが完了するよう、画面のスコープから切り離す。
+        // Roomの処理待ちや画面終了中でも即時に停止要求を発行する。
+        currentRecords.find { it.workerId == id }?.let { record ->
+            workManager.cancelWorkById(record.currentWorkerId)
+        }
+        // 最新IDによる状態同期は、ViewModelが破棄されても最後まで実行する。
         CoroutineScope(Dispatchers.IO).launch {
             // 安定IDでDBを更新してからWorkerを停止するため、既に停止した進捗も取り消せる。
             val record = downloadRepository.cancelByWorkerId(id.toString()) ?: return@launch
