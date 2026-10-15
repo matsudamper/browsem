@@ -46,19 +46,21 @@ class DownloadResumeRevertTest {
     }
 
     @Test
-    fun `付け替え後に状態が変わっていれば戻さない`() = runBlocking {
+    fun `再開処理中の二重付け替えは拒否して元の状態へ戻せる`() = runBlocking {
         val workerId = UUID.randomUUID().toString()
         val newWorkerId = UUID.randomUUID().toString()
         val furtherWorkerId = UUID.randomUUID().toString()
         repository.insertDownload(workerId = workerId, url = URL, referrerUrl = "", enqueuedAt = 0L)
         repository.updatePaused(workerId)
         val revertPoint = requireNotNull(repository.updateResumed(workerId = workerId, newWorkerId = newWorkerId))
-        repository.updateResumed(workerId = workerId, newWorkerId = furtherWorkerId)
+
+        assertNull(repository.updateResumed(workerId = workerId, newWorkerId = furtherWorkerId))
+        assertNull(repository.getByCurrentWorkerId(UUID.fromString(furtherWorkerId)))
 
         repository.revertResumed(workerId = workerId, newWorkerId = newWorkerId, revertPoint = revertPoint)
 
-        val current = repository.getByCurrentWorkerId(UUID.fromString(furtherWorkerId))
-        assertEquals(DownloadRecordStatus.ENQUEUED.name, current?.status)
+        val current = repository.getByCurrentWorkerId(UUID.fromString(workerId))
+        assertEquals(DownloadRecordStatus.PAUSED.name, current?.status)
     }
 
     private companion object {
