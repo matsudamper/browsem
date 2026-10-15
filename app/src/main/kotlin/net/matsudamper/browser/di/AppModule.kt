@@ -591,6 +591,6 @@ internal fun webAppScreenViewModel(
 @KoinWorker
 internal fun downloadWorker(
     context: Context,
-    workerParameters: WorkerParameters,
+    @InjectedParam workerParameters: WorkerParameters,
     geckoRuntimeInitializer: GeckoRuntimeInitializer,
 ): DownloadWorker = DownloadWorker(context, workerParameters, geckoRuntimeInitializer)
