@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.await
 import androidx.work.workDataOf
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.download.DownloadRepository
@@ -230,7 +231,7 @@ internal class GeckoDownloadManager(
                     revertPoint = downloadRepository.updateResumed(
                         workerId = workerId,
                         newWorkerId = newWorkId.toString(),
-                    )
+                    ) ?: throw CancellationException("再開前にダウンロードがキャンセルされました")
                 },
                 showStartingNotification = {
                     notificationManager.notify(

@@ -249,8 +249,7 @@ class DownloadRepository(context: Context) {
      * 戻り値は付け替え前の状態で、エンキューに失敗したときに [revertResumed] へ渡す
      */
     suspend fun updateResumed(workerId: String, newWorkerId: String): ResumeRevertPoint? {
-        val previous = dao.getByWorkerId(workerId)
-        dao.updateResumed(workerId = workerId, newWorkerId = newWorkerId)
+        val previous = dao.resumeIfAllowed(workerId = workerId, newWorkerId = newWorkerId)
         return previous?.let {
             ResumeRevertPoint(currentWorkerId = it.currentWorkerId, status = it.toStatus())
         }

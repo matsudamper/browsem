@@ -108,7 +108,7 @@ class DownloadStopRequestTest {
         requireNotNull(revertPoint)
 
         repository.revertResumed(workerId = workerId, newWorkerId = newWorkerId, revertPoint = revertPoint)
-        repository.updateResumed(workerId = workerId, newWorkerId = anotherWorkerId)
+        assertEquals(null, repository.updateResumed(workerId = workerId, newWorkerId = anotherWorkerId))
 
         assertEquals(DownloadRecordStatus.CANCELLED.name, repository.getByCurrentWorkerId(UUID.fromString(newWorkerId))?.status)
         assertTrue(repository.isStopRequested(newWorkerId))

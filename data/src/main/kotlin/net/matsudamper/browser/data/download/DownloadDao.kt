@@ -130,7 +130,13 @@ interface DownloadDao {
         "UPDATE download SET currentWorkerId = :newWorkerId, status = 'ENQUEUED', failureReason = NULL " +
             "WHERE workerId = :workerId AND status IN ('FAILED', 'PAUSED')",
     )
-    suspend fun updateResumed(workerId: String, newWorkerId: String)
+    suspend fun updateResumed(workerId: String, newWorkerId: String): Int
+
+    @Transaction
+    suspend fun resumeIfAllowed(workerId: String, newWorkerId: String): DownloadEntity? {
+        val record = getByWorkerId(workerId) ?: return null
+        return if (updateResumed(workerId, newWorkerId) > 0) record else null
+    }
 
     /**
      * 再開のエンキューに失敗したときに、付け替え前のワーカーIDと状態へ戻す。
