@@ -17,6 +17,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -289,7 +290,8 @@ internal class DownloadManagementScreenViewModel(
     }
 
     private fun cancelDownload(id: UUID) {
-        viewModelScope.launch {
+        // ViewModelの破棄後もキャンセルが完了するよう、画面のスコープから切り離す。
+        CoroutineScope(Dispatchers.IO).launch {
             // 安定IDでDBを更新してからWorkerを停止するため、既に停止した進捗も取り消せる。
             val record = downloadRepository.cancelByWorkerId(id.toString()) ?: return@launch
             val currentWorkerId = record.currentWorkerId
