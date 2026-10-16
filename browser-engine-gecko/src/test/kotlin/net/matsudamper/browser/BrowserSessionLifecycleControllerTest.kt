@@ -3,6 +3,8 @@ package net.matsudamper.browser
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -211,5 +213,79 @@ class BrowserSessionLifecycleControllerTest {
         every { session.isOpen } returns true
         controller.performInitialLoadIfPending(tab)
         verify(exactly = 0) { session.loadUri(any<String>()) }
+    }
+
+    @Test
+    fun `画面外では再生中でない開いたタブだけ止める`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+        val tab = createTab(session)
+        tab.setSessionActive(true)
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        val suspended = controller.suspendWhileHostStopped(tab, isPlaying = false)
+
+        assertTrue(suspended)
+        assertFalse(tab.isSessionActive)
+        verify { session.setActive(false) }
+    }
+
+    @Test
+    fun `既に inactive のタブは画面外で復帰対象にしない`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+        val tab = createTab(session)
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        val suspended = controller.suspendWhileHostStopped(tab, isPlaying = false)
+
+        assertFalse(suspended)
+        verify(exactly = 0) { session.setActive(false) }
+    }
+
+    @Test
+    fun `再生中のタブは画面外でも止めない`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+        val tab = createTab(session)
+        tab.setSessionActive(true)
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        val suspended = controller.suspendWhileHostStopped(tab, isPlaying = true)
+
+        assertFalse(suspended)
+        assertTrue(tab.isSessionActive)
+        verify(exactly = 0) { session.setActive(false) }
+    }
+
+    @Test
+    fun `live popup の opener は画面外でも止めない`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+        val tab = createTab(session)
+        tab.retainForLivePopup = true
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        val suspended = controller.suspendWhileHostStopped(tab, isPlaying = false)
+
+        assertFalse(suspended)
+        verify(exactly = 0) { session.setActive(false) }
+    }
+
+    @Test
+    fun `画面外で止めたタブは active に戻す`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+        val tab = createTab(session)
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        controller.resumeSuspendedWhileHostStopped(tab)
+
+        verify { session.setActive(true) }
     }
 }

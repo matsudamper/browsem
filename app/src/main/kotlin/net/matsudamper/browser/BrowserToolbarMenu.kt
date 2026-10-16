@@ -869,6 +869,94 @@ private fun PreviewToolbarMenuContent() {
     }
 }
 
+@Preview(name = "ToolbarMenuCustomTabLight")
+@Preview(name = "ToolbarMenuCustomTabDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuCustomTab() {
+    val workProfileId = ProfileId("work")
+    val profileSwitcher = ProfileSwitcherUiState(
+        activeProfileIcon = ProfileIcon.WORK,
+        profiles = listOf(
+            ProfileSwitcherUiState.ProfileItem(
+                id = ProfileId.DEFAULT,
+                name = "デフォルト",
+                icon = ProfileIcon.PERSON,
+                tabCount = 2,
+                isActive = false,
+                isDeletable = false,
+                listener = PreviewProfileItemListener,
+            ),
+            ProfileSwitcherUiState.ProfileItem(
+                id = workProfileId,
+                name = "仕事",
+                icon = ProfileIcon.WORK,
+                tabCount = 1,
+                isActive = true,
+                isDeletable = true,
+                listener = PreviewProfileItemListener,
+            ),
+        ),
+        callbacks = object : ProfileSwitcherUiState.Callbacks {
+            override fun onAddProfile() = Unit
+        },
+    )
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        Surface(modifier = Modifier.width(280.dp)) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                isPageLoading = false,
+                onStopLoading = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = false,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = false,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onSemanticFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                extensionActions = listOf(),
+                extensionActionScrollState = null,
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
+                showOpenSettings = false,
+                showAddToHomeScreen = true,
+                showHome = false,
+                onOpenInBrowser = {},
+                onOpenSiteSettings = {},
+                onOpenDownloads = null,
+                onOpenDevTools = null,
+                profileSwitcher = profileSwitcher,
+                currentTabProfileId = workProfileId,
+                onMoveTabToProfile = { _ -> },
+                onOpenProfileDialog = {},
+                onOpenMoveTabDialog = {},
+            )
+        }
+    }
+}
+
+private object PreviewProfileItemListener : ProfileSwitcherUiState.ProfileItem.Listener {
+    override fun onSelect() = Unit
+    override fun onRename(newName: String) = Unit
+    override fun onChangeIcon(icon: ProfileIcon) = Unit
+    override fun onDelete() = Unit
+}
+
 @Preview(name = "ToolbarMenuWebAppLight")
 @Preview(name = "ToolbarMenuWebAppDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable

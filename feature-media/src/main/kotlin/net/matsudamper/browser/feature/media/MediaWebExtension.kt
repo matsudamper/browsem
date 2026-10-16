@@ -4,7 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
+import android.widget.Toast
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -26,7 +28,11 @@ import org.mozilla.geckoview.WebExtension
  */
 class MediaWebExtension(
     private val context: Context,
+    private val onBlockedPlayback: (tag: String, title: String, body: String) -> Unit,
 ) {
+    private val backgroundPlaybackStoppedListeners =
+        mutableListOf<(GeckoSession) -> Unit>()
+    var onSessionActivated: (GeckoSession) -> Unit = {}
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessionStates =
@@ -49,6 +55,10 @@ class MediaWebExtension(
     private val _playingTabIds = MutableStateFlow<Set<String>>(setOf())
     val playingTabIds: StateFlow<Set<String>> = _playingTabIds.asStateFlow()
     private val artworkRequestSerial = AtomicLong(0L)
+    private val backgroundPlaybackGuard = BackgroundPlaybackGuard<GeckoSession>()
+    private val blockedPlaybackNotice = BlockedPlaybackNotice(
+        repeatIntervalMs = BLOCKED_PLAYBACK_NOTICE_INTERVAL_MS,
+    )
     private val artworkTargetSizePx by lazy(LazyThreadSafetyMode.NONE) {
         max(
             context.resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_width),
@@ -60,6 +70,28 @@ class MediaWebExtension(
     private var activeSession: GeckoSession? = null
     private var pendingDeactivateSession: GeckoSession? = null
     private var pendingDeactivateRunnable: Runnable? = null
+
+    init {
+        MediaSessionBridge.userTransportCommandListener = ::onUserTransportCommand
+        MediaSessionBridge.userPauseCommandListener = ::onUserPauseCommand
+    }
+
+    fun addBackgroundPlaybackStoppedListener(listener: (GeckoSession) -> Unit) {
+        backgroundPlaybackStoppedListeners.add(listener)
+    }
+
+    fun removeBackgroundPlaybackStoppedListener(listener: (GeckoSession) -> Unit) {
+        backgroundPlaybackStoppedListeners.remove(listener)
+    }
+
+    private fun notifyBackgroundPlaybackStopped(session: GeckoSession) {
+        if (!backgroundPlaybackGuard.isInBackground()) {
+            return
+        }
+        backgroundPlaybackStoppedListeners.toList().forEach { listener ->
+            listener(session)
+        }
+    }
 
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
@@ -116,6 +148,7 @@ class MediaWebExtension(
         sessionTabIds.remove(session)
         sessionMediaSessions.remove(session)
         publishPlayingTabIds()
+        backgroundPlaybackGuard.forget(session)
         if (activeSession !== session) {
             return
         }
@@ -278,14 +311,51 @@ class MediaWebExtension(
 
     fun isInstalled(): Boolean = extension != null
 
+    fun isSessionPlaying(session: GeckoSession): Boolean {
+        val snapshot = sessionStates[session]
+        if (snapshot != null) {
+            return snapshot.isPlaying
+        }
+        return activeSession === session && MediaSessionBridge.playbackState.value.isPlaying
+    }
+
+    /** アプリが画面から外れた。閉じた時点で鳴いていた再生だけを継続扱いにする。 */
+    fun onHostEnteredBackground() {
+        val playing = sessionStates.toMap().mapNotNull { (session, snapshot) ->
+            if (!snapshot.isPlaying) {
+                null
+            } else {
+                session to PlaybackIdentity(mediaSrc = snapshot.mediaSrc, title = snapshot.title)
+            }
+        }.toMap()
+        backgroundPlaybackGuard.onEnteredBackground(playing)
+    }
+
+    /** アプリが前面に戻った。以降の再生開始はページに任せる。 */
+    fun onHostEnteredForeground() {
+        backgroundPlaybackGuard.onEnteredForeground()
+        if (blockedPlaybackNotice.onEnteredForeground(SystemClock.elapsedRealtime())) {
+            showBlockedPlaybackToast()
+        }
+    }
+
+    /**
+     * 再生中だけ surface と active を維持する。
+     *
+     * 一時停止中まで維持すると、画面を閉じたあともドキュメントが前面のままになり、
+     * ページの JS が次の動画を再生できる。
+     */
     fun shouldKeepSessionAttached(session: GeckoSession): Boolean {
         val snapshot = sessionStates[session]
-        val keepAttached =
-            activeSession === session &&
-                (snapshot?.isActive ?: MediaSessionBridge.playbackState.value.isActive)
+        val playing = if (snapshot != null) {
+            snapshot.isPlaying
+        } else {
+            MediaSessionBridge.playbackState.value.isPlaying
+        }
+        val keepAttached = activeSession === session && playing
         Log.d(
             TAG,
-            "shouldKeepSessionAttached: session=${session.logKey()} keepAttached=$keepAttached activeSession=${activeSession?.logKey()} snapshotActive=${snapshot?.isActive}",
+            "shouldKeepSessionAttached: session=${session.logKey()} keepAttached=$keepAttached activeSession=${activeSession?.logKey()} isPlaying=$playing",
         )
         return keepAttached
     }
@@ -336,6 +406,7 @@ class MediaWebExtension(
                             album = json.optString("album", ""),
                             durationMs = json.optLong("durationMs", 0L).coerceAtLeast(0L),
                             positionMs = json.optLong("positionMs", 0L).coerceAtLeast(0L),
+                            mediaSrc = json.optString("currentSrc", ""),
                         )
                     val snapshot = buildSessionPlaybackSnapshot(previousSnapshot, payload)
                     mainHandler.post {
@@ -366,14 +437,19 @@ class MediaWebExtension(
                             "snapshot: session=${session.logKey()} isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
                                 "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}, activeSession=${activeSession?.logKey()}",
                         )
-                        if (snapshot.isActive) {
+                        if (!snapshot.isPlaying && json.optBoolean("debugMediaEnded", false)) {
+                            backgroundPlaybackGuard.onExplicitStop(session)
+                            notifyBackgroundPlaybackStopped(session)
+                        }
+                        val published = suppressUnexpectedBackgroundPlayback(session, snapshot)
+                        if (published.isActive) {
                             cancelPendingDeactivation(session)
                         }
-                        sessionStates[session] = snapshot
+                        sessionStates[session] = published
                         publishPlayingTabIds()
-                        promoteSessionFromSnapshotIfNeeded(session, snapshot)
+                        promoteSessionFromSnapshotIfNeeded(session, published)
                         if (activeSession === session) {
-                            applySnapshot(session, snapshot)
+                            applySnapshot(session, published)
                         }
                     }
                     return null
@@ -381,6 +457,88 @@ class MediaWebExtension(
             },
             NATIVE_APP_ID,
         )
+    }
+
+    private fun onUserPauseCommand() {
+        val session = sessionForUserTransport()
+        if (session == null) {
+            return
+        }
+        backgroundPlaybackGuard.onExplicitStop(session)
+        notifyBackgroundPlaybackStopped(session)
+    }
+
+    private fun onUserTransportCommand() {
+        val session = sessionForUserTransport()
+        if (session == null) {
+            return
+        }
+        backgroundPlaybackGuard.onUserTransportCommand(session, SystemClock.elapsedRealtime())
+        if (session.isOpen) {
+            onSessionActivated(session)
+            session.setActive(true)
+        }
+    }
+
+    private fun sessionForUserTransport(): GeckoSession? {
+        val current = activeSession
+        if (current != null) {
+            return current
+        }
+        val mediaSession = MediaSessionBridge.activeGeckoMediaSession
+        if (mediaSession == null) {
+            return null
+        }
+        return sessionMediaSessions.entries.firstOrNull { it.value === mediaSession }?.key
+    }
+
+    private fun suppressUnexpectedBackgroundPlayback(
+        session: GeckoSession,
+        snapshot: SessionPlaybackSnapshot,
+    ): SessionPlaybackSnapshot {
+        val shouldPause = backgroundPlaybackGuard.shouldPause(
+            session = session,
+            isPlaying = snapshot.isPlaying,
+            mediaSrc = snapshot.mediaSrc,
+            title = snapshot.title,
+            nowMs = SystemClock.elapsedRealtime(),
+        )
+        if (!shouldPause) {
+            return snapshot
+        }
+        Log.d(TAG, "画面を閉じている間の再生を止める session=${session.logKey()} src=${snapshot.mediaSrc}")
+        MediaTraceLog.d("WX blockBackgroundPlay session=${session.logKey()}")
+        if (blockedPlaybackNotice.onBlocked(SystemClock.elapsedRealtime())) {
+            showBlockedPlaybackToast()
+            saveBlockedPlayback(snapshot)
+        }
+        val mediaSession = sessionMediaSessions[session]
+        if (mediaSession != null) {
+            mediaSession.pause()
+        } else if (activeSession === session) {
+            MediaSessionBridge.pause()
+        }
+        return snapshot.copy(isPlaying = false)
+    }
+
+    private fun showBlockedPlaybackToast() {
+        mainHandler.post {
+            Toast.makeText(context, BLOCKED_PLAYBACK_TOAST, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun saveBlockedPlayback(snapshot: SessionPlaybackSnapshot) {
+        val body = buildString {
+            appendLine("title=${snapshot.title}")
+            appendLine("src=${snapshot.mediaSrc}")
+            appendLine("artist=${snapshot.artist}")
+            append("album=${snapshot.album}")
+        }
+        try {
+            onBlockedPlayback(TAG, BLOCKED_PLAYBACK_TOAST, body)
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "再生停止ログの保存に失敗", error)
+        }
     }
 
     private fun applySessionState(session: GeckoSession) {
@@ -409,7 +567,10 @@ class MediaWebExtension(
         session: GeckoSession,
         transform: (SessionPlaybackSnapshot) -> SessionPlaybackSnapshot,
     ): SessionPlaybackSnapshot {
-        val next = transform(sessionStates[session] ?: SessionPlaybackSnapshot())
+        val next = suppressUnexpectedBackgroundPlayback(
+            session,
+            transform(sessionStates[session] ?: SessionPlaybackSnapshot()),
+        )
         Log.d(
             TAG,
             "updateSessionSnapshot: session=${session.logKey()} next=$next activeSession=${activeSession?.logKey()}",
@@ -550,6 +711,8 @@ class MediaWebExtension(
             "resource://android/assets/web_extensions/media_bridge/"
         private const val DEFAULT_ARTWORK_SIZE_PX = 256
         private const val DEACTIVATION_GRACE_PERIOD_MS = 5_000L
+        private const val BLOCKED_PLAYBACK_NOTICE_INTERVAL_MS = 4_000L
+        private const val BLOCKED_PLAYBACK_TOAST = "再生を止めました"
     }
 }
 
@@ -571,6 +734,7 @@ internal data class SessionPlaybackSnapshot(
     val durationMs: Long = 0L,
     val positionMs: Long = 0L,
     val features: Long = 0L,
+    val mediaSrc: String = "",
 )
 
 internal data class WebExtensionPlaybackPayload(
@@ -581,6 +745,7 @@ internal data class WebExtensionPlaybackPayload(
     val album: String,
     val durationMs: Long,
     val positionMs: Long,
+    val mediaSrc: String,
 )
 
 internal fun buildSessionPlaybackSnapshot(
@@ -596,5 +761,6 @@ internal fun buildSessionPlaybackSnapshot(
         durationMs = payload.durationMs,
         positionMs = payload.positionMs,
         features = previousSnapshot?.features ?: 0L,
+        mediaSrc = payload.mediaSrc,
     )
 }

@@ -67,7 +67,7 @@ class BrowserSessionLifecycleController(
             // コンテキスト付きで自動読み込みするため、アプリ側から loadUri すると
             // その読み込みを上書きして referrer / opener 連携が失われ、
             // Google Pay などのポップアップ決済が「販売者に戻れない」エラーになる。
-            tab.session.setActive(true)
+            tab.setSessionActive(true)
             markActiveForExtensions(tab.session)
             return
         }
@@ -98,7 +98,7 @@ class BrowserSessionLifecycleController(
                 // （restoreState は onHistoryStateChange を発火しないため）
                 tab.initHistoryFromSessionState(parsed)
                 tab.session.restoreState(parsed)
-                tab.session.setActive(true)
+                tab.setSessionActive(true)
                 markActiveForExtensions(tab.session)
                 return
             }
@@ -108,7 +108,7 @@ class BrowserSessionLifecycleController(
         // shrink-to-fit スケールが誤計算され、画像が小さく低解像度で表示されるため。
         // performInitialLoadIfPending がサイズ確定検知後に呼ばれてロードを実行する。
         tab.pendingInitialLoad = true
-        tab.session.setActive(true)
+        tab.setSessionActive(true)
         markActiveForExtensions(tab.session)
     }
 
@@ -164,8 +164,33 @@ class BrowserSessionLifecycleController(
     fun pauseSession(tab: BrowserTab) {
         if (tab.retainForLivePopup) return
         if (tab.session.isOpen) {
-            tab.session.setActive(false)
+            tab.setSessionActive(false)
         }
+    }
+
+    /**
+     * アプリが画面から外れている間、このタブの JS を止める。
+     *
+     * 再生中のタブは音と通知操作を続けるため止めない。
+     * live popup の opener は決済などの window.opener を維持するため止めない。
+     *
+     * @return 止めたとき true。前面へ戻したら [resumeSuspendedWhileHostStopped] で戻す。
+     */
+    fun suspendWhileHostStopped(tab: BrowserTab, isPlaying: Boolean): Boolean {
+        if (isPlaying) return false
+        if (tab.retainForLivePopup) return false
+        if (!tab.session.isOpen) return false
+        // GeckoSession は active かどうかを返さない。止めていなかったタブまで
+        // 画面復帰で起こすと、非表示タブの JS が再開する。
+        if (!tab.isSessionActive) return false
+        tab.setSessionActive(false)
+        return true
+    }
+
+    /** [suspendWhileHostStopped] で止めたタブを、拡張機能のアクティブタブは変えずに戻す。 */
+    fun resumeSuspendedWhileHostStopped(tab: BrowserTab) {
+        if (!tab.session.isOpen) return
+        tab.setSessionActive(true)
     }
 
     /**
@@ -200,7 +225,7 @@ class BrowserSessionLifecycleController(
     private fun retainOpenerForLivePopup(tab: BrowserTab) {
         if (!tab.session.isOpen) return
         tab.retainForLivePopup = true
-        tab.session.setActive(true)
+        tab.setSessionActive(true)
         tab.session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
     }
 
@@ -209,7 +234,7 @@ class BrowserSessionLifecycleController(
         if (!tab.session.isOpen) return
         tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
         if (tab.tabId != selectedTabId) {
-            tab.session.setActive(false)
+            tab.setSessionActive(false)
         }
     }
 
@@ -228,7 +253,7 @@ class BrowserSessionLifecycleController(
             }
         }
         if (tab.session.isOpen) {
-            tab.session.setActive(true)
+            tab.setSessionActive(true)
             markActiveForExtensions(tab.session)
         }
     }

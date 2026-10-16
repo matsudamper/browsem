@@ -173,6 +173,7 @@ dependencies {
     implementation(project(":ui:tabs"))
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.work.runtime)
     implementation(libs.koin.android)

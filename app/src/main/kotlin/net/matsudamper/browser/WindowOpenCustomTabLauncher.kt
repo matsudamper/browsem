@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.app.Activity
 import android.content.Intent
 import java.util.UUID
+import net.matsudamper.browser.data.ProfileId
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -25,17 +26,41 @@ internal fun Activity.openWindowOpenRequestInCustomTab(
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
 ): GeckoSession {
-    val session = GeckoSession()
+    val profileId = browserTabController.findTab(openerTabId)?.let { opener ->
+        ProfileId.fromGeckoContextId(opener.session.settings.contextId)
+    } ?: browserTabController.activeProfileId
+    return openWindowOpenRequestInCustomTabWithProfile(
+        uri = uri,
+        openerTabId = openerTabId,
+        browserTabController = browserTabController,
+        browserSessionLifecycleController = browserSessionLifecycleController,
+        profileId = profileId,
+    )
+}
+
+/**
+ * ポップアップは opener と同じ contextId で開く。
+ * 載る前の連鎖した window.open では opener がまだタブ一覧に無いため、プロファイルを明示して渡す。
+ */
+private fun Activity.openWindowOpenRequestInCustomTabWithProfile(
+    uri: String,
+    openerTabId: String,
+    browserTabController: BrowserTabController,
+    browserSessionLifecycleController: BrowserSessionLifecycleController,
+    profileId: ProfileId,
+): GeckoSession {
+    val session = browserTabController.createSessionForProfile(profileId)
     // 渡した先のタブ ID をここで決める。載る前にさらに window.open が来た場合、その子の
     // opener はこのセッションであって、こちらの opener ではない。
     val handedOffTabId = UUID.randomUUID().toString()
     val holdingDelegate = WindowOpenHandoffHoldingDelegate(
         onChainedWindowOpen = { chainedUri ->
-            openWindowOpenRequestInCustomTab(
+            openWindowOpenRequestInCustomTabWithProfile(
                 uri = chainedUri,
                 openerTabId = handedOffTabId,
                 browserTabController = browserTabController,
                 browserSessionLifecycleController = browserSessionLifecycleController,
+                profileId = profileId,
             )
         },
     )

@@ -142,7 +142,7 @@ internal fun BrowserContentHost(
                         )
                         // Engine 側で非アクティブ扱いになると Compositor の描画更新が止まり、
                         // 復帰時の黒画面につながるため、初期生成時に必ず active 化する。
-                        session.setActive(true)
+                        browserTab.setSessionActive(true)
                         // キーボード操作 (コンテキストメニューキー等) 由来のメニューを
                         // 過去のタッチ記録で抑制しないよう、キー入力でタッチ記録を解除する。
                         geckoView.setOnKeyListener { _, _, _ ->

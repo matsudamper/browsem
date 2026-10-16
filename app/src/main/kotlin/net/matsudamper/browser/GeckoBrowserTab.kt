@@ -440,7 +440,7 @@ internal fun GeckoBrowserTab(
         gecko.setSession(session)
         addressAutofillDelegate.bind(session)
         if (session.isOpen) {
-            session.setActive(true)
+            browserTab.setSessionActive(true)
             // ポップアップを閉じて戻った直後は、拡張機能側のアクティブタブが閉じた子のまま残る
             browserSessionLifecycleController.notifyExtensionsActiveTab(session)
             // 別画面へ渡した子が閉じていれば、ここで opener の保持を解く
@@ -668,6 +668,39 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    fun releaseSurfaceAfterBackgroundPlaybackStopped() {
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            return
+        }
+        if (surfaceResumeState == SurfaceResumeState.RELEASED) {
+            return
+        }
+        val target = geckoView ?: return
+        Log.d(
+            TAG_SURFACE_RESUME,
+            "playback stopped while stopped: releaseSession + INVISIBLE" +
+                " state=$surfaceResumeState session=${session.logKey()}",
+        )
+        browserSessionLifecycleController.pauseSession(browserTab)
+        addressAutofillDelegate.unbindBeforeViewRelease(session)
+        target.releaseSession()
+        currentOnReevaluateOpenerRetention()
+        target.visibility = View.INVISIBLE
+        surfaceResumeState = SurfaceResumeState.RELEASED
+    }
+
+    DisposableEffect(session, mediaWebExtension) {
+        val listener: (GeckoSession) -> Unit = { stoppedSession ->
+            if (stoppedSession === session) {
+                releaseSurfaceAfterBackgroundPlaybackStopped()
+            }
+        }
+        mediaWebExtension.addBackgroundPlaybackStoppedListener(listener)
+        onDispose {
+            mediaWebExtension.removeBackgroundPlaybackStoppedListener(listener)
+        }
+    }
+
     DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
             val gv = geckoView
@@ -778,15 +811,14 @@ internal fun GeckoBrowserTab(
                             state.captureTabPreview(target)
                         }
 
-                        surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
-                            // IME 非表示の pause で surface を維持していたが、ON_STOP に
-                            // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
-                            // せず session を attach したまま停止すると、復帰時に surface が
-                            // session 付きで再作成され自動 resume-resize のハング経路を踏む。
-                            // release して、復帰は RELEASED → fresh attach 経路に合流させる。
+                        surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE ||
+                            surfaceResumeState == SurfaceResumeState.ACTIVE -> {
+                            // 再生中は ON_PAUSE をスキップするので状態は ACTIVE のまま。
+                            // その後に通知で止めるか曲の終了で再生が終わってから ON_STOP が来ると、
+                            // PAUSED_KEEP_SURFACE だけを解放しても session 付き surface が残る。
                             Log.d(
                                 TAG_SURFACE_RESUME,
-                                "ON_STOP: PAUSED_KEEP_SURFACE → releaseSession + INVISIBLE 実行" +
+                                "ON_STOP: $surfaceResumeState → releaseSession + INVISIBLE 実行" +
                                     " gv.size=${target.width}x${target.height}",
                             )
                             // 不可視になったので Mozilla の契約どおり deactivate してよい。
@@ -1337,6 +1369,7 @@ internal fun GeckoBrowserTab(
             )
         } else {
             if (customTabMode || webAppMode) {
+                val moveTabToProfile = onMoveTabToProfile
                 CustomTabToolbar(
                     title = state.currentPageTitle.ifBlank { "ページ" },
                     url = state.currentPageUrl,
@@ -1387,6 +1420,19 @@ internal fun GeckoBrowserTab(
                     onResetPageZoom = state::resetPageZoom,
                     showCloseButton = customTabMode,
                     showHome = webAppMode,
+                    profileSwitcher = if (customTabMode) profileSwitcher else null,
+                    currentTabProfileId = if (customTabMode) {
+                        ProfileId.fromGeckoContextId(browserTab.session.settings.contextId)
+                    } else {
+                        null
+                    },
+                    onMoveTabToProfile = if (customTabMode && moveTabToProfile != null) {
+                        { profileId ->
+                            moveTabToProfile(browserTab.tabId, state.currentPageUrl, profileId)
+                        }
+                    } else {
+                        null
+                    },
                 )
             } else {
                 BrowserToolBar(

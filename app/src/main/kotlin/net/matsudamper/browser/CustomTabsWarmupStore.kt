@@ -13,6 +13,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -20,9 +22,20 @@ import org.mozilla.geckoview.GeckoSession
 internal class CustomTabsWarmupStore(
     private val geckoRuntimeInitializer: GeckoRuntimeInitializer,
     private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    profileRepository: ProfileRepository,
 ) {
     // カスタムタブのウォームアップはプロセス生存中いつでも来るため、プロセスと同じ寿命で持つ。
     private val warmupScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val activeProfileId = AtomicReference(ProfileId.DEFAULT)
+
+    init {
+        // 事前読み込みのセッションは open 後に contextId を変えられないため、有効プロファイルをここで追う。
+        warmupScope.launch {
+            profileRepository.observeProfiles().collect { profiles ->
+                activeProfileId.set(profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT)
+            }
+        }
+    }
 
     private val lock = Any()
     private val entries = linkedMapOf<CustomTabsSessionToken, Entry>()
@@ -117,6 +130,12 @@ internal class CustomTabsWarmupStore(
         }
         closeOnMainThread(closableSessions)
         val (session, preparedUrl) = prepared ?: return null
+        // 準備後に有効プロファイルが変わっていると Cookie の分離が食い違うため、引き継がず作り直させる。
+        val preparedProfileId = ProfileId.fromGeckoContextId(session.settings.contextId)
+        if (preparedProfileId != activeProfileId.get()) {
+            closeOnMainThread(listOf(session))
+            return null
+        }
         if (launchUrl.isNotBlank() && launchUrl != preparedUrl) {
             runOnMainThreadBlocking {
                 session.loadUri(launchUrl)
@@ -193,7 +212,7 @@ internal class CustomTabsWarmupStore(
         val entry = entries[token] ?: return null
         if (entry.preparedUrl != targetUrl) return null
         entry.updatedAt = System.currentTimeMillis()
-        return entry.preparedSession ?: GeckoSession().also { newSession ->
+        return entry.preparedSession ?: createGeckoSessionForProfile(activeProfileId.get()).also { newSession ->
             newSession.open(runtime)
             registerBrowserSessionForRuntimeUpdates(newSession)
             entry.preparedSession = newSession

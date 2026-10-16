@@ -2,13 +2,17 @@ package net.matsudamper.browser.di
 
 import android.app.Application
 import android.content.Context
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
+import net.matsudamper.browser.BackgroundSessionSuspender
 import net.matsudamper.browser.BrowserTabController
 import net.matsudamper.browser.BrowserViewModel
+import net.matsudamper.browser.CustomTabProfileDeletionNotifier
 import net.matsudamper.browser.CustomTabsWarmupStore
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.ExtensionRuntimeCoordinator
@@ -19,6 +23,7 @@ import net.matsudamper.browser.WebAppLaunchRequest
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.WebExtensionActionController
 import net.matsudamper.browser.data.BackupRepository
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.ProfileRepositoryImpl
 import net.matsudamper.browser.data.SettingsRepository
@@ -80,6 +85,7 @@ import org.koin.core.annotation.InjectedParam
 import org.koin.core.annotation.KoinApplication
 import org.koin.core.annotation.KoinViewModel
 import org.koin.core.annotation.Module
+import org.koin.core.annotation.Qualifier
 import org.koin.core.annotation.Single
 import org.mozilla.geckoview.GeckoRuntime
 
@@ -192,15 +198,23 @@ internal fun geckoRuntimeInitializer(
     )
 }
 
+// 本体とカスタムタブは別 Activity のタブ管理を持つ。プロファイル削除を両方へ届ける。
+@Single
+internal fun customTabProfileDeletionNotifier(): CustomTabProfileDeletionNotifier {
+    return CustomTabProfileDeletionNotifier()
+}
+
 // カスタムタブのプリウォームはプロセス生存中いつでも来るため single で持つ。
 @Single
 internal fun customTabsWarmupStore(
     geckoRuntimeInitializer: GeckoRuntimeInitializer,
     webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    profileRepository: ProfileRepository,
 ): CustomTabsWarmupStore {
     return CustomTabsWarmupStore(
         geckoRuntimeInitializer = geckoRuntimeInitializer,
         webAuthnCompatWebExtension = webAuthnCompatWebExtension,
+        profileRepository = profileRepository,
     )
 }
 
@@ -217,8 +231,32 @@ internal fun themeColorWebExtension(runtime: GeckoRuntime): ThemeColorWebExtensi
 }
 
 @Single
-internal fun mediaWebExtension(context: Context, runtime: GeckoRuntime): MediaWebExtension {
-    return MediaWebExtension(context).also { it.install(runtime) }
+internal fun mediaWebExtension(
+    context: Context,
+    runtime: GeckoRuntime,
+    crashLogRepository: CrashLogRepository,
+): MediaWebExtension {
+    return MediaWebExtension(
+        context = context,
+        onBlockedPlayback = { tag, title, body ->
+            crashLogRepository.saveSync(tag = tag, title = title, body = body)
+        },
+    ).also { it.install(runtime) }
+}
+
+@Single
+internal fun backgroundSessionSuspender(
+    mediaWebExtension: MediaWebExtension,
+): BackgroundSessionSuspender {
+    return BackgroundSessionSuspender(mediaWebExtension).also { suspender ->
+        mediaWebExtension.onSessionActivated = { session ->
+            suspender.noteSessionActivated(session)
+        }
+        mediaWebExtension.addBackgroundPlaybackStoppedListener { session ->
+            suspender.onPlaybackStopped(session)
+        }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(suspender)
+    }
 }
 
 @Single
@@ -297,6 +335,8 @@ internal fun browserViewModel(
     pageTranslationWebExtension: PageTranslationWebExtension,
     siteSettingsRepository: SiteSettingsRepository,
     applicationCoroutineScope: CoroutineScope,
+    backgroundSessionSuspender: BackgroundSessionSuspender,
+    customTabProfileDeletionNotifier: CustomTabProfileDeletionNotifier,
 ): BrowserViewModel {
     return BrowserViewModel(
         runtime = runtime,
@@ -310,6 +350,8 @@ internal fun browserViewModel(
         pageTranslationWebExtension = pageTranslationWebExtension,
         siteSettingsRepository = siteSettingsRepository,
         applicationScope = applicationCoroutineScope,
+        backgroundSessionSuspender = backgroundSessionSuspender,
+        customTabProfileDeletionNotifier = customTabProfileDeletionNotifier,
     )
 }
 
@@ -492,12 +534,14 @@ internal fun customTabScreenViewModel(
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
     webAppRepository: WebAppRepository,
+    @InjectedParam displayedProfileId: Flow<ProfileId>,
 ): CustomTabScreenViewModel {
     return CustomTabScreenViewModel(
         historyRepository = historyRepository,
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
         webAppRepository = webAppRepository,
+        displayedProfileId = displayedProfileId,
     )
 }
 
@@ -513,6 +557,7 @@ internal fun webAppBrowserViewModel(
     mediaWebExtension: MediaWebExtension,
     pageTranslationWebExtension: PageTranslationWebExtension,
     applicationCoroutineScope: CoroutineScope,
+    backgroundSessionSuspender: BackgroundSessionSuspender,
 ): WebAppBrowserViewModel {
     return WebAppBrowserViewModel(
         launchRequest = launchRequest,
@@ -525,6 +570,7 @@ internal fun webAppBrowserViewModel(
         mediaWebExtension = mediaWebExtension,
         pageTranslationWebExtension = pageTranslationWebExtension,
         applicationScope = applicationCoroutineScope,
+        backgroundSessionSuspender = backgroundSessionSuspender,
     )
 }
 
@@ -543,7 +589,9 @@ internal fun webAppScreenViewModel(
     )
 }
 
+// Compiler Plugin 1.2.1 は関数の Worker 定義に検索用のクラス名を補わないため、明示する。
 @KoinWorker
+@Qualifier(DownloadWorker::class)
 internal fun downloadWorker(
     context: Context,
     workerParameters: WorkerParameters,

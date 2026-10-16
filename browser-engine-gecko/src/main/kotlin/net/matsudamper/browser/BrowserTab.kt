@@ -173,6 +173,15 @@ class BrowserTab(
     // 非表示でも setActive(true) を維持している opener。子タブ閉鎖時に解除する。
     internal var retainForLivePopup: Boolean = false
 
+    // GeckoSession に active 状態の取得 API がないため、最後に指示した値を覚える。
+    var isSessionActive: Boolean = false
+        private set
+
+    fun setSessionActive(active: Boolean) {
+        session.setActive(active)
+        isSessionActive = active
+    }
+
     // セッションを別画面のタブへ引き渡したか。引き渡した後のセッションは引き渡し先のものなので、
     // この画面の終了で閉じてはいけない。
     internal var sessionHandedOff: Boolean = false
