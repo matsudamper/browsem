@@ -2,10 +2,11 @@ package net.matsudamper.browser
 
 import android.app.Application
 import androidx.work.WorkerParameters
+import java.util.UUID
 import io.mockk.every
 import io.mockk.mockk
-import java.util.UUID
 import net.matsudamper.browser.di.BrowserAppModule
+import net.matsudamper.browser.di.module as appModule
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -16,7 +17,6 @@ import org.koin.androidx.workmanager.factory.KoinWorkerFactory
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
-import net.matsudamper.browser.di.module as appModule
 
 class DownloadWorkerFactoryTest {
     @After
