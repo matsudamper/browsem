@@ -85,6 +85,7 @@ import org.koin.core.annotation.InjectedParam
 import org.koin.core.annotation.KoinApplication
 import org.koin.core.annotation.KoinViewModel
 import org.koin.core.annotation.Module
+import org.koin.core.annotation.Qualifier
 import org.koin.core.annotation.Single
 import org.mozilla.geckoview.GeckoRuntime
 
@@ -588,7 +589,9 @@ internal fun webAppScreenViewModel(
     )
 }
 
+// Compiler Plugin 1.2.1 は関数の Worker 定義に検索用のクラス名を補わないため、明示する。
 @KoinWorker
+@Qualifier(DownloadWorker::class)
 internal fun downloadWorker(
     context: Context,
     workerParameters: WorkerParameters,
