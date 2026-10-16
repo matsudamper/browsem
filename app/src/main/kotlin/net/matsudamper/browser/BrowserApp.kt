@@ -192,9 +192,15 @@ internal fun BrowserApp(
                 },
                 onNavigateToUrl = { url ->
                     val tabId = UUID.randomUUID().toString()
+                    val profileId = viewModel.browserTabController.activeProfileId
+                    val groupId = tabGroupRepository.getGroupIdForExternalTab(profileId)
+                    if (groupId != null) {
+                        tabGroupRepository.assignTabToGroup(tabId, groupId)
+                    }
                     val newTab = viewModel.browserTabController.createAndAppendTab(
                         tabId = tabId,
                         initialUrl = url,
+                        profileId = profileId,
                     )
                     selectTabRequester.request(newTab.tabId)
                 },
