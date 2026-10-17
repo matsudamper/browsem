@@ -70,7 +70,10 @@ internal class GeckoRuntimeInitializer(
         context.registerComponentCallbacks(
             object : ComponentCallbacks {
                 override fun onConfigurationChanged(newConfig: Configuration) {
-                    mutableRuntime.value?.configurationChanged(newConfig)
+                    mutableRuntime.value?.let { runtime ->
+                        runtime.configurationChanged(newConfig)
+                        runtime.settings.setLocales(newConfig.languageTags())
+                    }
                 }
 
                 @Deprecated("メモリ不足の通知は使わない")
@@ -112,6 +115,7 @@ internal class GeckoRuntimeInitializer(
                 context,
                 GeckoRuntimeSettings.Builder()
                     .forceUserScalableEnabled(true)
+                    .locales(context.resources.configuration.languageTags())
                     .inputAutoZoomEnabled(browserSettings.resolvedInputAutoZoomEnabled())
                     .extensionsProcessEnabled(browserSettings.resolvedExtensionsProcessEnabled())
                     .build(),
@@ -143,6 +147,10 @@ internal class GeckoRuntimeInitializer(
             created
         }
     }
+}
+
+private fun Configuration.languageTags(): Array<String> {
+    return (0 until locales.size()).map { locales[it].toLanguageTag() }.toTypedArray()
 }
 
 /** GeckoView に公開設定 API がない住所自動入力を内部プリファレンスで有効にする。 */
