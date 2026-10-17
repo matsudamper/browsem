@@ -150,7 +150,7 @@ internal class GeckoRuntimeInitializer(
 }
 
 private fun Configuration.languageTags(): Array<String> {
-    return (0 until locales.size()).map { locales[it].toLanguageTag() }.toTypedArray()
+    return (0 until locales.size()).map { locales[it].stripExtensions().toLanguageTag() }.toTypedArray()
 }
 
 /** GeckoView に公開設定 API がない住所自動入力を内部プリファレンスで有効にする。 */
