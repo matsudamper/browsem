@@ -37,6 +37,11 @@ private const val ADDRESS_AUTOFILL_ENABLED_PREF = "extensions.formautofill.addre
 private const val ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF = "extensions.formautofill.addresses.capture.enabled"
 private const val ADDRESS_AUTOFILL_SUPPORTED_PREF = "extensions.formautofill.addresses.supported"
 
+private const val CJK_FALLBACK_ORDER_PREF = "font.cjk_pref_fallback_order"
+private const val JAPANESE_FIRST_CJK_FALLBACK_ORDER = "ja,zh-tw,zh-hk,zh-cn,ko"
+private const val DEFAULT_LANGUAGE_GROUP_PREF = "font.language.group"
+private const val JAPANESE_LANGUAGE_GROUP = "ja"
+
 /**
  * GeckoRuntime の生成と、生成直後に必要な拡張機能インストール・delegate 設定をまとめて行う。
  *
@@ -102,6 +107,7 @@ internal class GeckoRuntimeInitializer(
             // Gecko 起動前の pref 設定はキューされる。メインスレッドをブロックして待機すると
             // 起動処理とデッドロックするため非同期で投入する。
             enableAddressAutofill()
+            preferJapaneseCjkFonts()
             val created = GeckoRuntime.create(
                 context,
                 GeckoRuntimeSettings.Builder()
@@ -166,5 +172,33 @@ private fun enableAddressAutofill() {
             if (failed.isNotEmpty()) Log.w(TAG, "住所自動入力プリファレンスの設定に失敗: $failed")
         },
         { error -> Log.w(TAG, "住所自動入力プリファレンスの設定に失敗", error) },
+    )
+}
+
+/**
+ * GeckoView は en-US ビルドのため、lang 属性のないページの漢字が中国語字形のフォントで描画される。
+ * 言語グループと CJK フォールバック順を日本語優先にする。
+ */
+@OptIn(ExperimentalGeckoViewApi::class)
+private fun preferJapaneseCjkFonts() {
+    GeckoPreferenceController.setGeckoPrefs(
+        listOf(
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                CJK_FALLBACK_ORDER_PREF,
+                JAPANESE_FIRST_CJK_FALLBACK_ORDER,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                DEFAULT_LANGUAGE_GROUP_PREF,
+                JAPANESE_LANGUAGE_GROUP,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+        ),
+    ).accept(
+        { results ->
+            val failed = results.orEmpty().filterValues { !it }.keys
+            if (failed.isNotEmpty()) Log.w(TAG, "CJK フォント優先順プリファレンスの設定に失敗: $failed")
+        },
+        { error -> Log.w(TAG, "CJK フォント優先順プリファレンスの設定に失敗", error) },
     )
 }
