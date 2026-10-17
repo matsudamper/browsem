@@ -371,18 +371,17 @@ fun SettingsScreen(
                                 )
                             },
                         )
-                        if (uiState.geminiNanoModels.isNotEmpty()) {
-                            SettingsRadioOption(
-                                label = "Gemini Nano（端末内）",
-                                selected = uiState.semanticSearchProvider ==
+                        SettingsRadioOption(
+                            label = "Gemini Nano（端末内）",
+                            selected = uiState.semanticSearchProvider ==
+                                SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO,
+                            onClick = {
+                                uiState.callbacks.setSemanticSearchProvider(
                                     SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO,
-                                onClick = {
-                                    uiState.callbacks.setSemanticSearchProvider(
-                                        SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO,
-                                    )
-                                },
-                            )
-                        }
+                                )
+                            },
+                            enabled = uiState.geminiNanoModels.isNotEmpty(),
+                        )
                     }
                     if (uiState.semanticSearchProvider == SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO) {
                         Spacer(Modifier.height(8.dp))
