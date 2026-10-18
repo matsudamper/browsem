@@ -28,6 +28,18 @@ class SfntFamilyNameReaderTest {
     }
 
     @Test
+    fun `Unicode でも Mac Roman でもないレコードは読まない`() {
+        val macJapanese = Name(nameId = 1, text = "ignored", platformId = 1, encodingId = 1)
+        val macRoman = Name(nameId = 1, text = "Mac Roman", platformId = 1, encodingId = 0)
+        val windowsShiftJis = Name(nameId = 1, text = "ignored too", platformId = 3, encodingId = 2)
+        val single = buildSfnt(nameTable(listOf(macJapanese, macRoman, windowsShiftJis)), baseOffset = 0)
+
+        val names = SfntFamilyNameReader.readFamilyNames(ByteBuffer.wrap(single), 0)
+
+        assertEquals(listOf("Mac Roman"), names)
+    }
+
+    @Test
     fun `TTC でない単体フォントからも読める`() {
         val single = buildSfnt(nameTable(listOf(Name(nameId = 1, text = "Droid Sans Japanese"))), baseOffset = 0)
 
@@ -45,16 +57,27 @@ class SfntFamilyNameReaderTest {
         assertEquals(listOf<String>(), names)
     }
 
-    private class Name(val nameId: Int, val text: String, val languageId: Int = 0x409)
+    private class Name(
+        val nameId: Int,
+        val text: String,
+        val languageId: Int = 0x409,
+        val platformId: Int = 3,
+        val encodingId: Int = 1,
+    ) {
+        fun encode(): ByteArray {
+            return if (platformId == 1) text.toByteArray(Charsets.ISO_8859_1) else text.toByteArray(Charsets.UTF_16BE)
+        }
+    }
 
     private fun nameTable(names: List<Name>): ByteArray {
-        val encoded = names.map { it to it.text.toByteArray(Charsets.UTF_16BE) }
+        val encoded = names.map { it to it.encode() }
         val headerSize = 6 + encoded.size * 12
         val buffer = ByteBuffer.allocate(headerSize + encoded.sumOf { (_, bytes) -> bytes.size })
         buffer.putShort(0).putShort(encoded.size.toShort()).putShort(headerSize.toShort())
         var offset = 0
         encoded.forEach { (name, bytes) ->
-            buffer.putShort(3).putShort(1).putShort(name.languageId.toShort()).putShort(name.nameId.toShort())
+            buffer.putShort(name.platformId.toShort()).putShort(name.encodingId.toShort())
+            buffer.putShort(name.languageId.toShort()).putShort(name.nameId.toShort())
             buffer.putShort(bytes.size.toShort()).putShort(offset.toShort())
             offset += bytes.size
         }

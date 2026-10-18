@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.charset.Charset
 
 private const val TTC_TAG = 0x74746366 // "ttcf"
 private const val NAME_TAG = 0x6E616D65 // "name"
@@ -14,6 +15,10 @@ private const val NAME_ID_TYPOGRAPHIC_FAMILY = 16
 private const val PLATFORM_UNICODE = 0
 private const val PLATFORM_MACINTOSH = 1
 private const val PLATFORM_WINDOWS = 3
+private const val MACINTOSH_ENCODING_ROMAN = 0
+private const val WINDOWS_ENCODING_SYMBOL = 0
+private const val WINDOWS_ENCODING_UNICODE_BMP = 1
+private const val WINDOWS_ENCODING_UNICODE_FULL = 10
 
 /**
  * TrueType/OpenType フォント（TTC を含む）の name テーブルからファミリー名を読み取る。
@@ -41,14 +46,11 @@ internal object SfntFamilyNameReader {
             val nameId = input.getShort(record + 6).toInt() and 0xFFFF
             if (nameId != NAME_ID_FAMILY && nameId != NAME_ID_TYPOGRAPHIC_FAMILY) return@mapNotNull null
             val platformId = input.getShort(record).toInt() and 0xFFFF
+            val encodingId = input.getShort(record + 2).toInt() and 0xFFFF
+            val charset = nameCharset(platformId, encodingId) ?: return@mapNotNull null
             val length = input.getShort(record + 8).toInt() and 0xFFFF
             val offset = input.getShort(record + 10).toInt() and 0xFFFF
-            val bytes = input.readBytes(stringStorage + offset, length)
-            val text = when (platformId) {
-                PLATFORM_WINDOWS, PLATFORM_UNICODE -> String(bytes, Charsets.UTF_16BE)
-                PLATFORM_MACINTOSH -> String(bytes, Charsets.ISO_8859_1)
-                else -> return@mapNotNull null
-            }
+            val text = String(input.readBytes(stringStorage + offset, length), charset)
             nameId to text.trim()
         }
         val typographicNames = names.filter { (nameId, _) -> nameId == NAME_ID_TYPOGRAPHIC_FAMILY }
@@ -57,6 +59,23 @@ internal object SfntFamilyNameReader {
             .map { (_, name) -> name }
             .filter { it.isNotEmpty() }
             .distinct()
+    }
+
+    /**
+     * Gecko（HarfBuzz）が名前として読むのは Unicode 系と Mac Roman のレコードだけなので、同じ範囲に限る。
+     * Shift_JIS や Big5 を宣言する Mac のレコードを別の文字コードで復号すると、登録名と一致しない文字列になる。
+     */
+    private fun nameCharset(platformId: Int, encodingId: Int): Charset? {
+        return when (platformId) {
+            PLATFORM_UNICODE -> Charsets.UTF_16BE
+            PLATFORM_WINDOWS -> when (encodingId) {
+                WINDOWS_ENCODING_SYMBOL, WINDOWS_ENCODING_UNICODE_BMP, WINDOWS_ENCODING_UNICODE_FULL -> Charsets.UTF_16BE
+                else -> null
+            }
+
+            PLATFORM_MACINTOSH -> if (encodingId == MACINTOSH_ENCODING_ROMAN) Charsets.ISO_8859_1 else null
+            else -> null
+        }
     }
 
     private fun resolveFaceOffset(input: ByteBuffer, faceIndex: Int): Int {
