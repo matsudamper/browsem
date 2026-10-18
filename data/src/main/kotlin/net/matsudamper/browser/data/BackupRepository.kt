@@ -503,8 +503,6 @@ class BackupRepository(private val context: Context) {
             "shadercache",
             "saved-telemetry-pings",
             "security_state",
-            // 端末のシステムフォントから起動時に書き出す派生フォント
-            "fonts",
         )
 
         // ファイル名完全一致の除外。プロファイルロックや実行時ログを含めると
