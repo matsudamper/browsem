@@ -81,7 +81,7 @@ class BrowserSessionLifecycleController(
         // 失敗ナビゲーションは履歴に載らず、復元すると直前の成功ページが再表示される。
         if (tab.tabPageLoadError != null) {
             tab.session.loadUri("about:blank")
-            tab.session.setActive(true)
+            tab.setSessionActive(true)
             markActiveForExtensions(tab.session)
             return
         }
