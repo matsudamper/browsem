@@ -30,11 +30,12 @@ internal class JapaneseSystemFontExporter(
     fun export() {
         runCatching {
             val profileDir = findGeckoProfileDir() ?: return
-            val source = findJapaneseSystemFont() ?: run {
+            val source = findJapaneseSystemFont()
+            if (source == null) {
                 Log.w(TAG, "日本語のシステムフォントが見つからない")
                 return
             }
-            val sourceFile = checkNotNull(source.file)
+            val sourceFile = source.file
             val outputFile = File(profileDir, "fonts/$EXPORTED_FONT_FILE_NAME")
             if (outputFile.exists() && outputFile.lastModified() >= sourceFile.lastModified()) return
 
@@ -51,19 +52,16 @@ internal class JapaneseSystemFontExporter(
         }
     }
 
-    private fun findJapaneseSystemFont(): Font? {
+    private fun findJapaneseSystemFont(): JapaneseFontSource? {
         return SystemFonts.getAvailableFonts()
-            .filter { font ->
-                val file = font.file ?: return@filter false
-                val isJapanese = (0 until font.localeList.size()).any { font.localeList[it].language == "ja" }
-                isJapanese &&
-                    font.style.weight == FontStyle.FONT_WEIGHT_NORMAL &&
-                    font.style.slant == FontStyle.FONT_SLANT_UPRIGHT &&
-                    file.canRead()
+            .mapNotNull { font ->
+                val file = font.file
+                if (file == null || !file.canRead() || !font.isJapaneseRegular()) return@mapNotNull null
+                JapaneseFontSource(file = file, ttcIndex = font.ttcIndex)
             }
-            // 明朝（Serif）や等幅（Mono）のフェイスも ja として宣言されているため除外する
-            .sortedBy { font ->
-                val name = font.file!!.name
+            // 明朝（Serif）や等幅（Mono）のフェイスも ja として宣言されているため後回しにする
+            .sortedBy { source ->
+                val name = source.file.name
                 when {
                     name.contains("Serif", ignoreCase = true) || name.contains("Mono", ignoreCase = true) -> 2
                     name.contains("Sans", ignoreCase = true) -> 0
@@ -71,6 +69,13 @@ internal class JapaneseSystemFontExporter(
                 }
             }
             .firstOrNull()
+    }
+
+    private fun Font.isJapaneseRegular(): Boolean {
+        val isJapanese = (0 until localeList.size()).any { localeList[it].language == "ja" }
+        return isJapanese &&
+            style.weight == FontStyle.FONT_WEIGHT_NORMAL &&
+            style.slant == FontStyle.FONT_SLANT_UPRIGHT
     }
 
     /** GeckoView のプロファイルは HOME（filesDir）/mozilla 配下に profiles.ini で管理される。 */
@@ -85,4 +90,9 @@ internal class JapaneseSystemFontExporter(
         val profileDir = if (relativePath.startsWith("/")) File(relativePath) else File(mozillaDir, relativePath)
         return profileDir.takeIf { it.isDirectory }
     }
+
+    private class JapaneseFontSource(
+        val file: File,
+        val ttcIndex: Int,
+    )
 }
