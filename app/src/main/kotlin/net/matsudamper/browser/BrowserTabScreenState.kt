@@ -175,9 +175,12 @@ internal class BrowserTabScreenState(
     var onWebAppCrossDomainNavigation by mutableStateOf(onWebAppCrossDomainNavigation)
     val session: GeckoSession get() = browserTab.session
 
-    var urlInput by mutableStateOf(browserTab.currentUrl)
-    var currentPageUrl by mutableStateOf(browserTab.currentUrl)
-    var currentPageTitle by mutableStateOf(browserTab.title)
+    // 失敗ナビゲーションは BrowserTab.currentUrl に反映されないため、エラー表示中は失敗 URL を優先する
+    private val initialPageUrl = browserTab.tabPageLoadError?.failingUrl?.takeIf { it.isNotBlank() }
+        ?: browserTab.currentUrl
+    var urlInput by mutableStateOf(initialPageUrl)
+    var currentPageUrl by mutableStateOf(initialPageUrl)
+    var currentPageTitle by mutableStateOf(browserTab.tabPageLoadError?.title ?: browserTab.title)
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
     var isUrlInputFocused by mutableStateOf(false)
