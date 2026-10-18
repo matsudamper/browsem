@@ -533,6 +533,7 @@ internal class BrowserTabScreenState(
 
     fun jumpToHistoryEntry(targetIndex: Int) {
         if (targetIndex == tabHistoryCurrentIndex) return
+        clearPageLoadError()
         skipHistoryRecordCount++
         tabHistoryCurrentIndex = targetIndex
         session.gotoHistoryIndex(targetIndex)
