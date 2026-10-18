@@ -172,12 +172,11 @@ class BrowserSessionLifecycleControllerTest {
     }
 
     @Test
-    fun `読み込み失敗表示中は sessionState を復元せず about_blank を開く`() {
+    fun `読み込み失敗表示中で復元する sessionState が無い場合は初回 URL を読まず about_blank を開く`() {
         val runtime = mockk<GeckoRuntime>(relaxed = true)
         val session = mockk<GeckoSession>(relaxed = true)
         every { session.isOpen } returns false
         val tab = createTab(session)
-        tab.sessionState = "restored-state"
         tab.tabPageLoadError = TabPageLoadError(
             title = "アドレスが見つかりません",
             message = "失敗",
@@ -189,8 +188,8 @@ class BrowserSessionLifecycleControllerTest {
 
         verify { session.open(runtime) }
         verify { session.loadUri("about:blank") }
-        verify(exactly = 0) { session.restoreState(any()) }
-        verify { session.setActive(true) }
+        assert(!controller.hasPendingInitialLoad(tab))
+        assert(tab.isSessionActive)
     }
 
     @Test

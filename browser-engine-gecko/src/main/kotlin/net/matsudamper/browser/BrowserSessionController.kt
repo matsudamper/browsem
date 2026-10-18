@@ -77,14 +77,6 @@ class BrowserSessionLifecycleController(
             return
         }
         tab.session.open(geckoRuntime)
-        // 読み込み失敗オーバーレイ表示中は sessionState を復元しない。
-        // 失敗ナビゲーションは履歴に載らず、復元すると直前の成功ページが再表示される。
-        if (tab.tabPageLoadError != null) {
-            tab.session.loadUri("about:blank")
-            tab.setSessionActive(true)
-            markActiveForExtensions(tab.session)
-            return
-        }
         // 通常は pendingSessionState (永続化からの復元用) を使うが、それが既に消費済みの
         // 場合でも tab.sessionState (直近の onSessionStateChange でキャッシュされた状態) に
         // フォールバックする。これにより、一度正常に開いた後にコンテンツプロセスが
@@ -102,6 +94,13 @@ class BrowserSessionLifecycleController(
                 markActiveForExtensions(tab.session)
                 return
             }
+        }
+        // 読み込み失敗オーバーレイ表示中は、失敗 URL と無関係な初回 URL を背後で読み込まない
+        if (tab.tabPageLoadError != null) {
+            tab.session.loadUri("about:blank")
+            tab.setSessionActive(true)
+            markActiveForExtensions(tab.session)
+            return
         }
         // 初回ロードは GeckoView の Surface サイズ確定後まで遅延する。
         // 未確定 viewport でロードすると ImageDocument (画像単体表示) の
