@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.content.Context
 import android.util.Log
 import java.io.File
+import kotlinx.coroutines.delay
 
 private const val TAG = "BundledJapaneseFontInstaller"
 
@@ -12,6 +13,8 @@ internal const val BUNDLED_JAPANESE_FONT_FAMILY = "Noto Sans JP"
 private const val BUNDLED_FONT_ASSET_PATH = "fonts/NotoSansJP-Regular.ttf"
 private const val INSTALLED_FONT_FILE_PREFIX = "browsem-"
 private const val INSTALLED_FONT_FILE_NAME = "${INSTALLED_FONT_FILE_PREFIX}noto-sans-jp-regular-v1.ttf"
+private const val PROFILE_WAIT_ATTEMPTS = 50
+private const val PROFILE_WAIT_INTERVAL_MILLIS = 200L
 
 /**
  * Gecko はフォントをファミリー名で探すため、端末の CJK フォント構成（TTC の日本語フェイスや
@@ -20,14 +23,14 @@ private const val INSTALLED_FONT_FILE_NAME = "${INSTALLED_FONT_FILE_PREFIX}noto-
  * フォント設定からファミリー名で参照できるようにする。
  *
  * Gecko は起動時に fonts ディレクトリを走査するため、GeckoRuntime 生成前に呼ぶ。
- * プロファイルが未作成の初回起動では配置できず、次回起動から反映される。
  */
 internal class BundledJapaneseFontInstaller(
     private val context: Context,
 ) {
-    fun install() {
+    /** プロファイルが見つかれば配置して true。未作成なら false。 */
+    fun install(): Boolean {
+        val profileDir = runCatching { findGeckoProfileDir() }.getOrNull() ?: return false
         runCatching {
-            val profileDir = findGeckoProfileDir() ?: return
             val fontsDir = File(profileDir, "fonts")
             val installedFile = File(fontsDir, INSTALLED_FONT_FILE_NAME)
             if (!installedFile.exists()) {
@@ -38,6 +41,18 @@ internal class BundledJapaneseFontInstaller(
                 ?.forEach { it.delete() }
         }.onFailure { error ->
             Log.w(TAG, "同梱日本語フォントの配置に失敗", error)
+        }
+        return true
+    }
+
+    /**
+     * 初回起動ではプロファイルが Gecko の起動中に作られる。作られ次第配置し、
+     * Gecko がフォント一覧を構築する前に間に合えば初回起動から反映される。
+     */
+    suspend fun installWhenProfileCreated() {
+        repeat(PROFILE_WAIT_ATTEMPTS) {
+            if (install()) return
+            delay(PROFILE_WAIT_INTERVAL_MILLIS)
         }
     }
 

@@ -7,10 +7,12 @@ import android.util.Log
 import androidx.annotation.OptIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -97,6 +99,7 @@ internal class GeckoRuntimeInitializer(
 ) {
     private val initializeMutex = Mutex()
     private val bundledJapaneseFontInstaller = BundledJapaneseFontInstaller(context)
+    private val fontInstallScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutableRuntime = MutableStateFlow<GeckoRuntime?>(null)
 
     init {
@@ -128,8 +131,12 @@ internal class GeckoRuntimeInitializer(
         mutableRuntime.value?.let { return it }
         return initializeMutex.withLock {
             mutableRuntime.value ?: run {
-                withContext(Dispatchers.IO) { bundledJapaneseFontInstaller.install() }
-                createRuntime(settingsRepository.settings.first())
+                val fontInstalled = withContext(Dispatchers.IO) { bundledJapaneseFontInstaller.install() }
+                val created = createRuntime(settingsRepository.settings.first())
+                if (!fontInstalled) {
+                    fontInstallScope.launch { bundledJapaneseFontInstaller.installWhenProfileCreated() }
+                }
+                created
             }
         }
     }
