@@ -5,6 +5,9 @@ import java.nio.ByteOrder
 
 private const val TTC_TAG = 0x74746366 // "ttcf"
 private const val NAME_TAG = 0x6E616D65 // "name"
+private const val HEAD_TAG = 0x68656164 // "head"
+private const val HEAD_CHECKSUM_ADJUSTMENT_OFFSET = 8
+private const val SFNT_CHECKSUM_MAGIC = 0xB1B0AFBA.toInt()
 private const val SFNT_HEADER_SIZE = 12
 private const val TABLE_RECORD_SIZE = 16
 private const val NAME_RECORD_SIZE = 12
@@ -43,10 +46,15 @@ internal object SfntFaceExtractor {
             val tag = input.getInt(record)
             val offset = input.getInt(record + 8)
             val length = input.getInt(record + 12)
-            val data = if (tag == NAME_TAG) {
-                buildNameTable(input, offset, familyName)
-            } else {
-                input.readBytes(offset, length)
+            val data = when (tag) {
+                NAME_TAG -> buildNameTable(input, offset, familyName)
+
+                // 調整値はファイル全体から計算し直すため、テーブルのチェックサムは 0 として求める
+                HEAD_TAG -> input.readBytes(offset, length).also { head ->
+                    head.fill(0, HEAD_CHECKSUM_ADJUSTMENT_OFFSET, HEAD_CHECKSUM_ADJUSTMENT_OFFSET + 4)
+                }
+
+                else -> input.readBytes(offset, length)
             }
             tag to data
         }.sortedBy { (tag, _) -> tag.toUInt() }
@@ -138,17 +146,23 @@ internal object SfntFaceExtractor {
         output.putShort(entrySelector.toShort())
         output.putShort((tables.size * TABLE_RECORD_SIZE - searchRange).toShort())
 
-        var dataOffset = headerSize
-        tables.forEach { (tag, data) ->
+        val tableOffsets = tables.runningFold(headerSize) { offset, (_, data) -> offset + padded(data.size) }
+        tables.forEachIndexed { index, (tag, data) ->
             output.putInt(tag)
             output.putInt(checksum(data))
-            output.putInt(dataOffset)
+            output.putInt(tableOffsets[index])
             output.putInt(data.size)
-            dataOffset += padded(data.size)
         }
         tables.forEach { (_, data) ->
             output.put(data)
             repeat(padded(data.size) - data.size) { output.put(0) }
+        }
+        val headIndex = tables.indexOfFirst { (tag, _) -> tag == HEAD_TAG }.takeIf { it >= 0 }
+        if (headIndex != null) {
+            output.putInt(
+                tableOffsets[headIndex] + HEAD_CHECKSUM_ADJUSTMENT_OFFSET,
+                SFNT_CHECKSUM_MAGIC - checksum(output.array()),
+            )
         }
         return output.array()
     }

@@ -30,6 +30,18 @@ class SfntFaceExtractorTest {
     }
 
     @Test
+    fun `書き出したフォント全体のチェックサムが仕様の値になる`() {
+        val collection = buildCollection(listOf(face(glyphData = byteArrayOf(1, 2, 3), familyName = "Original")))
+
+        val extracted = SfntFaceExtractor.extract(ByteBuffer.wrap(collection), 0, "Browsem Test")
+
+        val sum = ByteBuffer.wrap(extracted).let { buffer ->
+            (0 until extracted.size / 4).sumOf { buffer.getInt(it * 4) }
+        }
+        assertEquals(0xB1B0AFBA.toInt(), sum)
+    }
+
+    @Test
     fun `TTC でない単体フォントもファミリー名を差し替えられる`() {
         val single = face(glyphData = byteArrayOf(3), familyName = "Original").let { buildSfnt(it, baseOffset = 0) }
 
@@ -42,7 +54,13 @@ class SfntFaceExtractorTest {
     private class Face(val tables: List<Pair<Int, ByteArray>>)
 
     private fun face(glyphData: ByteArray, familyName: String): Face {
-        return Face(listOf(GLYF_TAG to glyphData, NAME_TAG to nameTable(mapOf(0 to "copyright", 1 to familyName))))
+        return Face(
+            listOf(
+                GLYF_TAG to glyphData,
+                HEAD_TAG to ByteArray(54) { 0x11 },
+                NAME_TAG to nameTable(mapOf(0 to "copyright", 1 to familyName)),
+            ),
+        )
     }
 
     private fun nameTable(names: Map<Int, String>): ByteArray {
@@ -119,5 +137,6 @@ class SfntFaceExtractorTest {
     private companion object {
         const val GLYF_TAG = 0x676C7966
         const val NAME_TAG = 0x6E616D65
+        const val HEAD_TAG = 0x68656164
     }
 }
