@@ -380,6 +380,7 @@ fun SettingsScreen(
                                     SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO,
                                 )
                             },
+                            enabled = uiState.geminiNanoModels.isNotEmpty(),
                         )
                     }
                     if (uiState.semanticSearchProvider == SemanticSearchProvider.SEMANTIC_SEARCH_GEMINI_NANO) {
