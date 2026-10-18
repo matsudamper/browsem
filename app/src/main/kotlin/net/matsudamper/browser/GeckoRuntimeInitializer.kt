@@ -42,6 +42,8 @@ private const val JAPANESE_FIRST_CJK_FALLBACK_ORDER = "ja,zh-tw,zh-hk,zh-cn,ko"
 private const val DEFAULT_LANGUAGE_GROUP_PREF = "font.language.group"
 private const val JAPANESE_LANGUAGE_GROUP = "ja"
 private const val JAPANESE_SANS_SERIF_FONTS_PREF = "font.name-list.sans-serif.ja"
+private const val JAPANESE_SERIF_FONTS_PREF = "font.name-list.serif.ja"
+private const val JAPANESE_MONOSPACE_FONTS_PREF = "font.name-list.monospace.ja"
 
 // Gecko の Android 既定値から、欧文用フォントと端末の日本語フォントの直後に同梱フォントを置く
 private val JAPANESE_SANS_SERIF_FONTS = listOf(
@@ -54,6 +56,24 @@ private val JAPANESE_SANS_SERIF_FONTS = listOf(
     "MotoyaLCedar",
     "SEC CJK JP",
     "Droid Sans Japanese",
+).joinToString(", ")
+
+// 明朝・等幅のページでも中国語字形にならないよう、端末の日本語フォントの直後に同梱フォントを置く
+private val JAPANESE_SERIF_FONTS = listOf(
+    "Charis SIL Compact",
+    "Noto Serif CJK JP",
+    BUNDLED_JAPANESE_FONT_FAMILY,
+    "Noto Serif",
+    "Droid Serif",
+).joinToString(", ")
+
+private val JAPANESE_MONOSPACE_FONTS = listOf(
+    "MotoyaLMaru",
+    "MotoyaLCedar",
+    "Noto Sans Mono CJK JP",
+    "SEC Mono CJK JP",
+    BUNDLED_JAPANESE_FONT_FAMILY,
+    "Droid Sans Mono",
 ).joinToString(", ")
 
 /**
@@ -222,6 +242,16 @@ private fun preferJapaneseCjkFonts() {
             GeckoPreferenceController.SetGeckoPreference.setStringPref(
                 JAPANESE_SANS_SERIF_FONTS_PREF,
                 JAPANESE_SANS_SERIF_FONTS,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                JAPANESE_SERIF_FONTS_PREF,
+                JAPANESE_SERIF_FONTS,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                JAPANESE_MONOSPACE_FONTS_PREF,
+                JAPANESE_MONOSPACE_FONTS,
                 GeckoPreferenceController.PREF_BRANCH_USER,
             ),
         ),
