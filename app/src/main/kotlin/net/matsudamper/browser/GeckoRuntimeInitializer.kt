@@ -37,6 +37,36 @@ private const val ADDRESS_AUTOFILL_ENABLED_PREF = "extensions.formautofill.addre
 private const val ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF = "extensions.formautofill.addresses.capture.enabled"
 private const val ADDRESS_AUTOFILL_SUPPORTED_PREF = "extensions.formautofill.addresses.supported"
 
+private const val CJK_FALLBACK_ORDER_PREF = "font.cjk_pref_fallback_order"
+private const val JAPANESE_FIRST_CJK_FALLBACK_ORDER = "ja,zh-tw,zh-hk,zh-cn,ko"
+private const val DEFAULT_LANGUAGE_GROUP_PREF = "font.language.group"
+private const val JAPANESE_LANGUAGE_GROUP = "ja"
+private const val JAPANESE_SANS_SERIF_FONTS_PREF = "font.name-list.sans-serif.ja"
+private const val JAPANESE_SERIF_FONTS_PREF = "font.name-list.serif.ja"
+private const val JAPANESE_MONOSPACE_FONTS_PREF = "font.name-list.monospace.ja"
+
+// 候補リストの先頭は各 generic の主フォントになるため、欧文用フォントを先に置き、
+// その直後に Android が日本語に割り当てたフォントを入れて Gecko の既定候補より優先させる
+private val LATIN_SANS_SERIF_FONTS = listOf("Roboto", "Google Sans")
+private val DEFAULT_JAPANESE_SANS_SERIF_FONTS = listOf(
+    "Noto Sans CJK JP",
+    "Droid Sans",
+    "MotoyaLMaru",
+    "MotoyaLCedar",
+    "Noto Sans JP",
+    "SEC CJK JP",
+    "Droid Sans Japanese",
+)
+private val LATIN_SERIF_FONTS = listOf("Charis SIL Compact")
+private val DEFAULT_JAPANESE_SERIF_FONTS = listOf("Noto Serif CJK JP", "Noto Serif", "Droid Serif")
+private val LATIN_MONOSPACE_FONTS = listOf("Droid Sans Mono")
+private val DEFAULT_JAPANESE_MONOSPACE_FONTS = listOf(
+    "Noto Sans Mono CJK JP",
+    "SEC Mono CJK JP",
+    "MotoyaLMaru",
+    "MotoyaLCedar",
+)
+
 /**
  * GeckoRuntime の生成と、生成直後に必要な拡張機能インストール・delegate 設定をまとめて行う。
  *
@@ -65,7 +95,10 @@ internal class GeckoRuntimeInitializer(
         context.registerComponentCallbacks(
             object : ComponentCallbacks {
                 override fun onConfigurationChanged(newConfig: Configuration) {
-                    mutableRuntime.value?.configurationChanged(newConfig)
+                    mutableRuntime.value?.let { runtime ->
+                        runtime.configurationChanged(newConfig)
+                        runtime.settings.setLocales(newConfig.languageTags())
+                    }
                 }
 
                 @Deprecated("メモリ不足の通知は使わない")
@@ -83,7 +116,13 @@ internal class GeckoRuntimeInitializer(
     suspend fun initialize(): GeckoRuntime {
         mutableRuntime.value?.let { return it }
         return initializeMutex.withLock {
-            mutableRuntime.value ?: createRuntime(settingsRepository.settings.first())
+            mutableRuntime.value ?: run {
+                val japaneseFontFamilies = withContext(Dispatchers.IO) {
+                    StaleProfileFontCleaner.delete(context)
+                    JapaneseSystemFontFamilies.resolve()
+                }
+                createRuntime(settingsRepository.settings.first(), japaneseFontFamilies)
+            }
         }
     }
 
@@ -97,15 +136,20 @@ internal class GeckoRuntimeInitializer(
         }
     }
 
-    private suspend fun createRuntime(browserSettings: BrowserSettings): GeckoRuntime {
+    private suspend fun createRuntime(
+        browserSettings: BrowserSettings,
+        japaneseFontFamilies: JapaneseSystemFontFamilies,
+    ): GeckoRuntime {
         return withContext(Dispatchers.Main.immediate) {
             // Gecko 起動前の pref 設定はキューされる。メインスレッドをブロックして待機すると
             // 起動処理とデッドロックするため非同期で投入する。
             enableAddressAutofill()
+            preferJapaneseCjkFonts(japaneseFontFamilies)
             val created = GeckoRuntime.create(
                 context,
                 GeckoRuntimeSettings.Builder()
                     .forceUserScalableEnabled(true)
+                    .locales(context.resources.configuration.languageTags())
                     .inputAutoZoomEnabled(browserSettings.resolvedInputAutoZoomEnabled())
                     .extensionsProcessEnabled(browserSettings.resolvedExtensionsProcessEnabled())
                     .build(),
@@ -139,6 +183,10 @@ internal class GeckoRuntimeInitializer(
     }
 }
 
+private fun Configuration.languageTags(): Array<String> {
+    return (0 until locales.size()).map { locales[it].stripExtensions().toLanguageTag() }.toTypedArray()
+}
+
 /** GeckoView に公開設定 API がない住所自動入力を内部プリファレンスで有効にする。 */
 @OptIn(ExperimentalGeckoViewApi::class)
 private fun enableAddressAutofill() {
@@ -167,4 +215,67 @@ private fun enableAddressAutofill() {
         },
         { error -> Log.w(TAG, "住所自動入力プリファレンスの設定に失敗", error) },
     )
+}
+
+/**
+ * GeckoView は en-US ビルドのため、lang 属性のないページの漢字が中国語字形のフォントで描画される。
+ * 言語グループと CJK フォールバック順を日本語優先にし、日本語フォントの候補には
+ * Android が日本語に割り当てたフォントを Gecko の既定候補より先に入れる。
+ */
+@OptIn(ExperimentalGeckoViewApi::class)
+private fun preferJapaneseCjkFonts(japaneseFontFamilies: JapaneseSystemFontFamilies) {
+    GeckoPreferenceController.setGeckoPrefs(
+        listOf(
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                CJK_FALLBACK_ORDER_PREF,
+                JAPANESE_FIRST_CJK_FALLBACK_ORDER,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                DEFAULT_LANGUAGE_GROUP_PREF,
+                JAPANESE_LANGUAGE_GROUP,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                JAPANESE_SANS_SERIF_FONTS_PREF,
+                fontNameList(LATIN_SANS_SERIF_FONTS, japaneseFontFamilies.sansSerif, DEFAULT_JAPANESE_SANS_SERIF_FONTS),
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                JAPANESE_SERIF_FONTS_PREF,
+                fontNameList(
+                    LATIN_SERIF_FONTS,
+                    japaneseFontFamilies.serif + japaneseFontFamilies.sansSerif,
+                    DEFAULT_JAPANESE_SERIF_FONTS,
+                ),
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                JAPANESE_MONOSPACE_FONTS_PREF,
+                fontNameList(
+                    LATIN_MONOSPACE_FONTS,
+                    japaneseFontFamilies.monospace + japaneseFontFamilies.sansSerif,
+                    DEFAULT_JAPANESE_MONOSPACE_FONTS,
+                ),
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+        ),
+    ).accept(
+        { results ->
+            val failed = results.orEmpty().filterValues { !it }.keys
+            if (failed.isNotEmpty()) Log.w(TAG, "CJK フォント優先順プリファレンスの設定に失敗: $failed")
+        },
+        { error -> Log.w(TAG, "CJK フォント優先順プリファレンスの設定に失敗", error) },
+    )
+}
+
+/** font.name-list.* はカンマ区切りのため、名前にカンマを含むフォントは入れられない。 */
+private fun fontNameList(
+    latinFonts: List<String>,
+    systemJapaneseFonts: List<String>,
+    defaultJapaneseFonts: List<String>,
+): String {
+    return (latinFonts + systemJapaneseFonts.filterNot { it.contains(',') } + defaultJapaneseFonts)
+        .distinct()
+        .joinToString(", ")
 }
