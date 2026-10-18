@@ -41,6 +41,21 @@ private const val CJK_FALLBACK_ORDER_PREF = "font.cjk_pref_fallback_order"
 private const val JAPANESE_FIRST_CJK_FALLBACK_ORDER = "ja,zh-tw,zh-hk,zh-cn,ko"
 private const val DEFAULT_LANGUAGE_GROUP_PREF = "font.language.group"
 private const val JAPANESE_LANGUAGE_GROUP = "ja"
+private const val JAPANESE_SANS_SERIF_FONTS_PREF = "font.name-list.sans-serif.ja"
+
+// Gecko の Android 既定値の先頭（欧文用）の直後に、書き出した日本語フォントを差し込む
+private val JAPANESE_SANS_SERIF_FONTS = listOf(
+    "Roboto",
+    "Google Sans",
+    EXPORTED_JAPANESE_FONT_FAMILY,
+    "Droid Sans",
+    "MotoyaLMaru",
+    "MotoyaLCedar",
+    "Noto Sans JP",
+    "Noto Sans CJK JP",
+    "SEC CJK JP",
+    "Droid Sans Japanese",
+).joinToString(", ")
 
 /**
  * GeckoRuntime の生成と、生成直後に必要な拡張機能インストール・delegate 設定をまとめて行う。
@@ -61,6 +76,7 @@ internal class GeckoRuntimeInitializer(
     private val autocompleteCoroutineScope: CoroutineScope,
 ) {
     private val initializeMutex = Mutex()
+    private val japaneseSystemFontExporter = JapaneseSystemFontExporter(context)
     private val mutableRuntime = MutableStateFlow<GeckoRuntime?>(null)
 
     init {
@@ -91,7 +107,10 @@ internal class GeckoRuntimeInitializer(
     suspend fun initialize(): GeckoRuntime {
         mutableRuntime.value?.let { return it }
         return initializeMutex.withLock {
-            mutableRuntime.value ?: createRuntime(settingsRepository.settings.first())
+            mutableRuntime.value ?: run {
+                withContext(Dispatchers.IO) { japaneseSystemFontExporter.export() }
+                createRuntime(settingsRepository.settings.first())
+            }
         }
     }
 
@@ -199,6 +218,11 @@ private fun preferJapaneseCjkFonts() {
             GeckoPreferenceController.SetGeckoPreference.setStringPref(
                 DEFAULT_LANGUAGE_GROUP_PREF,
                 JAPANESE_LANGUAGE_GROUP,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                JAPANESE_SANS_SERIF_FONTS_PREF,
+                JAPANESE_SANS_SERIF_FONTS,
                 GeckoPreferenceController.PREF_BRANCH_USER,
             ),
         ),
