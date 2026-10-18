@@ -14,7 +14,10 @@ private const val TAG = "JapaneseSystemFontExporter"
 /** Gecko のフォント設定から参照する、書き出した日本語フォントのファミリー名。 */
 internal const val EXPORTED_JAPANESE_FONT_FAMILY = "Browsem Japanese Sans"
 
-private const val EXPORTED_FONT_FILE_NAME = "browsem-japanese-sans.otf"
+private const val EXPORTED_FONT_FILE_PREFIX = "browsem-japanese-sans-"
+
+// 書き出し形式を変えたら上げ、既存の書き出し済みファイルを作り直させる
+private const val EXPORT_FORMAT_VERSION = 1
 
 /**
  * Android の CJK フォント（NotoSansCJK の TTC）は、Gecko がファミリー名で探すと日本語フェイスを選べず
@@ -35,21 +38,30 @@ internal class JapaneseSystemFontExporter(
                 Log.w(TAG, "日本語のシステムフォントが見つからない")
                 return
             }
-            val sourceFile = source.file
-            val outputFile = File(profileDir, "fonts/$EXPORTED_FONT_FILE_NAME")
-            if (outputFile.exists() && outputFile.lastModified() >= sourceFile.lastModified()) return
-
-            val extracted = RandomAccessFile(sourceFile, "r").use { file ->
-                val buffer = file.channel.map(FileChannel.MapMode.READ_ONLY, 0, file.length())
-                SfntFaceExtractor.extract(buffer, source.ttcIndex, EXPORTED_JAPANESE_FONT_FAMILY)
+            val fontsDir = File(profileDir, "fonts")
+            // バックアップ復元で別端末の書き出し結果が持ち込まれることがあるため、
+            // mtime ではなく元フォントを識別する情報をファイル名に含めて作り直しを判定する
+            val outputFile = File(fontsDir, "$EXPORTED_FONT_FILE_PREFIX${source.identity()}.otf")
+            if (!outputFile.exists()) {
+                writeExtractedFont(source, outputFile)
             }
-            outputFile.parentFile?.mkdirs()
-            val tempFile = File(outputFile.parentFile, "${outputFile.name}.tmp")
-            tempFile.writeBytes(extracted)
-            check(tempFile.renameTo(outputFile)) { "書き出したフォントの配置に失敗" }
+            fontsDir.listFiles()
+                ?.filter { it.name.startsWith(EXPORTED_FONT_FILE_PREFIX) && it != outputFile }
+                ?.forEach { it.delete() }
         }.onFailure { error ->
             Log.w(TAG, "日本語フォントの書き出しに失敗", error)
         }
+    }
+
+    private fun writeExtractedFont(source: JapaneseFontSource, outputFile: File) {
+        val extracted = RandomAccessFile(source.file, "r").use { file ->
+            val buffer = file.channel.map(FileChannel.MapMode.READ_ONLY, 0, file.length())
+            SfntFaceExtractor.extract(buffer, source.ttcIndex, EXPORTED_JAPANESE_FONT_FAMILY)
+        }
+        outputFile.parentFile?.mkdirs()
+        val tempFile = File(outputFile.parentFile, "${outputFile.name}.tmp")
+        tempFile.writeBytes(extracted)
+        check(tempFile.renameTo(outputFile)) { "書き出したフォントの配置に失敗" }
     }
 
     private fun findJapaneseSystemFont(): JapaneseFontSource? {
@@ -94,5 +106,11 @@ internal class JapaneseSystemFontExporter(
     private class JapaneseFontSource(
         val file: File,
         val ttcIndex: Int,
-    )
+    ) {
+        fun identity(): String {
+            val key = listOf(file.absolutePath, file.length(), file.lastModified(), ttcIndex, EXPORT_FORMAT_VERSION)
+                .joinToString(":")
+            return Integer.toHexString(key.hashCode())
+        }
+    }
 }
