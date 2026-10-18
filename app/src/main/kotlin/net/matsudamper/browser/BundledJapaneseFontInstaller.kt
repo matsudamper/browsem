@@ -53,6 +53,10 @@ internal class BundledJapaneseFontInstaller(
     /** GeckoView のプロファイルは HOME（filesDir）/mozilla 配下に profiles.ini で管理される。 */
     private fun findGeckoProfileDir(): File? {
         val mozillaDir = File(context.filesDir, "mozilla")
+        return readProfileDirFromProfilesIni(mozillaDir) ?: findDefaultProfileDir(mozillaDir)
+    }
+
+    private fun readProfileDirFromProfilesIni(mozillaDir: File): File? {
         val profilesIni = File(mozillaDir, "profiles.ini")
         if (!profilesIni.exists()) return null
         val profilePath = profilesIni.readLines()
@@ -61,5 +65,12 @@ internal class BundledJapaneseFontInstaller(
             ?: return null
         val profileDir = if (profilePath.startsWith("/")) File(profilePath) else File(mozillaDir, profilePath)
         return profileDir.takeIf { it.isDirectory }
+    }
+
+    /** profiles.ini が書き出される前でも、Gecko が作る <salt>.default ディレクトリがあれば使う。 */
+    private fun findDefaultProfileDir(mozillaDir: File): File? {
+        return mozillaDir.listFiles()
+            ?.filter { it.isDirectory && it.name.endsWith(".default") }
+            ?.maxByOrNull { it.lastModified() }
     }
 }
