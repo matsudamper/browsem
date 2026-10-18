@@ -914,7 +914,8 @@ internal class BrowserTabScreenState(
             failingUrl = resolvedError.failingUrl,
         )
         if (failedUrl.isNotBlank()) {
-            recordBrowsingHistory(url = failedUrl, title = resolvedError.title)
+            // 失敗ナビゲーションは Gecko のセッション履歴に載らないため、タブ内履歴には追加しない
+            recordBrowsingHistory(url = failedUrl, title = resolvedError.title, appendToTabHistory = false)
         }
     }
 
@@ -1406,14 +1407,16 @@ internal class BrowserTabScreenState(
         browserTab.tabPageLoadError = null
     }
 
-    private fun recordBrowsingHistory(url: String, title: String) {
+    private fun recordBrowsingHistory(url: String, title: String, appendToTabHistory: Boolean = true) {
         val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
         val skip = skipHistoryRecordCount > 0
         if (skip) skipHistoryRecordCount--
         if (!shouldRecord || skip) return
-        val newItem = TabHistoryItem(uri = url, title = title)
-        tabHistoryItems = tabHistoryItems.take(tabHistoryCurrentIndex + 1) + newItem
-        tabHistoryCurrentIndex = tabHistoryItems.lastIndex
+        if (appendToTabHistory) {
+            val newItem = TabHistoryItem(uri = url, title = title)
+            tabHistoryItems = tabHistoryItems.take(tabHistoryCurrentIndex + 1) + newItem
+            tabHistoryCurrentIndex = tabHistoryItems.lastIndex
+        }
 
         historyRecordSequence++
         val sequence = historyRecordSequence
