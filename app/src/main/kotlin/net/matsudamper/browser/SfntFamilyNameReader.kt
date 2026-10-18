@@ -68,12 +68,14 @@ internal object SfntFamilyNameReader {
     private fun nameCharset(platformId: Int, encodingId: Int): Charset? {
         return when (platformId) {
             PLATFORM_UNICODE -> Charsets.UTF_16BE
+
             PLATFORM_WINDOWS -> when (encodingId) {
                 WINDOWS_ENCODING_SYMBOL, WINDOWS_ENCODING_UNICODE_BMP, WINDOWS_ENCODING_UNICODE_FULL -> Charsets.UTF_16BE
                 else -> null
             }
 
             PLATFORM_MACINTOSH -> if (encodingId == MACINTOSH_ENCODING_ROMAN) Charsets.ISO_8859_1 else null
+
             else -> null
         }
     }
