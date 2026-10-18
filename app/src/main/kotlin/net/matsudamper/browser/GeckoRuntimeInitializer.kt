@@ -43,16 +43,15 @@ private const val DEFAULT_LANGUAGE_GROUP_PREF = "font.language.group"
 private const val JAPANESE_LANGUAGE_GROUP = "ja"
 private const val JAPANESE_SANS_SERIF_FONTS_PREF = "font.name-list.sans-serif.ja"
 
-// Gecko の Android 既定値の先頭（欧文用）の直後に、書き出した日本語フォントを差し込む
+// Gecko の Android 既定値から、欧文用フォントと端末の日本語フォントの直後に同梱フォントを置く
 private val JAPANESE_SANS_SERIF_FONTS = listOf(
     "Roboto",
     "Google Sans",
-    EXPORTED_JAPANESE_FONT_FAMILY,
+    "Noto Sans CJK JP",
+    BUNDLED_JAPANESE_FONT_FAMILY,
     "Droid Sans",
     "MotoyaLMaru",
     "MotoyaLCedar",
-    "Noto Sans JP",
-    "Noto Sans CJK JP",
     "SEC CJK JP",
     "Droid Sans Japanese",
 ).joinToString(", ")
@@ -76,7 +75,7 @@ internal class GeckoRuntimeInitializer(
     private val autocompleteCoroutineScope: CoroutineScope,
 ) {
     private val initializeMutex = Mutex()
-    private val japaneseSystemFontExporter = JapaneseSystemFontExporter(context)
+    private val bundledJapaneseFontInstaller = BundledJapaneseFontInstaller(context)
     private val mutableRuntime = MutableStateFlow<GeckoRuntime?>(null)
 
     init {
@@ -108,7 +107,7 @@ internal class GeckoRuntimeInitializer(
         mutableRuntime.value?.let { return it }
         return initializeMutex.withLock {
             mutableRuntime.value ?: run {
-                withContext(Dispatchers.IO) { japaneseSystemFontExporter.export() }
+                withContext(Dispatchers.IO) { bundledJapaneseFontInstaller.install() }
                 createRuntime(settingsRepository.settings.first())
             }
         }
