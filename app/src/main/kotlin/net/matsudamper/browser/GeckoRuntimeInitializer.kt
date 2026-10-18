@@ -67,13 +67,14 @@ private val JAPANESE_SERIF_FONTS = listOf(
     "Droid Serif",
 ).joinToString(", ")
 
+// 先頭が monospace の主フォントになるため、欧文が等幅のままになるよう Droid Sans Mono を先に置く
 private val JAPANESE_MONOSPACE_FONTS = listOf(
-    "MotoyaLMaru",
-    "MotoyaLCedar",
+    "Droid Sans Mono",
     "Noto Sans Mono CJK JP",
     "SEC Mono CJK JP",
+    "MotoyaLMaru",
+    "MotoyaLCedar",
     BUNDLED_JAPANESE_FONT_FAMILY,
-    "Droid Sans Mono",
 ).joinToString(", ")
 
 /**
