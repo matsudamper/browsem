@@ -51,16 +51,29 @@ class ExternalAppNavigationTest {
             shouldCheckExternalAppForNavigation(
                 uri = "https://example.com/",
                 isRedirect = false,
+                isNavigationStartedByUser = false,
             ),
         )
     }
 
     @Test
-    fun `リダイレクト先は App Links 判定を行わない`() {
+    fun `ページが自動で始めた遷移のリダイレクト先は App Links 判定を行わない`() {
         assertFalse(
             shouldCheckExternalAppForNavigation(
                 uri = "https://example.com/",
                 isRedirect = true,
+                isNavigationStartedByUser = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `ユーザー操作で始まった遷移のリダイレクト先は App Links 判定を行う`() {
+        assertTrue(
+            shouldCheckExternalAppForNavigation(
+                uri = "https://example.com/",
+                isRedirect = true,
+                isNavigationStartedByUser = true,
             ),
         )
     }
@@ -85,6 +98,7 @@ class ExternalAppNavigationTest {
             shouldCheckExternalAppForNavigation(
                 uri = "okta-verify://enroll",
                 isRedirect = true,
+                isNavigationStartedByUser = false,
             ),
         )
     }

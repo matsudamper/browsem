@@ -343,6 +343,9 @@ internal class BrowserTabScreenState(
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
 
+    // Gecko はリダイレクトの要求に hasUserGesture を載せないため、起点の要求の値を引き継ぐ
+    private var isCurrentNavigationStartedByUser = false
+
     var isFullScreen by mutableStateOf(false)
 
     var renderReady by mutableStateOf(false)
@@ -1120,8 +1123,13 @@ internal class BrowserTabScreenState(
     override fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
+        if (!request.isRedirect) {
+            isCurrentNavigationStartedByUser = request.hasUserGesture || request.isDirectNavigation
+        }
         if (skipExternalAppCheckForNextLoad) {
             skipExternalAppCheckForNextLoad = false
+            // 確認ダイアログで取りやめた遷移の読み込み直しなので、リダイレクト先で再び確認しない
+            isCurrentNavigationStartedByUser = false
             return null
         }
         // 外部アプリ確認ダイアログを表示中に後続のナビゲーションが来た場合、
@@ -1130,7 +1138,12 @@ internal class BrowserTabScreenState(
         if (pendingExternalAppLaunch != null) {
             // ダイアログ表示中でもリダイレクト先は止めない。サブフレームのアプリ受け渡しと
             // 認証のリダイレクトが重なると、ここで DENY してフローごと失うため。
-            if (!shouldCheckExternalAppForNavigation(uri = request.uri, isRedirect = request.isRedirect)) {
+            if (!shouldCheckExternalAppForNavigation(
+                    uri = request.uri,
+                    isRedirect = request.isRedirect,
+                    isNavigationStartedByUser = false,
+                )
+            ) {
                 return null
             }
             val externalAction = resolveExternalAppNavigationAction(context, request.uri)
@@ -1144,6 +1157,7 @@ internal class BrowserTabScreenState(
             shouldCheckExternalAppForNavigation(
                 uri = request.uri,
                 isRedirect = request.isRedirect,
+                isNavigationStartedByUser = isCurrentNavigationStartedByUser,
             )
         ) {
             resolveExternalAppNavigationAction(context, request.uri)
