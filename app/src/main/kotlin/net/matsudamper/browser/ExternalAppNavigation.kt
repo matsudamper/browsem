@@ -332,6 +332,9 @@ internal fun isHttpUri(uri: String): Boolean {
  * 開けなくなるため、その条件は過去に撤廃されている。
  *
  * 独自スキームはページの自動遷移からアプリへ受け渡す作りがあるため、この制限をかけない。
+ *
+ * 除外したリダイレクト先の App Link は [resolveRedirectAppLinkSuggestion] で、遷移を止めずに
+ * アプリで開く導線として扱う。
  */
 internal fun shouldCheckExternalAppForNavigation(
     uri: String,
@@ -339,4 +342,20 @@ internal fun shouldCheckExternalAppForNavigation(
 ): Boolean {
     if (!isHttpUri(uri)) return true
     return !isRedirect
+}
+
+/**
+ * リダイレクト先の http/https が App Link の場合に、アプリで開く候補を返す。
+ *
+ * マイナポータルのログインのように、ボタンからサーバーのリダイレクトを経てアプリの App Link へ
+ * 渡す作りがある。リダイレクトは SSO のフローを失わないよう止めずに読み込むため、アプリの起動は
+ * ユーザーが選んだときだけにする。
+ */
+internal fun resolveRedirectAppLinkSuggestion(
+    context: Context,
+    uri: String,
+): PendingExternalAppLaunch? {
+    if (!isHttpUri(uri)) return null
+    val action = resolveExternalAppNavigationAction(context, uri)
+    return (action as? ExternalAppNavigationAction.Launch)?.request
 }

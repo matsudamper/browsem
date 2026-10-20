@@ -326,6 +326,10 @@ internal class BrowserTabScreenState(
 
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
 
+    // リダイレクト先の App Link。遷移はブラウザで続けたまま、アプリで開く導線として表示する。
+    var redirectAppLinkSuggestion by mutableStateOf<PendingExternalAppLaunch?>(null)
+        private set
+
     // サブフレーム由来の要求で起動確認を出した URI。ユーザー操作なしに何度でも要求できるため、
     // 同じ URI では出し直さず、タブあたりの回数も制限する。
     private val promptedSubframeExternalAppUris = mutableSetOf<String>()
@@ -675,6 +679,20 @@ internal class BrowserTabScreenState(
         val initialUrl = externalTabInitialUrl ?: return
         if (!matchesExternalDownloadInitialUrl(initialUrl, responseUri)) return
         externalDownloadDialogListener?.onResolved()
+    }
+
+    fun openRedirectAppLinkSuggestion() {
+        val request = redirectAppLinkSuggestion ?: return
+        redirectAppLinkSuggestion = null
+        if (launchExternalApp(context, request).isFailure) {
+            Toast.makeText(context, "対応するアプリを開けませんでした", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun dismissRedirectAppLinkSuggestion(request: PendingExternalAppLaunch) {
+        if (redirectAppLinkSuggestion == request) {
+            redirectAppLinkSuggestion = null
+        }
     }
 
     fun confirmPendingExternalAppLaunch() {
@@ -1139,6 +1157,11 @@ internal class BrowserTabScreenState(
                 canLoadQueuedLaunchInCurrentTab = !request.isNewWindowTarget()
             }
             return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        redirectAppLinkSuggestion = if (request.isRedirect) {
+            resolveRedirectAppLinkSuggestion(context, request.uri)
+        } else {
+            null
         }
         val externalAction = if (
             shouldCheckExternalAppForNavigation(
