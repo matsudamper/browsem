@@ -1158,10 +1158,12 @@ internal class BrowserTabScreenState(
             }
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
-        redirectAppLinkSuggestion = if (request.isRedirect) {
-            resolveRedirectAppLinkSuggestion(context, request.uri)
+        // App Link の URL がさらに通常の URL へリダイレクトすることがあるため、
+        // 後続のリダイレクトでは候補を消さず、新しい App Link が見つかったときだけ差し替える
+        if (request.isRedirect) {
+            resolveRedirectAppLinkSuggestion(context, request.uri)?.let { redirectAppLinkSuggestion = it }
         } else {
-            null
+            redirectAppLinkSuggestion = null
         }
         val externalAction = if (
             shouldCheckExternalAppForNavigation(
