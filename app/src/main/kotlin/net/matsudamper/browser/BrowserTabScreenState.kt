@@ -124,6 +124,7 @@ internal fun rememberBrowserTabScreenState(
     DisposableEffect(state) {
         onDispose {
             state.translation.onScreenDisposed()
+            state.releaseHeldRedirect()
         }
     }
     state.homepageUrl = homepageUrl
@@ -1232,11 +1233,20 @@ internal class BrowserTabScreenState(
     }
 
     /**
+     * 画面の破棄で確認ダイアログが失われても、GeckoSession は ViewModel 側で生き続ける。
+     * 保留を確定しないと Gecko がリダイレクトを待ち続けて読み込み中のまま止まるため、ブラウザで続ける。
+     */
+    fun releaseHeldRedirect() {
+        heldRedirectLoadResult?.complete(AllowOrDeny.ALLOW)
+        heldRedirectLoadResult = null
+    }
+
+    /**
      * リダイレクト先の App Link を、遷移を止めずに保留して確認ダイアログを出す。
      * DENY するとリダイレクトを連ねる SSO のフローごと失われるため、取りやめたら ALLOW で続ける。
      *
-     * 未対応: 保留中に来た別の遷移との整合、ダイアログを閉じないままタブを閉じた場合の確定、
-     * 保留が長引いたときのサーバー側のタイムアウト。問題が出たら対応する。
+     * 未対応: 保留中に来た別の遷移との整合、保留が長引いたときのサーバー側のタイムアウト。
+     * 問題が出たら対応する。
      */
     private fun holdRedirectForExternalAppLaunch(
         request: PendingExternalAppLaunch,
