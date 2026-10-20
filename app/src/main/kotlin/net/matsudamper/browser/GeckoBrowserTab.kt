@@ -1639,15 +1639,6 @@ internal fun GeckoBrowserTab(
                         .imeAboveNavigationBarsPadding(),
                 )
             }
-
-            RedirectAppLinkSnackbar(
-                request = state.redirectAppLinkSuggestion,
-                onOpen = state::openRedirectAppLinkSuggestion,
-                onDismiss = state::dismissRedirectAppLinkSuggestion,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth(),
-            )
         }
         BrowserTabDialogLayer(
             state = state,
