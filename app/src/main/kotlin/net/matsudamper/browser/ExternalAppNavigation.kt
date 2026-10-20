@@ -325,23 +325,18 @@ internal fun isHttpUri(uri: String): Boolean {
  * http/https の遷移で App Links 判定を行ってよいかどうかを返す。
  *
  * SSO の受け渡しはサーバーのリダイレクトを連ねて進むため、途中の 1 ホップでも App Links と
- * みなして遷移を DENY すると、認証フローごと失われて白画面で止まる。ページが自動で始めた
- * 遷移のリダイレクト先は、ユーザーが選んだ遷移先ではないため判定の対象外にする。
+ * みなして遷移を DENY すると、認証フローごと失われて白画面で止まる。リダイレクト先は
+ * ユーザーが選んだ遷移先ではないため、判定の対象外にする。
  *
- * ただしユーザー操作で始まった遷移のリダイレクト先は判定する。マイナポータルのログインのように、
- * ボタンからサーバーのリダイレクトを経てアプリの App Link へ渡す作りがあるため。
- * Gecko はリダイレクトの要求に hasUserGesture を載せないので、起点の要求の値を呼び出し側で引き継ぐ。
- *
- * リダイレクトでない遷移はユーザー操作の有無では絞らない。JavaScript のリダイレクトや
- * setTimeout からの App Links が開けなくなるため、その条件は過去に撤廃されている。
+ * ユーザー操作の有無では絞らない。JavaScript のリダイレクトや setTimeout からの App Links が
+ * 開けなくなるため、その条件は過去に撤廃されている。
  *
  * 独自スキームはページの自動遷移からアプリへ受け渡す作りがあるため、この制限をかけない。
  */
 internal fun shouldCheckExternalAppForNavigation(
     uri: String,
     isRedirect: Boolean,
-    isNavigationStartedByUser: Boolean,
 ): Boolean {
     if (!isHttpUri(uri)) return true
-    return !isRedirect || isNavigationStartedByUser
+    return !isRedirect
 }
