@@ -184,6 +184,7 @@ internal fun geckoRuntimeInitializer(
     webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
     addressAutofillCoordinator: AddressAutofillCoordinator,
     applicationCoroutineScope: CoroutineScope,
+    crashLogRepository: CrashLogRepository,
 ): GeckoRuntimeInitializer {
     return GeckoRuntimeInitializer(
         context = context,
@@ -195,6 +196,7 @@ internal fun geckoRuntimeInitializer(
         webAuthnCompatWebExtension = webAuthnCompatWebExtension,
         addressAutofillCoordinator = addressAutofillCoordinator,
         autocompleteCoroutineScope = applicationCoroutineScope,
+        crashLogRepository = crashLogRepository,
     )
 }
 

@@ -6,7 +6,7 @@
   const pageWin = window.wrappedJSObject;
 
   function log(message) {
-    browser.runtime.sendMessage(`${location.href} ${message}`).catch(() => {});
+    browser.runtime.sendMessage(`${message}\n${location.href}`).catch(() => {});
   }
 
   function bufferToBase64Url(buffer) {

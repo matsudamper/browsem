@@ -11,12 +11,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
@@ -85,6 +87,7 @@ internal class GeckoRuntimeInitializer(
     private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
     private val addressAutofillCoordinator: AddressAutofillCoordinator,
     private val autocompleteCoroutineScope: CoroutineScope,
+    private val crashLogRepository: CrashLogRepository,
 ) {
     private val initializeMutex = Mutex()
     private val mutableRuntime = MutableStateFlow<GeckoRuntime?>(null)
@@ -123,6 +126,20 @@ internal class GeckoRuntimeInitializer(
                     JapaneseSystemFontFamilies.resolve()
                 }
                 createRuntime(settingsRepository.settings.first(), japaneseFontFamilies)
+            }
+        }
+    }
+
+    private fun saveWebAuthnCompatLog(message: String) {
+        autocompleteCoroutineScope.launch(Dispatchers.IO) {
+            try {
+                crashLogRepository.saveSync(
+                    tag = WebAuthnCompatLogMessageDelegate.TAG,
+                    title = message.lineSequence().first(),
+                    body = message,
+                )
+            } catch (error: RuntimeException) {
+                Log.w(TAG, "WebAuthn 互換拡張のログ保存に失敗", error)
             }
         }
     }
@@ -166,7 +183,7 @@ internal class GeckoRuntimeInitializer(
             ).accept(
                 { extension ->
                     extension?.setMessageDelegate(
-                        WebAuthnCompatLogMessageDelegate,
+                        WebAuthnCompatLogMessageDelegate(onLog = ::saveWebAuthnCompatLog),
                         WebAuthnCompatLogMessageDelegate.NATIVE_APP,
                     )
                 },
