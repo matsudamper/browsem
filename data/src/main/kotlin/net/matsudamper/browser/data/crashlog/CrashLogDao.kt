@@ -13,6 +13,9 @@ interface CrashLogDao {
     @Query("SELECT id, occurredAt, tag, title FROM crash_log ORDER BY occurredAt DESC, id DESC")
     fun observeAllSummaries(): Flow<List<CrashLogListItem>>
 
+    @Query("SELECT * FROM crash_log ORDER BY occurredAt DESC, id DESC")
+    suspend fun getAll(): List<CrashLogEntity>
+
     @Query("SELECT * FROM crash_log WHERE id = :id")
     suspend fun getById(id: Long): CrashLogEntity?
 

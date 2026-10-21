@@ -96,6 +96,7 @@ internal fun AddressEditNavContent(
 
 @Composable
 internal fun CrashLogsNavContent(navActions: OuterNavActions) {
+    val context = LocalContext.current
     val crashLogsViewModel: CrashLogsScreenViewModel = koinViewModel()
     val crashLogsUiState by crashLogsViewModel.uiState.collectAsState()
     LaunchedEffect(crashLogsViewModel) {
@@ -103,6 +104,15 @@ internal fun CrashLogsNavContent(navActions: OuterNavActions) {
             it(object : CrashLogsScreenViewModel.Event {
                 override fun navigateToDetail(crashLogId: Long) {
                     navActions.add(AppDestination.CrashLogDetail(crashLogId = crashLogId))
+                }
+
+                override fun copyToClipboard(text: String) {
+                    copyTextToClipboard(
+                        context = context,
+                        label = "crash logs",
+                        text = text,
+                        message = "アプリログをコピーしました",
+                    )
                 }
             })
         }
