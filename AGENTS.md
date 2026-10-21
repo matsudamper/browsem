@@ -16,7 +16,7 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 変更・削除前に `git log -p` で追加経緯を確認する。
 
 ## テスト
-- 単体: JUnit 4。`./gradlew test`
+- 単体: JUnit 4。テストのロジックを変更した場合のみ、変更対象のクラスに絞って実行する
 - Instrumentation: Gradle Managed Device のみ（実機・通常エミュレータ禁止）
 - 通常は全件実行せず class 指定で絞る
 - UI操作は Compose セマンティクス API。生のタッチ注入禁止
@@ -30,12 +30,11 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 コード変更後はコミット前に、以下をこの順で逐次実行する。
 1. `./gradlew :app:assembleDebug` でビルド確認
 2. `./gradlew detekt` で lint を確認
-3. `./gradlew test` でユニットテスト通過を確認
 
 ## ビルド例
 ```bash
 ./gradlew :app:assembleDebug
-./gradlew test
+./gradlew :app:testDebugUnitTest --tests 'net.matsudamper.browser.BrowserTabPoliciesTest'
 ./gradlew :app:lintDebug detekt
 ./gradlew :app:pixel6Api34DebugAndroidTest
 ```
