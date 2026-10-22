@@ -11,12 +11,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
@@ -24,6 +26,8 @@ import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinato
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
 import net.matsudamper.browser.feature.addressautofill.AutocompleteStorageDelegate
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillWebExtension
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatCredentialBridge
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatLogMessageDelegate
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.mozilla.geckoview.ExperimentalGeckoViewApi
@@ -84,6 +88,7 @@ internal class GeckoRuntimeInitializer(
     private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
     private val addressAutofillCoordinator: AddressAutofillCoordinator,
     private val autocompleteCoroutineScope: CoroutineScope,
+    private val crashLogRepository: CrashLogRepository,
 ) {
     private val initializeMutex = Mutex()
     private val mutableRuntime = MutableStateFlow<GeckoRuntime?>(null)
@@ -126,6 +131,20 @@ internal class GeckoRuntimeInitializer(
         }
     }
 
+    private fun saveWebAuthnCompatLog(message: String) {
+        autocompleteCoroutineScope.launch(Dispatchers.IO) {
+            try {
+                crashLogRepository.saveSync(
+                    tag = WebAuthnCompatLogMessageDelegate.TAG,
+                    title = message.lineSequence().first(),
+                    body = message,
+                )
+            } catch (error: RuntimeException) {
+                Log.w(TAG, "WebAuthn 互換拡張のログ保存に失敗", error)
+            }
+        }
+    }
+
     /**
      * 初期化済みの GeckoRuntime を同期的に取得する。
      * [initialize] を待ってから使う経路でのみ呼ぶこと。
@@ -162,6 +181,21 @@ internal class GeckoRuntimeInitializer(
             webAuthnCompatWebExtension.setEnabled(
                 created,
                 browserSettings.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
+            ).accept(
+                { extension ->
+                    extension?.setMessageDelegate(
+                        WebAuthnCompatLogMessageDelegate(onLog = ::saveWebAuthnCompatLog),
+                        WebAuthnCompatLogMessageDelegate.NATIVE_APP,
+                    )
+                    extension?.setMessageDelegate(
+                        WebAuthnCompatCredentialBridge(
+                            context = context,
+                            onLog = ::saveWebAuthnCompatLog,
+                        ),
+                        WebAuthnCompatCredentialBridge.NATIVE_APP,
+                    )
+                },
+                {},
             )
             created.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = addressRepository,
