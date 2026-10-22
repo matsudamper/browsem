@@ -26,6 +26,7 @@ import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinato
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
 import net.matsudamper.browser.feature.addressautofill.AutocompleteStorageDelegate
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillWebExtension
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatCredentialBridge
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatLogMessageDelegate
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
@@ -185,6 +186,13 @@ internal class GeckoRuntimeInitializer(
                     extension?.setMessageDelegate(
                         WebAuthnCompatLogMessageDelegate(onLog = ::saveWebAuthnCompatLog),
                         WebAuthnCompatLogMessageDelegate.NATIVE_APP,
+                    )
+                    extension?.setMessageDelegate(
+                        WebAuthnCompatCredentialBridge(
+                            context = context,
+                            onLog = ::saveWebAuthnCompatLog,
+                        ),
+                        WebAuthnCompatCredentialBridge.NATIVE_APP,
                     )
                 },
                 {},
