@@ -212,10 +212,15 @@ internal fun BrowserTabDialogLayer(
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    state.dismissPendingExternalAppLaunchAndLoadInBrowser()
-                }) {
-                    Text("キャンセル")
+                Row {
+                    TextButton(onClick = state::copyPendingExternalAppLaunchUrl) {
+                        Text("リンクをコピー")
+                    }
+                    TextButton(onClick = {
+                        state.dismissPendingExternalAppLaunchAndLoadInBrowser()
+                    }) {
+                        Text("キャンセル")
+                    }
                 }
             },
         )

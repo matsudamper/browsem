@@ -716,6 +716,11 @@ internal class BrowserTabScreenState(
      * http/https の場合は sourceUri をそのまま使い、
      * intent:// 等のカスタムスキームの場合は fallbackUrl を使用する。
      */
+    fun copyPendingExternalAppLaunchUrl() {
+        val request = pendingExternalAppLaunch ?: return
+        copyUrlToClipboard(request.sourceUri)
+    }
+
     fun dismissPendingExternalAppLaunchAndLoadInBrowser() {
         val request = pendingExternalAppLaunch ?: return
         val loadsCurrentTab = canLoadPendingLaunchInCurrentTab
