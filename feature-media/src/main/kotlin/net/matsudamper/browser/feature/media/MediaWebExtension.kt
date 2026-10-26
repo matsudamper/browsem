@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
-import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.MediaSession
@@ -47,6 +46,10 @@ class MediaWebExtension(
         Collections.synchronizedMap(WeakHashMap<GeckoSession, String>())
     private val sessionMediaSessions =
         Collections.synchronizedMap(WeakHashMap<GeckoSession, MediaSession>())
+    private val sessionPorts = mutableMapOf<GeckoSession, MutableMap<WebExtension.Port, SessionPlaybackSnapshot?>>()
+    private val playbackPorts = mutableMapOf<GeckoSession, WebExtension.Port>()
+    private val pendingTransportCommands = mutableMapOf<GeckoSession, PendingTransportCommand>()
+    private var transportCommandSerial = 0L
 
     // 破棄済みセッション。デリゲート解除後もキュー済みのコールバックが残るため、
     // 解放した状態を作り直さないようここで弾く。
@@ -147,6 +150,9 @@ class MediaWebExtension(
         registeredSessions.remove(session)
         sessionTabIds.remove(session)
         sessionMediaSessions.remove(session)
+        pendingTransportCommands.remove(session)
+        playbackPorts.remove(session)
+        sessionPorts.remove(session)?.keys?.toList()?.forEach { it.disconnect() }
         publishPlayingTabIds()
         backgroundPlaybackGuard.forget(session)
         if (activeSession !== session) {
@@ -183,6 +189,15 @@ class MediaWebExtension(
         MediaTraceLog.d("WX activated session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
         cancelPendingDeactivation(session)
         sessionMediaSessions[session] = mediaSession
+        val snapshot = sessionStates[session]
+        if (backgroundPlaybackGuard.isInBackground() &&
+            (snapshot == null || !backgroundPlaybackGuard.canActivate(session, snapshot.playbackIdentity(), SystemClock.elapsedRealtime()))
+        ) {
+            if (activeSession === session) {
+                MediaSessionBridge.activeGeckoMediaSession = mediaSession
+            }
+            return
+        }
         activeSession = session
         MediaSessionBridge.activeGeckoMediaSession = mediaSession
         applySessionState(session)
@@ -269,6 +284,7 @@ class MediaWebExtension(
         Log.d(TAG, "onPlay fallback: session=${session.logKey()}")
         cancelPendingDeactivation(session)
         bindMediaSessionIfNeeded(session, mediaSession)
+        if (!sessionPorts[session].isNullOrEmpty()) return
         updateSessionSnapshot(session) { current ->
             current.copy(isActive = true, isPlaying = true)
         }
@@ -329,11 +345,18 @@ class MediaWebExtension(
             }
         }.toMap()
         backgroundPlaybackGuard.onEnteredBackground(playing)
+        sessionPorts.forEach { (session, ports) ->
+            ports.keys.forEach { pushPlaybackPolicy(session, it) }
+        }
     }
 
     /** アプリが前面に戻った。以降の再生開始はページに任せる。 */
     fun onHostEnteredForeground() {
         backgroundPlaybackGuard.onEnteredForeground()
+        pendingTransportCommands.clear()
+        sessionPorts.forEach { (session, ports) ->
+            ports.keys.forEach { pushPlaybackPolicy(session, it) }
+        }
         if (blockedPlaybackNotice.onEnteredForeground(SystemClock.elapsedRealtime())) {
             showBlockedPlaybackToast()
         }
@@ -369,6 +392,11 @@ class MediaWebExtension(
         registeredSessions.clear()
         sessionTabIds.clear()
         sessionMediaSessions.clear()
+        val ports = sessionPorts.values.flatMap { it.keys }
+        sessionPorts.clear()
+        playbackPorts.clear()
+        pendingTransportCommands.clear()
+        ports.forEach { it.disconnect() }
         releasedSessions.clear()
         _playingTabIds.value = setOf()
     }
@@ -387,77 +415,128 @@ class MediaWebExtension(
         session.webExtensionController.setMessageDelegate(
             extension,
             object : WebExtension.MessageDelegate {
-                override fun onMessage(
-                    nativeApp: String,
-                    message: Any,
-                    sender: WebExtension.MessageSender,
-                ): GeckoResult<Any>? {
-                    if (nativeApp != NATIVE_APP_ID) {
-                        return null
+                override fun onConnect(port: WebExtension.Port) {
+                    if (isReleased(session) || port.name != NATIVE_APP_ID || port.sender.session !== session) {
+                        port.disconnect()
+                        return
                     }
-                    val json = message as? JSONObject ?: return null
-                    val previousSnapshot = sessionStates[session]
-                    val payload =
-                        WebExtensionPlaybackPayload(
-                            isActive = json.optBoolean("isActive", false),
-                            isPlaying = json.optBoolean("isPlaying", false),
-                            title = json.optString("title", ""),
-                            artist = json.optString("artist", ""),
-                            album = json.optString("album", ""),
-                            durationMs = json.optLong("durationMs", 0L).coerceAtLeast(0L),
-                            positionMs = json.optLong("positionMs", 0L).coerceAtLeast(0L),
-                            mediaSrc = json.optString("currentSrc", ""),
-                            playbackId = json.optString("playbackId", ""),
-                        )
-                    val snapshot = buildSessionPlaybackSnapshot(previousSnapshot, payload)
-                    mainHandler.post {
-                        if (isReleased(session)) return@post
-                        Log.d(TAG, "raw snapshot: session=${session.logKey()} payload=$json")
-                        val debugReason = json.optString("debugReason", "")
-                        if (debugReason != "interval" && debugReason != "event:timeupdate") {
-                            MediaTraceLog.d(
-                                "WX raw session=${session.logKey()} reason=$debugReason isActive=${snapshot.isActive} isPlaying=${snapshot.isPlaying} " +
-                                    "vis=${json.optString("debugVisibility", "")} playbackState=${json.optString("debugPlaybackState", "")} " +
-                                    "mediaCount=${json.optInt("debugMediaCount", -1)} knownMedia=${json.optInt("debugKnownMediaCount", -1)} " +
-                                    "paused=${json.optBoolean("debugMediaPaused", false)} ended=${json.optBoolean("debugMediaEnded", false)} " +
-                                    "ready=${json.optInt("debugMediaReadyState", -1)} pos=${snapshot.positionMs} dur=${snapshot.durationMs} src=${json.optString("debugCurrentSrc", "").takeLast(80)}",
-                            )
-                        }
-                        if (
-                            previousSnapshot != null &&
-                            (
-                                previousSnapshot.title != snapshot.title ||
-                                    previousSnapshot.artist != snapshot.artist ||
-                                    previousSnapshot.album != snapshot.album
+                    sessionPorts.getOrPut(session) { mutableMapOf() }[port] = null
+                    port.setDelegate(object : WebExtension.PortDelegate {
+                        override fun onPortMessage(message: Any, port: WebExtension.Port) {
+                            if (isReleased(session)) return
+                            val json = message as? JSONObject ?: return
+                            when (json.optString("type")) {
+                                "policyReady" -> completeUserTransportCommand(session, port, json.optLong("commandId"))
+
+                                "blocked" -> recordBlockedPlayback(
+                                    session,
+                                    SessionPlaybackSnapshot(
+                                        title = json.optString("title"),
+                                        mediaSrc = json.optString("currentSrc"),
+                                    ),
                                 )
-                        ) {
-                            invalidateArtwork(session)
+
+                                else -> receiveSnapshot(session, port, json)
+                            }
                         }
-                        Log.d(
-                            TAG,
-                            "snapshot: session=${session.logKey()} isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
-                                "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}, activeSession=${activeSession?.logKey()}",
-                        )
-                        if (!snapshot.isPlaying && json.optBoolean("debugMediaEnded", false)) {
-                            backgroundPlaybackGuard.onExplicitStop(session)
-                            notifyBackgroundPlaybackStopped(session)
+
+                        override fun onDisconnect(port: WebExtension.Port) {
+                            sessionPorts[session]?.remove(port)
+                            if (playbackPorts[session] === port) {
+                                playbackPorts.remove(session)
+                                pendingTransportCommands.remove(session)
+                                backgroundPlaybackGuard.onExplicitStop(session)
+                            }
                         }
-                        val published = suppressUnexpectedBackgroundPlayback(session, snapshot)
-                        if (published.isActive) {
-                            cancelPendingDeactivation(session)
-                        }
-                        sessionStates[session] = published
-                        publishPlayingTabIds()
-                        promoteSessionFromSnapshotIfNeeded(session, published)
-                        if (activeSession === session) {
-                            applySnapshot(session, published)
-                        }
-                    }
-                    return null
+                    })
+                    pushPlaybackPolicy(session, port)
                 }
             },
             NATIVE_APP_ID,
         )
+    }
+
+    private fun pushPlaybackPolicy(session: GeckoSession, port: WebExtension.Port) {
+        val snapshot = sessionPorts[session]?.get(port)
+        port.postMessage(
+            JSONObject()
+                .put("type", "playbackPolicy")
+                .put("inBackground", backgroundPlaybackGuard.isInBackground())
+                .put("activePlaybackId", if (snapshot?.isActive == true) snapshot.playbackId else "")
+                .put("continuationId", if (snapshot?.isPlaying == true) snapshot.playbackId else ""),
+        )
+    }
+
+    private fun stopPagePlayback(session: GeckoSession) {
+        pendingTransportCommands.remove(session)
+        sessionPorts[session]?.keys?.forEach { port ->
+            port.postMessage(JSONObject().put("type", "stopPlayback"))
+        }
+    }
+
+    private fun receiveSnapshot(session: GeckoSession, port: WebExtension.Port, json: JSONObject) {
+        val previousSnapshot = sessionStates[session]
+        val payload =
+            WebExtensionPlaybackPayload(
+                isActive = json.optBoolean("isActive", false),
+                isPlaying = json.optBoolean("isPlaying", false),
+                title = json.optString("title", ""),
+                artist = json.optString("artist", ""),
+                album = json.optString("album", ""),
+                durationMs = json.optLong("durationMs", 0L).coerceAtLeast(0L),
+                positionMs = json.optLong("positionMs", 0L).coerceAtLeast(0L),
+                mediaSrc = json.optString("currentSrc", ""),
+                playbackId = json.optString("playbackId", ""),
+            )
+        val snapshot = buildSessionPlaybackSnapshot(previousSnapshot, payload)
+        val ports = sessionPorts[session] ?: return
+        ports[port] = snapshot
+        if (snapshot.isPlaying || playbackPorts[session] == null) {
+            playbackPorts[session] = port
+        }
+        if (playbackPorts[session] !== port) return
+        Log.d(TAG, "raw snapshot: session=${session.logKey()} payload=$json")
+        val debugReason = json.optString("debugReason", "")
+        if (debugReason != "interval" && debugReason != "event:timeupdate") {
+            MediaTraceLog.d(
+                "WX raw session=${session.logKey()} reason=$debugReason isActive=${snapshot.isActive} isPlaying=${snapshot.isPlaying} " +
+                    "vis=${json.optString("debugVisibility", "")} playbackState=${json.optString("debugPlaybackState", "")} " +
+                    "mediaCount=${json.optInt("debugMediaCount", -1)} knownMedia=${json.optInt("debugKnownMediaCount", -1)} " +
+                    "paused=${json.optBoolean("debugMediaPaused", false)} ended=${json.optBoolean("debugMediaEnded", false)} " +
+                    "ready=${json.optInt("debugMediaReadyState", -1)} pos=${snapshot.positionMs} dur=${snapshot.durationMs} src=${json.optString("debugCurrentSrc", "").takeLast(80)}",
+            )
+        }
+        if (
+            previousSnapshot != null &&
+            (
+                previousSnapshot.title != snapshot.title ||
+                    previousSnapshot.artist != snapshot.artist ||
+                    previousSnapshot.album != snapshot.album
+                )
+        ) {
+            invalidateArtwork(session)
+        }
+        Log.d(
+            TAG,
+            "snapshot: session=${session.logKey()} isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
+                "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}, activeSession=${activeSession?.logKey()}",
+        )
+        if (!snapshot.isPlaying && json.optBoolean("debugMediaEnded", false)) {
+            backgroundPlaybackGuard.onPlaybackEnded(session, snapshot.playbackId)
+            if (!backgroundPlaybackGuard.canActivate(session, snapshot.playbackIdentity(), SystemClock.elapsedRealtime())) {
+                notifyBackgroundPlaybackStopped(session)
+            }
+        }
+        val published = suppressUnexpectedBackgroundPlayback(session, snapshot)
+        if (published.isActive) {
+            cancelPendingDeactivation(session)
+        }
+        sessionStates[session] = published
+        publishPlayingTabIds()
+        promoteSessionFromSnapshotIfNeeded(session, published)
+        if (activeSession === session) {
+            applySnapshot(session, published)
+        }
     }
 
     private fun onUserPauseCommand() {
@@ -466,20 +545,51 @@ class MediaWebExtension(
             return
         }
         backgroundPlaybackGuard.onExplicitStop(session)
+        stopPagePlayback(session)
         notifyBackgroundPlaybackStopped(session)
     }
 
     private fun onUserTransportCommand(command: () -> Unit) {
-        val session = sessionForUserTransport()
-        if (session == null) {
+        val session = sessionForUserTransport() ?: return
+        val port = playbackPorts[session]
+        if (port == null) {
+            if (!backgroundPlaybackGuard.isInBackground()) {
+                command()
+            }
             return
         }
-        backgroundPlaybackGuard.onUserTransportCommand(session, SystemClock.elapsedRealtime())
+        val commandId = ++transportCommandSerial
+        pendingTransportCommands[session] = PendingTransportCommand(
+            id = commandId,
+            port = port,
+            issuedAtMs = SystemClock.elapsedRealtime(),
+            execute = command,
+        )
+        port.postMessage(
+            JSONObject()
+                .put("type", "allowPlayback")
+                .put("commandId", commandId)
+                .put("windowMs", BackgroundPlaybackGuard.USER_COMMAND_WINDOW_MS),
+        )
         if (session.isOpen) {
             onSessionActivated(session)
             session.setActive(true)
         }
-        command()
+    }
+
+    private fun completeUserTransportCommand(session: GeckoSession, port: WebExtension.Port, commandId: Long) {
+        val pending = pendingTransportCommands[session] ?: return
+        if (pending.id != commandId || pending.port !== port) return
+        pendingTransportCommands.remove(session)
+        val nowMs = SystemClock.elapsedRealtime()
+        if (nowMs - pending.issuedAtMs > BackgroundPlaybackGuard.USER_COMMAND_WINDOW_MS) {
+            stopPagePlayback(session)
+            return
+        }
+        backgroundPlaybackGuard.onUserTransportCommand(session, nowMs)
+        activeSession = session
+        MediaSessionBridge.activeGeckoMediaSession = sessionMediaSessions[session]
+        pending.execute()
     }
 
     private fun sessionForUserTransport(): GeckoSession? {
@@ -507,23 +617,34 @@ class MediaWebExtension(
             nowMs = SystemClock.elapsedRealtime(),
         )
         if (!shouldPause) {
-            return snapshot
+            val previous = sessionStates[session]
+            return if (backgroundPlaybackGuard.canActivate(session, snapshot.playbackIdentity(), SystemClock.elapsedRealtime())) {
+                snapshot
+            } else {
+                snapshot.copy(isActive = snapshot.isActive && previous?.isActive == true && previous.playbackId == snapshot.playbackId)
+            }
         }
-        Log.d(TAG, "画面を閉じている間の再生を止める session=${session.logKey()} src=${snapshot.mediaSrc}")
-        MediaTraceLog.d("WX blockBackgroundPlay session=${session.logKey()}")
-        if (blockedPlaybackNotice.onBlocked(SystemClock.elapsedRealtime())) {
-            showBlockedPlaybackToast()
-            saveBlockedPlayback(snapshot)
-        }
+        backgroundPlaybackGuard.onExplicitStop(session)
+        stopPagePlayback(session)
+        recordBlockedPlayback(session, snapshot)
         val mediaSession = sessionMediaSessions[session]
         if (mediaSession != null) {
             mediaSession.pause()
         } else if (activeSession === session) {
             MediaSessionBridge.pause()
         }
-        backgroundPlaybackGuard.onExplicitStop(session)
         notifyBackgroundPlaybackStopped(session)
         return snapshot.copy(isActive = false, isPlaying = false)
+    }
+
+    private fun recordBlockedPlayback(session: GeckoSession, snapshot: SessionPlaybackSnapshot) {
+        if (!backgroundPlaybackGuard.isInBackground()) return
+        Log.d(TAG, "画面を閉じている間の再生をブロック session=${session.logKey()} src=${snapshot.mediaSrc}")
+        MediaTraceLog.d("WX blockBackgroundPlay session=${session.logKey()}")
+        if (blockedPlaybackNotice.onBlocked(SystemClock.elapsedRealtime())) {
+            showBlockedPlaybackToast()
+            saveBlockedPlayback(snapshot)
+        }
     }
 
     private fun showBlockedPlaybackToast() {
@@ -780,6 +901,13 @@ internal fun buildSessionPlaybackSnapshot(
         playbackId = payload.playbackId,
     )
 }
+
+private data class PendingTransportCommand(
+    val id: Long,
+    val port: WebExtension.Port,
+    val issuedAtMs: Long,
+    val execute: () -> Unit,
+)
 
 private fun SessionPlaybackSnapshot.playbackIdentity(): PlaybackIdentity = PlaybackIdentity(
     mediaSrc = mediaSrc,

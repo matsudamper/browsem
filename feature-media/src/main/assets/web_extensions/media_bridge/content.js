@@ -1,6 +1,4 @@
 (function () {
-  if (window !== window.top) return;
-
   const NATIVE_APP = "mediaBridge";
   const MEDIA_SELECTOR = "video, audio";
   const ATTACHED_MEDIA = new WeakSet();
@@ -10,6 +8,45 @@
   let lastSerializedPayload = "";
   let publishTimer = null;
   let pendingPublishReason = "init";
+  let port = null;
+
+  function connectNative() {
+    try {
+      const connectedPort = browser.runtime.connectNative(NATIVE_APP);
+      port = connectedPort;
+      lastSerializedPayload = "";
+      connectedPort.onMessage.addListener(function (message) {
+        if (port !== connectedPort) return;
+        backgroundPlaybackPolicy.apply(message);
+        if (message.type === "allowPlayback") {
+          connectedPort.postMessage({type: "policyReady", commandId: message.commandId});
+        }
+        schedulePublish("policy:" + message.type);
+      });
+      connectedPort.onDisconnect.addListener(function () {
+        if (port !== connectedPort) return;
+        port = null;
+        backgroundPlaybackPolicy.apply({type: "playbackPolicy", inBackground: true});
+        backgroundPlaybackPolicy.apply({type: "stopPlayback"});
+        window.setTimeout(connectNative, 1000);
+      });
+    } catch (error) {
+      console.error("[MediaBridge] connectNative error:", error);
+      window.setTimeout(connectNative, 1000);
+    }
+  }
+
+  function postNativeMessage(message) {
+    if (port !== null) port.postMessage(message);
+  }
+  backgroundPlaybackPolicy.setBlockedListener(function (media) {
+    const metadata = readMetadata(media);
+    postNativeMessage({
+      type: "blocked",
+      title: metadata.title,
+      currentSrc: media.currentSrc || media.src || "",
+    });
+  });
 
   function cleanText(value) {
     if (typeof value !== "string") return "";
@@ -121,13 +158,12 @@
     const hasStarted = !!media && (STARTED_MEDIA.has(media) || positionMs > 0);
     const mediaElementPlaying = !!media && !media.paused && !media.ended;
     const mediaMuted = !!media && (media.muted || media.volume === 0);
-    const isPlaying =
-      (!mediaMuted && playbackState === "playing") ||
-      (playbackState !== "paused" && mediaElementPlaying && !mediaMuted);
-    const isActive =
+    const allowed = backgroundPlaybackPolicy.isAllowed(media);
+    const isPlaying = mediaElementPlaying && !mediaMuted && allowed;
+    const isActive = backgroundPlaybackPolicy.isRetained(media) || (allowed && (
       (playbackState === "playing" && !mediaMuted) ||
       (playbackState === "paused" && !!media && hasStarted && !mediaMuted) ||
-      (!!media && (mediaElementPlaying || hasStarted) && !mediaMuted);
+      (!!media && (mediaElementPlaying || hasStarted) && !mediaMuted)));
 
     return {
       url: location.href,
@@ -135,6 +171,7 @@
       artist: metadata.artist,
       album: metadata.album,
       currentSrc: currentSrc,
+      playbackId: backgroundPlaybackPolicy.identity(media),
       durationMs: durationMs,
       positionMs: positionMs,
       isPlaying: isPlaying,
@@ -153,15 +190,14 @@
   }
 
   function publishNow() {
+    if (publishTimer !== null) window.clearTimeout(publishTimer);
     publishTimer = null;
     const payload = readPayload();
     const serializedPayload = JSON.stringify(payload);
     if (serializedPayload === lastSerializedPayload) return;
     lastSerializedPayload = serializedPayload;
     console.log("[MediaBridge] payload=" + serializedPayload);
-    browser.runtime.sendNativeMessage(NATIVE_APP, payload).catch(function (error) {
-      console.error("[MediaBridge] sendNativeMessage error:", error);
-    });
+    postNativeMessage(payload);
   }
 
   function schedulePublish(reason) {
@@ -184,13 +220,19 @@
     if (event.type === "emptied") {
       STARTED_MEDIA.delete(media);
     }
-    schedulePublish("event:" + event.type);
+    if (["play", "playing", "pause", "ended"].includes(event.type)) {
+      pendingPublishReason = "event:" + event.type;
+      publishNow();
+    } else {
+      schedulePublish("event:" + event.type);
+    }
   }
 
   function attachMediaListeners(media) {
     if (ATTACHED_MEDIA.has(media)) return;
     ATTACHED_MEDIA.add(media);
     KNOWN_MEDIA.add(media);
+    backgroundPlaybackPolicy.protect(media);
     [
       "loadedmetadata",
       "durationchange",
@@ -216,15 +258,16 @@
 
   const observer = new MutationObserver(function () {
     attachAllMediaListeners();
+    listMediaElements().forEach(backgroundPlaybackPolicy.protect);
     schedulePublish("mutation");
   });
 
   attachAllMediaListeners();
-  observer.observe(document.documentElement, {
+  observer.observe(document, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["title", "src"],
+    attributeFilter: ["title", "src", "autoplay", "muted"],
   });
 
   const titleElement = document.querySelector("title");
@@ -249,5 +292,6 @@
     schedulePublish("interval");
   }, 1000);
 
+  connectNative();
   schedulePublish("init");
 })();
