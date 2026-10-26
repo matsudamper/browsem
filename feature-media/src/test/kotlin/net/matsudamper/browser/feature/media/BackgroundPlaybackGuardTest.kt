@@ -8,9 +8,50 @@ class BackgroundPlaybackGuardTest {
     private val guard = BackgroundPlaybackGuard<String>()
 
     @Test
+    fun 同じタイトルとURLでも要素が違えば継続にしない() {
+        guard.onEnteredBackground(mapOf("tab" to PlaybackIdentity("a", "X", "element1")))
+
+        assertTrue(guard.shouldPause("tab", true, "a", "X", "element2", 1_000L))
+    }
+
+    @Test
+    fun ページが確認した画質変更はIDが同じなら継続にする() {
+        guard.onEnteredBackground(mapOf("tab" to PlaybackIdentity("quality1", "A", "element1")))
+
+        assertFalse(guard.shouldPause("tab", true, "quality2", "A", "element1", 1_000L))
+    }
+
+    @Test
     fun 許可のない背景タブは通知を起動しない() {
         guard.onEnteredBackground(mapOf())
-        assertFalse(guard.canActivate("tab", 1_000L))
+
+        assertFalse(guard.canActivate("tab", PlaybackIdentity("a", "A", "element1"), 1_000L))
+    }
+
+    @Test
+    fun 継続中でも別のメディアの通知を起動しない() {
+        guard.onEnteredBackground(mapOf("tab" to PlaybackIdentity("a", "X", "element1")))
+
+        assertFalse(guard.canActivate("tab", PlaybackIdentity("a", "X", "element2"), 1_000L))
+    }
+
+    @Test
+    fun 次へ操作の途中で古い動画が終了しても許可は残す() {
+        guard.onEnteredBackground(mapOf("tab" to PlaybackIdentity("a", "A", "element1")))
+        guard.onUserTransportCommand("tab", 1_000L)
+        guard.onPlaybackEnded("tab", "element1")
+
+        assertFalse(guard.shouldPause("tab", true, "b", "B", "element2", 2_000L))
+    }
+
+    @Test
+    fun 遅れて届いた前の動画の終了で次の再生を取り消さない() {
+        guard.onEnteredBackground(mapOf("tab" to PlaybackIdentity("a", "A", "element1")))
+        guard.onUserTransportCommand("tab", 1_000L)
+        guard.shouldPause("tab", true, "b", "B", "element2", 2_000L)
+        guard.onPlaybackEnded("tab", "element1")
+
+        assertFalse(guard.shouldPause("tab", true, "b", "B", "element2", 3_000L))
     }
 
     @Test
@@ -20,6 +61,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/new",
             title = "new",
+            playbackId = "",
             nowMs = 0L,
         )
 
@@ -35,6 +77,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/a",
             title = "A",
+            playbackId = "",
             nowMs = 1_000L,
         )
 
@@ -42,7 +85,7 @@ class BackgroundPlaybackGuardTest {
     }
 
     @Test
-    fun 配信URLだけ変わってもタイトルが同じなら止めない() {
+    fun タイトルが同じでも配信URLが変わっただけでは許さない() {
         enterBackgroundPlaying(src = "https://example.com/a?q=1", title = "A")
 
         val pause = guard.shouldPause(
@@ -50,10 +93,11 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/a?q=2",
             title = "A",
+            playbackId = "",
             nowMs = 1_000L,
         )
 
-        assertFalse(pause)
+        assertTrue(pause)
     }
 
     @Test
@@ -65,6 +109,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/b",
             title = "B",
+            playbackId = "",
             nowMs = 1_000L,
         )
 
@@ -80,6 +125,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/a",
             title = "A",
+            playbackId = "",
             nowMs = 1_000L,
         )
 
@@ -96,6 +142,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/a",
             title = "A",
+            playbackId = "",
             nowMs = 1_100L,
         )
         val nextPlayback = guard.shouldPause(
@@ -103,6 +150,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/b",
             title = "B",
+            playbackId = "",
             nowMs = 2_000L,
         )
 
@@ -119,6 +167,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/b",
             title = "B",
+            playbackId = "",
             nowMs = 2_000L,
         )
 
@@ -127,6 +176,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/c",
             title = "C",
+            playbackId = "",
             nowMs = 3_000L,
         )
 
@@ -143,6 +193,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/b",
             title = "B",
+            playbackId = "",
             nowMs = 1_100L,
         )
 
@@ -159,6 +210,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/b",
             title = "B",
+            playbackId = "",
             nowMs = BackgroundPlaybackGuard.USER_COMMAND_WINDOW_MS + 1L,
         )
 
@@ -175,6 +227,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/a",
             title = "A",
+            playbackId = "",
             nowMs = 1_000L,
         )
 
@@ -190,6 +243,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = false,
             mediaSrc = "https://example.com/a",
             title = "A",
+            playbackId = "",
             nowMs = 1_000L,
         )
 
@@ -206,6 +260,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/a",
             title = "A",
+            playbackId = "",
             nowMs = 2_000L,
         )
 
@@ -223,6 +278,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/a",
             title = "A",
+            playbackId = "",
             nowMs = 2_100L,
         )
 
@@ -240,6 +296,7 @@ class BackgroundPlaybackGuardTest {
             isPlaying = true,
             mediaSrc = "https://example.com/b",
             title = "B",
+            playbackId = "",
             nowMs = 2_000L,
         )
 
@@ -274,7 +331,7 @@ class BackgroundPlaybackGuardTest {
 
     private fun enterBackgroundPlaying(src: String, title: String) {
         guard.onEnteredBackground(
-            mapOf("tab" to PlaybackIdentity(mediaSrc = src, title = title)),
+            mapOf("tab" to PlaybackIdentity(mediaSrc = src, title = title, playbackId = "")),
         )
     }
 }

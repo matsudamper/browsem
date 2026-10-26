@@ -325,7 +325,7 @@ class MediaWebExtension(
             if (!snapshot.isPlaying) {
                 null
             } else {
-                session to PlaybackIdentity(mediaSrc = snapshot.mediaSrc, title = snapshot.title)
+                session to PlaybackIdentity(mediaSrc = snapshot.mediaSrc, title = snapshot.title, playbackId = snapshot.playbackId)
             }
         }.toMap()
         backgroundPlaybackGuard.onEnteredBackground(playing)
@@ -407,6 +407,7 @@ class MediaWebExtension(
                             durationMs = json.optLong("durationMs", 0L).coerceAtLeast(0L),
                             positionMs = json.optLong("positionMs", 0L).coerceAtLeast(0L),
                             mediaSrc = json.optString("currentSrc", ""),
+                            playbackId = json.optString("playbackId", ""),
                         )
                     val snapshot = buildSessionPlaybackSnapshot(previousSnapshot, payload)
                     mainHandler.post {
@@ -502,6 +503,7 @@ class MediaWebExtension(
             isPlaying = snapshot.isPlaying,
             mediaSrc = snapshot.mediaSrc,
             title = snapshot.title,
+            playbackId = snapshot.playbackId,
             nowMs = SystemClock.elapsedRealtime(),
         )
         if (!shouldPause) {
@@ -604,7 +606,7 @@ class MediaWebExtension(
             return
         }
 
-        if (!backgroundPlaybackGuard.canActivate(session, SystemClock.elapsedRealtime())) {
+        if (!backgroundPlaybackGuard.canActivate(session, snapshot.playbackIdentity(), SystemClock.elapsedRealtime())) {
             MediaSessionBridge.updatePlaying(false)
             return
         }
@@ -746,6 +748,7 @@ internal data class SessionPlaybackSnapshot(
     val positionMs: Long = 0L,
     val features: Long = 0L,
     val mediaSrc: String = "",
+    val playbackId: String = "",
 )
 
 internal data class WebExtensionPlaybackPayload(
@@ -757,6 +760,7 @@ internal data class WebExtensionPlaybackPayload(
     val durationMs: Long,
     val positionMs: Long,
     val mediaSrc: String,
+    val playbackId: String,
 )
 
 internal fun buildSessionPlaybackSnapshot(
@@ -773,5 +777,12 @@ internal fun buildSessionPlaybackSnapshot(
         positionMs = payload.positionMs,
         features = previousSnapshot?.features ?: 0L,
         mediaSrc = payload.mediaSrc,
+        playbackId = payload.playbackId,
     )
 }
+
+private fun SessionPlaybackSnapshot.playbackIdentity(): PlaybackIdentity = PlaybackIdentity(
+    mediaSrc = mediaSrc,
+    title = title,
+    playbackId = playbackId,
+)
