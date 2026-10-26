@@ -26,8 +26,7 @@
       connectedPort.onDisconnect.addListener(function () {
         if (port !== connectedPort) return;
         port = null;
-        backgroundPlaybackPolicy.apply({type: "playbackPolicy", inBackground: true});
-        backgroundPlaybackPolicy.apply({type: "stopPlayback"});
+        backgroundPlaybackPolicy.connectionLost();
         window.setTimeout(connectNative, 1000);
       });
     } catch (error) {

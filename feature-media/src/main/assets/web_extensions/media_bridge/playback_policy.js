@@ -7,9 +7,13 @@ const backgroundPlaybackPolicy = (function () {
   const records = new WeakMap();
   const endedMedia = new WeakSet();
   const forcedMuted = new Map();
+  const pendingInitialPlayback = new Set();
   const documentId = Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-");
   let serial = 0;
   let inBackground = null;
+  let receivedNativePolicy = false;
+  let visibleFallback = false;
+  const initialPolicyDeadline = performance.now() + 250;
   let continuation = null;
   let retainedPlayback = null;
   let commandExpiresAt = 0;
@@ -86,6 +90,7 @@ const backgroundPlaybackPolicy = (function () {
   }
 
   function silence(media, report) {
+    if (inBackground === null && !media.paused && !media.ended) pendingInitialPlayback.add(media);
     if (!forcedMuted.has(media)) forcedMuted.set(media, nativeMuted.get.call(media));
     nativeMuted.set.call(media, true);
     nativePause.call(media);
@@ -180,14 +185,46 @@ const backgroundPlaybackPolicy = (function () {
     document.addEventListener(name, handleEvent, true);
   });
 
+  function applyVisibleFallback() {
+    if (receivedNativePolicy || performance.now() < initialPolicyDeadline) return;
+    visibleFallback = true;
+    inBackground = document.visibilityState !== "visible";
+    if (!inBackground) {
+      Array.from(forcedMuted.keys()).forEach(restoreMuted);
+      pendingInitialPlayback.forEach(function (media) {
+        nativePlay.call(media).catch(function () {});
+      });
+      pendingInitialPlayback.clear();
+      resolveReady();
+    } else {
+      document.querySelectorAll("video, audio").forEach(protect);
+    }
+  }
+
+  window.setTimeout(applyVisibleFallback, 250);
+  document.addEventListener("visibilitychange", applyVisibleFallback, true);
+
   return {
     identity: identity,
     protect: protect,
     isAllowed: function (media) { return !!media && permit(media, false); },
     isRetained: function (media) { return !!media && matches(retainedPlayback, media); },
     setBlockedListener: function (listener) { onBlocked = listener; },
+    connectionLost: function () {
+      if (!receivedNativePolicy) {
+        applyVisibleFallback();
+        return;
+      }
+      inBackground = true;
+      continuation = null;
+      commandExpiresAt = 0;
+      document.querySelectorAll("video, audio").forEach(function (media) { silence(media, false); });
+    },
+    state: function () { return {inBackground: inBackground, visibleFallback: visibleFallback}; },
     apply: function (message) {
       if (message.type === "playbackPolicy") {
+        receivedNativePolicy = true;
+        visibleFallback = false;
         const wasInBackground = inBackground;
         inBackground = message.inBackground;
         commandExpiresAt = 0;
@@ -195,6 +232,9 @@ const backgroundPlaybackPolicy = (function () {
           continuation = null;
           retainedPlayback = null;
           Array.from(forcedMuted.keys()).forEach(restoreMuted);
+          pendingInitialPlayback.forEach(function (media) {
+            nativePlay.call(media).catch(function () {});
+          });
         } else if (wasInBackground !== true) {
           continuation = null;
           retainedPlayback = null;
@@ -210,6 +250,7 @@ const backgroundPlaybackPolicy = (function () {
           });
         }
         document.querySelectorAll("video, audio").forEach(protect);
+        pendingInitialPlayback.clear();
         resolveReady();
       } else if (message.type === "allowPlayback") {
         commandExpiresAt = performance.now() + message.windowMs;

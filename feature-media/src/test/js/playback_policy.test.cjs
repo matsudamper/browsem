@@ -62,7 +62,7 @@ function fixture() {
   const context = vm.createContext({
     window: {
       wrappedJSObject: {HTMLMediaElement: PageMedia, Promise, DOMException},
-      setTimeout: callback => { const id = Symbol(); timers.set(id, callback); return id; },
+      setTimeout: (callback, delay) => { const id = Symbol(); timers.set(id, {callback, at: now + delay}); return id; },
       clearTimeout: id => timers.delete(id),
       setInterval: () => {},
       addEventListener: () => {},
@@ -76,7 +76,10 @@ function fixture() {
       visibilityState: "visible",
       querySelectorAll: () => elements,
       querySelector: () => null,
-      addEventListener(name, listener) { listeners.set(name, listener); },
+      addEventListener(name, listener) {
+        if (!listeners.has(name)) listeners.set(name, new Set());
+        listeners.get(name).add(listener);
+      },
     },
     location: {href: "https://example.com"},
     MutationObserver: class { observe() {} },
@@ -94,6 +97,17 @@ function fixture() {
   vm.runInContext(source + "\nglobalThis.policy = backgroundPlaybackPolicy;", context);
   const policy = context.policy;
   policy.setBlockedListener(() => calls.blocked++);
+  function flushTimers() {
+    for (const [id, timer] of Array.from(timers)) {
+      if (timer.at <= now) {
+        timers.delete(id);
+        timer.callback();
+      }
+    }
+  }
+  function event(name, media) {
+    for (const listener of listeners.get(name) || []) listener({type: name, target: media});
+  }
   return {
     policy, calls, navigator,
     media: () => new PageMedia(),
@@ -101,17 +115,17 @@ function fixture() {
     background: media => policy.apply({type: "playbackPolicy", inBackground: true, continuationId: media ? policy.identity(media) : "", activePlaybackId: media ? policy.identity(media) : ""}),
     allow: () => policy.apply({type: "allowPlayback", windowMs: 30000}),
     stop: () => policy.apply({type: "stopPlayback"}),
-    advance: ms => now += ms,
-    event: (name, media) => listeners.get(name)({type: name, target: media}),
+    advance: ms => { now += ms; flushTimers(); },
+    event,
+    visibility: value => { context.document.visibilityState = value; event("visibilitychange"); },
     nativePlay: media => NativeMedia.prototype.play.call(media),
     startContent: () => vm.runInContext(readFileSync(__dirname + "/../../main/assets/web_extensions/media_bridge/content.js", "utf8"), context),
     receive: message => portListener(message),
     disconnect: () => portDisconnectListener(),
     failConnection: value => failConnection = value,
     publish: () => {
-      const pending = Array.from(timers.values());
-      timers.clear();
-      pending.forEach(callback => callback());
+      now += 120;
+      flushTimers();
       return messages.filter(message => !message.type).at(-1);
     },
     messages,
@@ -336,6 +350,7 @@ test("初期接続に失敗しても無音のまま再接続し前面の再生�
   const pending = media.play();
   assert.equal(f.calls.play, 0);
   f.failConnection(false);
+  f.advance(1000);
   f.publish();
   f.receive({type: "playbackPolicy", inBackground: false});
   await pending;
@@ -352,7 +367,74 @@ test("接続が切れたあとは再接続しても背景許可を勝手に復�
   f.disconnect();
   assert.equal(media.paused, true);
   assert.equal(media.muted, true);
+  f.advance(1000);
   f.publish();
   f.receive({type: "playbackPolicy", inBackground: true});
   await assert.rejects(media.play(), {name: "NotAllowedError"});
+});
+
+test("未登録の visible セッションは250msで保留した再生を解放する", async () => {
+  const f = fixture();
+  const media = f.media();
+  const pending = media.play();
+  f.advance(249);
+  assert.equal(f.calls.play, 0);
+  f.advance(1);
+  await pending;
+  assert.equal(f.calls.play, 1);
+  assert.equal(f.policy.state().visibleFallback, true);
+});
+
+test("未応答の hidden セッションは解放せず visible に戻ってから再生する", async () => {
+  const f = fixture();
+  f.visibility("hidden");
+  const media = f.media();
+  const pending = media.play();
+  f.advance(1000);
+  assert.equal(f.calls.play, 0);
+  f.visibility("visible");
+  await pending;
+  f.visibility("hidden");
+  assert.equal(media.muted, true);
+  assert.equal(media.paused, true);
+  await assert.rejects(media.play(), {name: "NotAllowedError"});
+});
+
+test("visibleでもネイティブの背景指定と指定後の切断にはフォールバックしない", async () => {
+  const f = fixture();
+  const media = f.media();
+  f.background();
+  f.advance(1000);
+  f.visibility("visible");
+  f.policy.connectionLost();
+  assert.equal(f.policy.state().visibleFallback, false);
+  await assert.rejects(media.play(), {name: "NotAllowedError"});
+});
+
+test("フォールバック後に届いた背景指定で直ちに無音化する", async () => {
+  const f = fixture();
+  const media = f.media();
+  f.advance(250);
+  await media.play();
+  f.background();
+  assert.equal(media.paused, true);
+  assert.equal(media.muted, true);
+});
+
+test("初回の前面指定が届いたら250msを待たず保留とautoplayを復旧する", async () => {
+  const f = fixture();
+  const media = f.media();
+  const pending = media.play();
+  f.advance(5);
+  f.foreground();
+  await pending;
+  assert.equal(f.calls.play, 1);
+  const initial = fixture();
+  const initialMedia = initial.media();
+  await initial.nativePlay(initialMedia);
+  initial.policy.protect(initialMedia);
+  assert.equal(initialMedia.paused, true);
+  initial.foreground();
+  assert.equal(initialMedia.paused, false);
+  assert.equal(initialMedia.muted, false);
 });
