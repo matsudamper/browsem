@@ -43,6 +43,11 @@ internal class BackgroundPlaybackGuard<Session> {
 
     fun isInBackground(): Boolean = inBackground
 
+    fun canActivate(session: Session, nowMs: Long): Boolean {
+        return !inBackground || continuationBySession.containsKey(session) ||
+            (allowedCommandSession == session && nowMs - allowedCommandAtMs <= USER_COMMAND_WINDOW_MS)
+    }
+
     fun forget(session: Session) {
         continuationBySession.remove(session)
         if (allowedCommandSession == session) {

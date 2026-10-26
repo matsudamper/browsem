@@ -8,6 +8,12 @@ class BackgroundPlaybackGuardTest {
     private val guard = BackgroundPlaybackGuard<String>()
 
     @Test
+    fun 許可のない背景タブは通知を起動しない() {
+        guard.onEnteredBackground(mapOf())
+        assertFalse(guard.canActivate("tab", 1_000L))
+    }
+
+    @Test
     fun 前面では再生を止めない() {
         val pause = guard.shouldPause(
             session = "tab",

@@ -519,7 +519,9 @@ class MediaWebExtension(
         } else if (activeSession === session) {
             MediaSessionBridge.pause()
         }
-        return snapshot.copy(isPlaying = false)
+        backgroundPlaybackGuard.onExplicitStop(session)
+        notifyBackgroundPlaybackStopped(session)
+        return snapshot.copy(isActive = false, isPlaying = false)
     }
 
     private fun showBlockedPlaybackToast() {
@@ -552,6 +554,8 @@ class MediaWebExtension(
             applySnapshot(session, snapshot)
             return
         }
+
+        if (backgroundPlaybackGuard.isInBackground()) return
 
         MediaSessionBridge.activate()
         MediaSessionBridge.updateMetadata(
@@ -595,7 +599,13 @@ class MediaWebExtension(
                 "titleBlank=${snapshot.title.isBlank()} pos=${snapshot.positionMs} dur=${snapshot.durationMs} artwork=${sessionArtworkBitmaps.containsKey(session)} active=${activeSession?.logKey()}",
         )
         if (!snapshot.isActive) {
+            MediaSessionBridge.updatePlaying(false)
             deactivateSession(session)
+            return
+        }
+
+        if (!backgroundPlaybackGuard.canActivate(session, SystemClock.elapsedRealtime())) {
+            MediaSessionBridge.updatePlaying(false)
             return
         }
 
