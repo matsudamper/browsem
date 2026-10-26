@@ -121,6 +121,7 @@ function fixture() {
     nativePlay: media => NativeMedia.prototype.play.call(media),
     startContent: () => vm.runInContext(readFileSync(__dirname + "/../../main/assets/web_extensions/media_bridge/content.js", "utf8"), context),
     receive: message => portListener(message),
+    relay: receiver => context.browser.runtime.sendMessage = receiver,
     disconnect: () => portDisconnectListener(),
     failConnection: value => failConnection = value,
     publish: () => {
@@ -437,4 +438,109 @@ test("初回の前面指定が届いたら250msを待たず保留とautoplayを�
   initial.foreground();
   assert.equal(initialMedia.paused, false);
   assert.equal(initialMedia.muted, false);
+});
+
+test("背景で許可したページのplayには操作元とidentityを記録する", async () => {
+  const f = fixture();
+  const media = f.media();
+  f.startContent();
+  f.receive({type: "playbackPolicy", inBackground: false});
+  await media.play();
+  f.receive({type: "playbackPolicy", inBackground: true, continuationId: f.policy.identity(media)});
+  await media.play();
+  const log = f.messages.find(message => message.event === "ページ許可");
+  assert.equal(log.origin, "ページの play()");
+  assert.equal(log.identity, f.policy.identity(media));
+  assert.match(log.reason, /identityに一致/);
+});
+
+test("アンミュートの同期拒否には実際の停止経路を記録する", async () => {
+  const f = fixture();
+  const media = f.media();
+  f.startContent();
+  f.receive({type: "playbackPolicy", inBackground: false});
+  media.muted = true;
+  await media.play();
+  f.receive({type: "playbackPolicy", inBackground: true});
+  media.muted = false;
+  const log = f.messages.find(message => message.type === "blocked" && message.origin === "アンミュート");
+  assert.equal(log.origin, "アンミュート");
+  assert.equal(log.stopPath, "content script: muted=true,pause()");
+});
+
+test("未接続中のフォールバックと接続失敗は重複を集計して復旧時に送る", async () => {
+  const f = fixture();
+  f.failConnection(true);
+  f.startContent();
+  f.advance(1000);
+  f.advance(1000);
+  f.failConnection(false);
+  f.advance(1000);
+  f.receive({type: "playbackPolicy", inBackground: false});
+  assert.equal(f.messages.some(message => message.event === "フォールバック"), true);
+  const failed = f.messages.find(message => message.reason === "接続失敗");
+  assert.equal(failed.suppressedBeforeConnect, 2);
+  assert.equal(f.messages.some(message => message.reason === "再接続"), true);
+});
+
+test("コマンド取消しは継続中の再生を止めず次の再生だけを拒否する", async () => {
+  const f = fixture();
+  f.foreground();
+  const media = f.media();
+  await media.play();
+  f.background(media);
+  f.allow();
+  f.policy.apply({type: "cancelPlaybackCommand"});
+  assert.equal(media.paused, false);
+  await assert.rejects(f.media().play(), {name: "NotAllowedError"});
+});
+
+test("セッションのポートが未登録でもフォールバック診断をbackgroundへ送る", async () => {
+  const f = fixture();
+  const relayed = [];
+  f.failConnection(true);
+  f.relay(message => { relayed.push(message); return Promise.resolve(true); });
+  f.startContent();
+  const pending = f.media().play();
+  f.advance(250);
+  await pending;
+  assert.equal(relayed.some(message => message.payload.event === "フォールバック"), true);
+  assert.equal(relayed.at(-1).payload.pageUrl, "https://example.com");
+});
+
+test("診断中継はネイティブ準備完了まで保持し件数制限と抑制件数を維持する", async () => {
+  const messages = [];
+  let receivePage;
+  let nativeReady;
+  const context = vm.createContext({
+    browser: {runtime: {
+      connectNative: () => ({
+        onMessage: {addListener: listener => nativeReady = listener},
+        onDisconnect: {addListener: () => {}},
+        postMessage: message => messages.push(message),
+      }),
+      onMessage: {addListener: listener => receivePage = listener},
+    }},
+    setTimeout: () => {},
+  });
+  vm.runInContext(readFileSync(__dirname + "/../../main/assets/web_extensions/media_bridge/diagnostics.js", "utf8"), context);
+  for (let i = 0; i < 40; i++) {
+    await receivePage({type: "mediaDiagnostic", payload: {event: "遮断", identity: String(i), origin: "play", reason: "背景"}});
+  }
+  await receivePage({type: "mediaDiagnostic", payload: {event: "遮断", identity: "39", origin: "play", reason: "背景"}});
+  assert.equal(messages.length, 0);
+  nativeReady({type: "diagnosticsReady"});
+  assert.equal(messages.length, 32);
+  assert.equal(messages[0].relayDropped, 8);
+  assert.equal(messages.at(-1).suppressedBeforeConnect, 1);
+});
+
+test("ポートオブジェクトだけがあり初回応答が来ない場合も診断を中継する", async () => {
+  const f = fixture();
+  const relayed = [];
+  f.relay(message => { relayed.push(message); return Promise.resolve(true); });
+  f.startContent();
+  f.advance(250);
+  assert.equal(relayed.some(message => message.payload.event === "フォールバック"), true);
+  assert.equal(f.messages.some(message => message.event === "フォールバック"), false);
 });

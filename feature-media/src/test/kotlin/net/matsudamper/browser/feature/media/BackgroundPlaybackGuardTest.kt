@@ -1,11 +1,32 @@
 package net.matsudamper.browser.feature.media
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackgroundPlaybackGuardTest {
     private val guard = BackgroundPlaybackGuard<String>()
+
+    @Test
+    fun 継続許可の判定には一致したidentityを含める() {
+        val identity = PlaybackIdentity("a", "A", "element1")
+        guard.onEnteredBackground(mapOf("tab" to identity))
+        val result = guard.evaluate("tab", true, "a", "A", "element1", 100)
+        assertFalse(result.shouldPause)
+        assertEquals(identity, result.matchedIdentity)
+        assertEquals("閉じた時点または通知操作で許可したidentityの継続", result.reason)
+    }
+
+    @Test
+    fun 通知許可の判定にはコマンドからの経過時間を含める() {
+        guard.onEnteredBackground(mapOf())
+        guard.onUserTransportCommand("tab", 100)
+        val result = guard.evaluate("tab", true, "a", "A", "element1", 250)
+        assertFalse(result.shouldPause)
+        assertEquals(150L, result.commandElapsedMs)
+        assertEquals("通知操作の猶予内", result.reason)
+    }
 
     @Test
     fun 同じタイトルとURLでも要素が違えば継続にしない() {

@@ -76,9 +76,18 @@ internal class BackgroundPlaybackGuard<Session> {
         title: String,
         playbackId: String,
         nowMs: Long,
-    ): Boolean {
+    ): Boolean = evaluate(session, isPlaying, mediaSrc, title, playbackId, nowMs).shouldPause
+
+    fun evaluate(
+        session: Session,
+        isPlaying: Boolean,
+        mediaSrc: String,
+        title: String,
+        playbackId: String,
+        nowMs: Long,
+    ): BackgroundPlaybackDecision {
         if (!inBackground || !isPlaying) {
-            return false
+            return BackgroundPlaybackDecision(false, "前面または非再生", null, null)
         }
         val current = PlaybackIdentity(mediaSrc = mediaSrc, title = title, playbackId = playbackId)
         val continuation = continuationBySession[session]
@@ -86,7 +95,7 @@ internal class BackgroundPlaybackGuard<Session> {
             if (isMoreSpecific(current, continuation)) {
                 continuationBySession[session] = current
             }
-            return false
+            return BackgroundPlaybackDecision(false, "閉じた時点または通知操作で許可したidentityの継続", continuation, null)
         }
         val commandSession = allowedCommandSession
         val commandIsFresh = commandSession == session &&
@@ -94,12 +103,12 @@ internal class BackgroundPlaybackGuard<Session> {
         if (commandIsFresh) {
             allowedCommandSession = null
             continuationBySession[session] = current
-            return false
+            return BackgroundPlaybackDecision(false, "通知操作の猶予内", null, nowMs - allowedCommandAtMs)
         }
         if (commandSession == session) {
             allowedCommandSession = null
         }
-        return true
+        return BackgroundPlaybackDecision(true, "許可のない背景再生", continuation, null)
     }
 
     companion object {
@@ -169,3 +178,10 @@ internal class BlockedPlaybackNotice(
         return true
     }
 }
+
+internal data class BackgroundPlaybackDecision(
+    val shouldPause: Boolean,
+    val reason: String,
+    val matchedIdentity: PlaybackIdentity?,
+    val commandElapsedMs: Long?,
+)

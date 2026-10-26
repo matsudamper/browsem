@@ -18,6 +18,9 @@ const backgroundPlaybackPolicy = (function () {
   let retainedPlayback = null;
   let commandExpiresAt = 0;
   let onBlocked = function () {};
+  let onDiagnostic = function () {};
+  const startedAt = performance.now();
+  let commandIssuedAt = 0;
   let resolveReady;
   const ready = new page.Promise(exportFunction(function (resolve) { resolveReady = resolve; }, page));
 
@@ -89,12 +92,32 @@ const backgroundPlaybackPolicy = (function () {
     return false;
   }
 
-  function silence(media, report) {
+  function silence(media, report, origin) {
     if (inBackground === null && !media.paused && !media.ended) pendingInitialPlayback.add(media);
     if (!forcedMuted.has(media)) forcedMuted.set(media, nativeMuted.get.call(media));
     nativeMuted.set.call(media, true);
     nativePause.call(media);
-    if (report && inBackground === true) onBlocked(media);
+    if (report && inBackground === true) onBlocked(media, origin || "content script");
+  }
+
+  function reasonFor(media) {
+    if (matches(continuation, media)) return "閉じた時点または通知操作で許可したidentityに一致";
+    if (commandExpiresAt > 0 && performance.now() <= commandExpiresAt) return "通知操作の猶予内";
+    return "許可のない背景再生";
+  }
+
+  function diagnostic(event, media, origin, reason) {
+    onDiagnostic({
+      event: event,
+      origin: origin,
+      reason: reason,
+      identity: media ? identity(media) : "",
+      src: media ? (media.currentSrc || media.src || "").slice(0, 1024) : "",
+      elapsedMs: performance.now() - startedAt,
+      commandElapsedMs: commandIssuedAt ? performance.now() - commandIssuedAt : null,
+      nativePolicy: receivedNativePolicy,
+      inBackground: inBackground,
+    });
   }
 
   function protect(media) {
@@ -107,10 +130,12 @@ const backgroundPlaybackPolicy = (function () {
 
   function play(media) {
     if (inBackground === null) return ready.then(exportFunction(function () { return play(media); }, page));
+    const reason = reasonFor(media);
     if (!permit(media, true)) {
-      silence(media, true);
+      silence(media, true, "ページの play()");
       return page.Promise.reject(new page.DOMException("Background playback is blocked", "NotAllowedError"));
     }
+    if (inBackground) diagnostic("ページ許可", media, "ページの play()", reason);
     restoreMuted(media);
     if (continuation && continuation.media === media) {
       continuation = describe(media, continuation.id);
@@ -141,13 +166,16 @@ const backgroundPlaybackPolicy = (function () {
       set: exportFunction(function (value) {
         const media = XPCNativeWrapper(this);
         if ((name === "muted" && !value) || (name === "volume" && value > 0)) {
+          const reason = reasonFor(media);
+          const origin = name === "muted" ? "アンミュート" : "音量変更";
           if (!permit(media, true)) {
-            silence(media, true);
+            silence(media, true, origin);
             if (name === "muted") {
               forcedMuted.set(media, !!value);
               return;
             }
           } else {
+            if (inBackground) diagnostic("ページ許可", media, origin, reason);
             restoreMuted(media);
           }
         } else if (name === "muted" && forcedMuted.has(media)) {
@@ -168,8 +196,12 @@ const backgroundPlaybackPolicy = (function () {
       endedMedia.add(media);
       protect(media);
     } else if (event.type === "play" || event.type === "playing" || event.type === "volumechange") {
-      if (!permit(media, true)) silence(media, true);
-      else restoreMuted(media);
+      const reason = reasonFor(media);
+      if (!permit(media, true)) silence(media, true, "event:" + event.type);
+      else {
+        if (inBackground && event.type !== "volumechange") diagnostic("ページ許可", media, "event:" + event.type, reason);
+        restoreMuted(media);
+      }
     } else {
       protect(media);
     }
@@ -189,6 +221,7 @@ const backgroundPlaybackPolicy = (function () {
     if (receivedNativePolicy || performance.now() < initialPolicyDeadline) return;
     visibleFallback = true;
     inBackground = document.visibilityState !== "visible";
+    diagnostic("フォールバック", null, "visibility", "初回policy未受信:" + document.visibilityState);
     if (!inBackground) {
       Array.from(forcedMuted.keys()).forEach(restoreMuted);
       pendingInitialPlayback.forEach(function (media) {
@@ -210,6 +243,7 @@ const backgroundPlaybackPolicy = (function () {
     isAllowed: function (media) { return !!media && permit(media, false); },
     isRetained: function (media) { return !!media && matches(retainedPlayback, media); },
     setBlockedListener: function (listener) { onBlocked = listener; },
+    setDiagnosticListener: function (listener) { onDiagnostic = listener; },
     connectionLost: function () {
       if (!receivedNativePolicy) {
         applyVisibleFallback();
@@ -220,9 +254,10 @@ const backgroundPlaybackPolicy = (function () {
       commandExpiresAt = 0;
       document.querySelectorAll("video, audio").forEach(function (media) { silence(media, false); });
     },
-    state: function () { return {inBackground: inBackground, visibleFallback: visibleFallback}; },
+    state: function () { return {inBackground: inBackground, visibleFallback: visibleFallback, nativePolicy: receivedNativePolicy}; },
     apply: function (message) {
       if (message.type === "playbackPolicy") {
+        const firstPolicy = !receivedNativePolicy;
         receivedNativePolicy = true;
         visibleFallback = false;
         const wasInBackground = inBackground;
@@ -252,8 +287,12 @@ const backgroundPlaybackPolicy = (function () {
         document.querySelectorAll("video, audio").forEach(protect);
         pendingInitialPlayback.clear();
         resolveReady();
+        if (firstPolicy) diagnostic("初回policy", null, "native", "playbackPolicy受信");
       } else if (message.type === "allowPlayback") {
+        commandIssuedAt = performance.now();
         commandExpiresAt = performance.now() + message.windowMs;
+      } else if (message.type === "cancelPlaybackCommand") {
+        commandExpiresAt = 0;
       } else if (message.type === "stopPlayback") {
         if (continuation) retainedPlayback = continuation;
         continuation = null;

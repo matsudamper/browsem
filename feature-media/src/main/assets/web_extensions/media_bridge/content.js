@@ -9,15 +9,57 @@
   let publishTimer = null;
   let pendingPublishReason = "init";
   let port = null;
+  let connectAttempts = 0;
+  const pendingDiagnostics = new Map();
+  let droppedDiagnostics = 0;
+
+  function postDiagnostic(message) {
+    const payload = Object.assign({type: "diagnostic"}, message);
+    payload.pageUrl = location.href;
+    payload.src = payload.src || payload.currentSrc || "";
+    Object.keys(payload).forEach(function (key) {
+      if (typeof payload[key] === "string") payload[key] = payload[key].slice(0, ["src", "currentSrc", "pageUrl"].includes(key) ? 1024 : 256);
+    });
+    if (port !== null && backgroundPlaybackPolicy.state().nativePolicy) {
+      port.postMessage(payload);
+      return;
+    }
+    const key = [payload.event, payload.origin, payload.reason, payload.identity].join(":");
+    if (pendingDiagnostics.has(key)) {
+      payload.suppressedBeforeConnect = (pendingDiagnostics.get(key).suppressedBeforeConnect || 0) + 1;
+    } else if (pendingDiagnostics.size >= 16) {
+      const oldest = pendingDiagnostics.keys().next().value;
+      droppedDiagnostics += 1 + (pendingDiagnostics.get(oldest).suppressedBeforeConnect || 0);
+      pendingDiagnostics.delete(oldest);
+    }
+    pendingDiagnostics.set(key, payload);
+    if (typeof browser.runtime.sendMessage === "function") {
+      browser.runtime.sendMessage({type: "mediaDiagnostic", payload: payload}).then(function (accepted) {
+        if (accepted && pendingDiagnostics.get(key) === payload) pendingDiagnostics.delete(key);
+      }).catch(function () {});
+    }
+  }
+
+  backgroundPlaybackPolicy.setDiagnosticListener(postDiagnostic);
 
   function connectNative() {
     try {
+      connectAttempts++;
       const connectedPort = browser.runtime.connectNative(NATIVE_APP);
       port = connectedPort;
       lastSerializedPayload = "";
+      if (connectAttempts > 1) postDiagnostic({event: "接続", origin: "port", reason: "再接続", elapsedMs: performance.now(), attempt: connectAttempts});
       connectedPort.onMessage.addListener(function (message) {
         if (port !== connectedPort) return;
+        postDiagnostic({event: "接続", origin: "port", reason: "切断", elapsedMs: performance.now()});
         backgroundPlaybackPolicy.apply(message);
+        if (message.type === "playbackPolicy") {
+          pendingDiagnostics.forEach(function (pending) {
+            connectedPort.postMessage(Object.assign({droppedBeforeConnect: droppedDiagnostics}, pending));
+            droppedDiagnostics = 0;
+          });
+          pendingDiagnostics.clear();
+        }
         if (message.type === "allowPlayback") {
           connectedPort.postMessage({type: "policyReady", commandId: message.commandId});
         }
@@ -30,6 +72,7 @@
         window.setTimeout(connectNative, 1000);
       });
     } catch (error) {
+      postDiagnostic({event: "接続", origin: "port", reason: "接続失敗", elapsedMs: performance.now(), attempt: connectAttempts});
       console.error("[MediaBridge] connectNative error:", error);
       window.setTimeout(connectNative, 1000);
     }
@@ -38,10 +81,15 @@
   function postNativeMessage(message) {
     if (port !== null) port.postMessage(message);
   }
-  backgroundPlaybackPolicy.setBlockedListener(function (media) {
+  backgroundPlaybackPolicy.setBlockedListener(function (media, origin) {
     const metadata = readMetadata(media);
-    postNativeMessage({
+    postDiagnostic({
       type: "blocked",
+      event: "遮断",
+      origin: origin,
+      reason: "content scriptで同期拒否",
+      stopPath: "content script: muted=true,pause()",
+      identity: backgroundPlaybackPolicy.identity(media),
       title: metadata.title,
       currentSrc: media.currentSrc || media.src || "",
     });

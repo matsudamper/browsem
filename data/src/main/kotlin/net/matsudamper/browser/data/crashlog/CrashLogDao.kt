@@ -10,6 +10,9 @@ interface CrashLogDao {
     @Insert
     fun insert(entity: CrashLogEntity): Long
 
+    @Query("DELETE FROM crash_log WHERE tag LIKE 'MediaPlayback/%' AND id NOT IN (SELECT id FROM crash_log WHERE tag LIKE 'MediaPlayback/%' ORDER BY id DESC LIMIT :limit)")
+    fun deleteOldMediaDiagnostics(limit: Int)
+
     @Query("SELECT id, occurredAt, tag, title FROM crash_log ORDER BY occurredAt DESC, id DESC")
     fun observeAllSummaries(): Flow<List<CrashLogListItem>>
 

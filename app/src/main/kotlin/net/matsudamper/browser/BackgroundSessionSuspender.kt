@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
+import net.matsudamper.browser.feature.media.MediaTraceLog
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import org.mozilla.geckoview.GeckoSession
 
@@ -37,6 +38,7 @@ internal class BackgroundSessionSuspender(
             val tab = host.tabs().firstOrNull { it.session === session }
             if (tab != null) {
                 tab.setSessionActive(true)
+                MediaTraceLog.d("HOST setActive=true tab=${tab.tabId} reason=通知操作")
             }
         }
     }
@@ -57,6 +59,7 @@ internal class BackgroundSessionSuspender(
             if (!suspended) {
                 return@forEach
             }
+            MediaTraceLog.d("HOST setActive=false tab=${tab.tabId} reason=背景再生停止")
             val current = suspendedByHost[host].orEmpty()
             if (tab !in current) {
                 suspendedByHost[host] = current + tab
@@ -76,6 +79,7 @@ internal class BackgroundSessionSuspender(
                 )
             }
             if (suspended.isNotEmpty()) {
+                suspended.forEach { MediaTraceLog.d("HOST setActive=false tab=${it.tabId} reason=背景移行") }
                 suspendedByHost[host] = suspended
             }
         }
@@ -93,6 +97,7 @@ internal class BackgroundSessionSuspender(
             }
             tabs.forEach { tab ->
                 host.lifecycleController.resumeSuspendedWhileHostStopped(tab)
+                MediaTraceLog.d("HOST setActive=true tab=${tab.tabId} reason=前面復帰")
             }
         }
     }

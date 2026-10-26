@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,5 +62,19 @@ class CrashLogRepositoryTest {
         val saved = runBlocking { repository.getById(1) }
         assertEquals("Custom", saved?.tag)
         assertEquals("任意ログ", saved?.title)
+    }
+
+    @Test
+    fun メディア診断だけを最新100件に制限し他のログは残す() {
+        repository.saveInfoSync("残すログ", "body")
+        repeat(CrashLogRepository.MAX_MEDIA_DIAGNOSTICS + 1) {
+            repository.saveSync("MediaPlayback/遮断", "メディア", "event=$it")
+        }
+        runBlocking {
+            assertNotNull(repository.getById(1))
+            assertNull(repository.getById(2))
+            assertNotNull(repository.getById(3))
+            assertNotNull(repository.getById((CrashLogRepository.MAX_MEDIA_DIAGNOSTICS + 2).toLong()))
+        }
     }
 }

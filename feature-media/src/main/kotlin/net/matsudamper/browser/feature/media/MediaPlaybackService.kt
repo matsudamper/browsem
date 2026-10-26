@@ -269,9 +269,16 @@ private class GeckoMediaPlayer(
     }
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
-        if (playWhenReady && isUserCommand()) {
+        val fromUser = isUserCommand()
+        MediaTraceLog.event(
+            "操作",
+            "player:$playWhenReady:$fromUser",
+            "origin=${if (fromUser) "通知・メディアボタン" else "システム・内部（通知要求元なし）"} " +
+                "reason=${if (fromUser) "handleSetPlayWhenReady" else "PLY ignore playWhenReady"} playWhenReady=$playWhenReady",
+        )
+        if (playWhenReady && fromUser) {
             MediaSessionBridge.playFromUser()
-        } else if (!playWhenReady && isUserCommand()) {
+        } else if (!playWhenReady && fromUser) {
             MediaSessionBridge.pauseFromUser()
         } else {
             MediaTraceLog.d("PLY ignore playWhenReady=$playWhenReady without user controller")

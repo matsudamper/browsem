@@ -27,7 +27,7 @@ import org.mozilla.geckoview.WebExtension
  */
 class MediaWebExtension(
     private val context: Context,
-    private val onBlockedPlayback: (tag: String, title: String, body: String) -> Unit,
+    onPlaybackDiagnostic: (tag: String, title: String, body: String) -> Unit,
 ) {
     private val backgroundPlaybackStoppedListeners =
         mutableListOf<(GeckoSession) -> Unit>()
@@ -50,6 +50,7 @@ class MediaWebExtension(
     private val playbackPorts = mutableMapOf<GeckoSession, WebExtension.Port>()
     private val pendingTransportCommands = mutableMapOf<GeckoSession, PendingTransportCommand>()
     private var transportCommandSerial = 0L
+    private var diagnosticRelayConnections = 0L
 
     // 破棄済みセッション。デリゲート解除後もキュー済みのコールバックが残るため、
     // 解放した状態を作り直さないようここで弾く。
@@ -75,6 +76,7 @@ class MediaWebExtension(
     private var pendingDeactivateRunnable: Runnable? = null
 
     init {
+        MediaTraceLog.install(onPlaybackDiagnostic)
         MediaSessionBridge.userTransportCommandListener = ::onUserTransportCommand
         MediaSessionBridge.userPauseCommandListener = ::onUserPauseCommand
     }
@@ -97,6 +99,7 @@ class MediaWebExtension(
     }
 
     fun install(runtime: GeckoRuntime) {
+        MediaTraceLog.d("WX install requested")
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
         runtime.webExtensionController
             .installBuiltIn(EXTENSION_URI)
@@ -105,11 +108,40 @@ class MediaWebExtension(
                     Log.d(TAG, "インストール完了: id=${ext?.id} version=${ext?.metaData?.version}")
                     if (ext == null) return@accept
                     extension = ext
+                    ext.setMessageDelegate(
+                        object : WebExtension.MessageDelegate {
+                            override fun onConnect(port: WebExtension.Port) {
+                                if (port.name != NATIVE_APP_ID || port.sender.session != null) {
+                                    port.disconnect()
+                                    return
+                                }
+                            diagnosticRelayConnections++
+                            MediaTraceLog.d("WX diagnosticRelay connected count=$diagnosticRelayConnections")
+                            if (diagnosticRelayConnections > 1L) {
+                                MediaTraceLog.event("接続", "relayReconnect", "origin=extension-relay reason=診断中継ポート再接続")
+                            }
+                                port.setDelegate(object : WebExtension.PortDelegate {
+                                    override fun onPortMessage(message: Any, port: WebExtension.Port) {
+                                        val json = message as? JSONObject ?: return
+                                        recordPageDiagnostic("extension-relay", json)
+                                    }
+
+                                override fun onDisconnect(port: WebExtension.Port) {
+                                    MediaTraceLog.event("接続", "relayDisconnect", "origin=extension-relay reason=診断中継ポート切断")
+                                }
+                                })
+                                port.postMessage(JSONObject().put("type", "diagnosticsReady"))
+                            }
+                        },
+                        NATIVE_APP_ID,
+                    )
                     registeredSessions.toList().forEach { session ->
                         attachSessionMessageDelegate(session, ext)
                     }
+                    MediaTraceLog.d("WX install complete sessions=${registeredSessions.size}")
                 },
                 { error ->
+                    MediaTraceLog.event("接続", "installFailed", "origin=native reason=拡張インストール失敗 error=${error?.javaClass?.simpleName}")
                     Log.e(TAG, "インストール失敗", error)
                 },
             )
@@ -337,6 +369,7 @@ class MediaWebExtension(
 
     /** アプリが画面から外れた。閉じた時点で鳴いていた再生だけを継続扱いにする。 */
     fun onHostEnteredBackground() {
+        MediaTraceLog.d("HOST enteredBackground")
         val playing = sessionStates.toMap().mapNotNull { (session, snapshot) ->
             if (!snapshot.isPlaying) {
                 null
@@ -352,6 +385,8 @@ class MediaWebExtension(
 
     /** アプリが前面に戻った。以降の再生開始はページに任せる。 */
     fun onHostEnteredForeground() {
+        MediaTraceLog.d("HOST enteredForeground")
+        MediaTraceLog.flush()
         backgroundPlaybackGuard.onEnteredForeground()
         pendingTransportCommands.clear()
         sessionPorts.forEach { (session, ports) ->
@@ -421,26 +456,27 @@ class MediaWebExtension(
                         return
                     }
                     sessionPorts.getOrPut(session) { mutableMapOf() }[port] = null
+                    MediaTraceLog.d("WX portConnected session=${session.logKey()}")
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
                             if (isReleased(session)) return
                             val json = message as? JSONObject ?: return
                             when (json.optString("type")) {
+                                "diagnostic" -> recordPageDiagnostic(session.logKey(), json)
+
                                 "policyReady" -> completeUserTransportCommand(session, port, json.optLong("commandId"))
 
-                                "blocked" -> recordBlockedPlayback(
-                                    session,
-                                    SessionPlaybackSnapshot(
-                                        title = json.optString("title"),
-                                        mediaSrc = json.optString("currentSrc"),
-                                    ),
-                                )
+                                "blocked" -> {
+                                    recordPageDiagnostic(session.logKey(), json)
+                                    showBlockedNoticeIfDue()
+                                }
 
                                 else -> receiveSnapshot(session, port, json)
                             }
                         }
 
                         override fun onDisconnect(port: WebExtension.Port) {
+                            MediaTraceLog.event("接続", "${session.logKey()}:disconnect", "origin=port reason=切断 session=${session.logKey()}")
                             sessionPorts[session]?.remove(port)
                             if (playbackPorts[session] === port) {
                                 playbackPorts.remove(session)
@@ -457,6 +493,7 @@ class MediaWebExtension(
     }
 
     private fun pushPlaybackPolicy(session: GeckoSession, port: WebExtension.Port) {
+        MediaTraceLog.d("WX pushPolicy session=${session.logKey()} background=${backgroundPlaybackGuard.isInBackground()}")
         val snapshot = sessionPorts[session]?.get(port)
         port.postMessage(
             JSONObject()
@@ -545,6 +582,7 @@ class MediaWebExtension(
             return
         }
         backgroundPlaybackGuard.onExplicitStop(session)
+        MediaTraceLog.event("操作", "${session.logKey()}:pause", "origin=通知・メディアボタン reason=明示停止 session=${session.logKey()}")
         stopPagePlayback(session)
         notifyBackgroundPlaybackStopped(session)
     }
@@ -553,6 +591,7 @@ class MediaWebExtension(
         val session = sessionForUserTransport() ?: return
         val port = playbackPorts[session]
         if (port == null) {
+            MediaTraceLog.event("操作", "${session.logKey()}:noPort", "origin=通知・メディアボタン reason=操作先ポートなし session=${session.logKey()}")
             if (!backgroundPlaybackGuard.isInBackground()) {
                 command()
             }
@@ -565,6 +604,14 @@ class MediaWebExtension(
             issuedAtMs = SystemClock.elapsedRealtime(),
             execute = command,
         )
+        MediaTraceLog.event("操作", "${session.logKey()}:policyWait", "origin=通知・メディアボタン reason=policyReady待ち commandId=$commandId session=${session.logKey()}")
+        mainHandler.postDelayed({
+            if (pendingTransportCommands[session]?.id == commandId) {
+                pendingTransportCommands.remove(session)
+                port.postMessage(JSONObject().put("type", "cancelPlaybackCommand"))
+                MediaTraceLog.event("操作", "${session.logKey()}:policyTimeout", "origin=port reason=policyReadyタイムアウト commandId=$commandId")
+            }
+        }, BackgroundPlaybackGuard.USER_COMMAND_WINDOW_MS)
         port.postMessage(
             JSONObject()
                 .put("type", "allowPlayback")
@@ -573,6 +620,7 @@ class MediaWebExtension(
         )
         if (session.isOpen) {
             onSessionActivated(session)
+            MediaTraceLog.d("WX setActive=true session=${session.logKey()} reason=通知操作")
             session.setActive(true)
         }
     }
@@ -582,6 +630,7 @@ class MediaWebExtension(
         if (pending.id != commandId || pending.port !== port) return
         pendingTransportCommands.remove(session)
         val nowMs = SystemClock.elapsedRealtime()
+        MediaTraceLog.event("操作", "${session.logKey()}:policyReady", "origin=port reason=policyReady commandId=$commandId waitMs=${nowMs - pending.issuedAtMs} session=${session.logKey()}")
         if (nowMs - pending.issuedAtMs > BackgroundPlaybackGuard.USER_COMMAND_WINDOW_MS) {
             stopPagePlayback(session)
             return
@@ -608,7 +657,7 @@ class MediaWebExtension(
         session: GeckoSession,
         snapshot: SessionPlaybackSnapshot,
     ): SessionPlaybackSnapshot {
-        val shouldPause = backgroundPlaybackGuard.shouldPause(
+        val decision = backgroundPlaybackGuard.evaluate(
             session = session,
             isPlaying = snapshot.isPlaying,
             mediaSrc = snapshot.mediaSrc,
@@ -616,7 +665,19 @@ class MediaWebExtension(
             playbackId = snapshot.playbackId,
             nowMs = SystemClock.elapsedRealtime(),
         )
-        if (!shouldPause) {
+        if (backgroundPlaybackGuard.isInBackground() && snapshot.isPlaying) {
+            val previous = sessionStates[session]
+            if (previous?.isPlaying != true || previous.playbackId != snapshot.playbackId || decision.shouldPause) {
+                MediaTraceLog.event(
+                    if (decision.shouldPause) "判定・拒否" else "判定・許可",
+                    "${session.logKey()}:${snapshot.playbackId}:${decision.reason}",
+                    "origin=snapshot reason=${decision.reason} session=${session.logKey()} identity=${snapshot.playbackId} " +
+                        "matchedIdentity=${decision.matchedIdentity?.playbackId} matchedSrc=${decision.matchedIdentity?.mediaSrc?.take(1024)} " +
+                        "commandElapsedMs=${decision.commandElapsedMs} src=${snapshot.mediaSrc.take(1024)}",
+                )
+            }
+        }
+        if (!decision.shouldPause) {
             val previous = sessionStates[session]
             return if (backgroundPlaybackGuard.canActivate(session, snapshot.playbackIdentity(), SystemClock.elapsedRealtime())) {
                 snapshot
@@ -626,24 +687,38 @@ class MediaWebExtension(
         }
         backgroundPlaybackGuard.onExplicitStop(session)
         stopPagePlayback(session)
-        recordBlockedPlayback(session, snapshot)
         val mediaSession = sessionMediaSessions[session]
+        val stopPath = when {
+            mediaSession != null -> "MediaSession.pause"
+            activeSession === session && MediaSessionBridge.activeGeckoMediaSession != null -> "MediaSessionBridge.pause"
+            !sessionPorts[session].isNullOrEmpty() -> "content scriptへ停止要求（未確認）"
+            else -> "停止手段なし"
+        }
         if (mediaSession != null) {
             mediaSession.pause()
         } else if (activeSession === session) {
             MediaSessionBridge.pause()
         }
+        recordBlockedPlayback(session, snapshot, origin = "native snapshot", stopPath = stopPath)
         notifyBackgroundPlaybackStopped(session)
         return snapshot.copy(isActive = false, isPlaying = false)
     }
 
-    private fun recordBlockedPlayback(session: GeckoSession, snapshot: SessionPlaybackSnapshot) {
-        if (!backgroundPlaybackGuard.isInBackground()) return
+    private fun recordBlockedPlayback(session: GeckoSession, snapshot: SessionPlaybackSnapshot, origin: String, stopPath: String) {
         Log.d(TAG, "画面を閉じている間の再生をブロック session=${session.logKey()} src=${snapshot.mediaSrc}")
         MediaTraceLog.d("WX blockBackgroundPlay session=${session.logKey()}")
-        if (blockedPlaybackNotice.onBlocked(SystemClock.elapsedRealtime())) {
+        MediaTraceLog.event(
+            "遮断",
+            "${session.logKey()}:$origin:${snapshot.mediaSrc.take(512)}",
+            "origin=$origin reason=背景再生を遮断 stopPath=$stopPath session=${session.logKey()} " +
+                "identity=${snapshot.playbackId} title=${snapshot.title.take(160)} src=${snapshot.mediaSrc.take(1024)}",
+        )
+        showBlockedNoticeIfDue()
+    }
+
+    private fun showBlockedNoticeIfDue() {
+        if (backgroundPlaybackGuard.isInBackground() && blockedPlaybackNotice.onBlocked(SystemClock.elapsedRealtime())) {
             showBlockedPlaybackToast()
-            saveBlockedPlayback(snapshot)
         }
     }
 
@@ -653,17 +728,21 @@ class MediaWebExtension(
         }
     }
 
-    private fun saveBlockedPlayback(snapshot: SessionPlaybackSnapshot) {
-        val body = buildString {
-            appendLine("title=${snapshot.title}")
-            appendLine("src=${snapshot.mediaSrc}")
-            appendLine("artist=${snapshot.artist}")
-            append("album=${snapshot.album}")
-        }
-        try {
-            onBlockedPlayback(TAG, BLOCKED_PLAYBACK_TOAST, body)
-        } catch (error: RuntimeException) {
-            Log.w(TAG, "再生停止ログの保存に失敗", error)
+    private fun recordPageDiagnostic(sessionKey: String, json: JSONObject) {
+        val event = json.optString("event")
+        val origin = json.optString("origin")
+        val details = "session=$sessionKey origin=$origin reason=${json.optString("reason")} pageUrl=${json.optString("pageUrl").take(1024)} " +
+            "title=${json.optString("title").take(160)} " +
+            "identity=${json.optString("identity")} src=${json.optString("src").take(1024)} " +
+            "elapsedMs=${json.optLong("elapsedMs")} commandElapsedMs=${json.opt("commandElapsedMs")} nativePolicy=${json.optBoolean("nativePolicy")} " +
+            "pageBackground=${json.opt("inBackground")} hostBackground=${backgroundPlaybackGuard.isInBackground()} " +
+            "attempt=${json.optInt("attempt")} " +
+            "stopPath=${json.optString("stopPath")} suppressedBeforeConnect=${json.optInt("suppressedBeforeConnect")} " +
+            "droppedBeforeConnect=${json.optInt("droppedBeforeConnect")} relayDropped=${json.optInt("relayDropped")}"
+        if (event == "初回policy" && json.optLong("elapsedMs") < 250L) {
+            MediaTraceLog.d("WX $event $details")
+        } else {
+            MediaTraceLog.event(event, "$sessionKey:${json.optString("identity")}:$origin:${json.optString("reason")}", details)
         }
     }
 

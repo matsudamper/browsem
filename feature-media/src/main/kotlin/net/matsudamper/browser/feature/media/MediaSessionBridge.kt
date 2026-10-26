@@ -112,23 +112,28 @@ object MediaSessionBridge {
     }
 
     fun playFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=play")
         dispatchUserTransport(::play)
     }
 
     fun nextTrackFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=nextTrack")
         dispatchUserTransport(::nextTrack)
     }
 
     fun previousTrackFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=previousTrack")
         dispatchUserTransport(::previousTrack)
     }
 
     fun pauseFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=pause")
         userPauseCommandListener?.invoke()
         pause()
     }
 
     fun stopFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=stop")
         userPauseCommandListener?.invoke()
         stop()
     }
