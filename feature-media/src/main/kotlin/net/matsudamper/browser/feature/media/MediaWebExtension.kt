@@ -468,7 +468,7 @@ class MediaWebExtension(
         notifyBackgroundPlaybackStopped(session)
     }
 
-    private fun onUserTransportCommand() {
+    private fun onUserTransportCommand(command: () -> Unit) {
         val session = sessionForUserTransport()
         if (session == null) {
             return
@@ -478,6 +478,7 @@ class MediaWebExtension(
             onSessionActivated(session)
             session.setActive(true)
         }
+        command()
     }
 
     private fun sessionForUserTransport(): GeckoSession? {
