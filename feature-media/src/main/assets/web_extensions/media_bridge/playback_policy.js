@@ -8,7 +8,7 @@ const backgroundPlaybackPolicy = (function () {
   const endedMedia = new WeakSet();
   const forcedMuted = new Map();
   const pendingInitialPlayback = new Set();
-  const pendingPlayRequests = new WeakMap();
+  const pauseCounts = new WeakMap();
   const documentId = Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-");
   let serial = 0;
   let inBackground = null;
@@ -131,13 +131,11 @@ const backgroundPlaybackPolicy = (function () {
 
   function play(media) {
     if (inBackground === null) {
-      const request = {};
-      pendingPlayRequests.set(media, request);
+      const pauseCount = pauseCounts.get(media) || 0;
       return ready.then(exportFunction(function () {
-        if (pendingPlayRequests.get(media) !== request) {
+        if ((pauseCounts.get(media) || 0) !== pauseCount) {
           return page.Promise.reject(new page.DOMException("The play() request was interrupted by a call to pause()", "AbortError"));
         }
-        pendingPlayRequests.delete(media);
         return play(media);
       }, page));
     }
@@ -171,7 +169,7 @@ const backgroundPlaybackPolicy = (function () {
     writable: true,
     value: exportFunction(function () {
       const media = XPCNativeWrapper(this);
-      pendingPlayRequests.delete(media);
+      pauseCounts.set(media, (pauseCounts.get(media) || 0) + 1);
       pendingInitialPlayback.delete(media);
       return nativePause.call(media);
     }, page),

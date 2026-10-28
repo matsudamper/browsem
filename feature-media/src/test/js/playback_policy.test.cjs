@@ -604,3 +604,14 @@ test("初回ポリシー待機中に無音化した自動再生も pause() で�
   assert.equal(f.calls.play, 0);
   assert.equal(media.paused, true);
 });
+
+test("初回ポリシー待機中の複数の play() は pause() がなければすべて再生として解決する", async () => {
+  const f = fixture();
+  const media = f.media();
+  const first = media.play();
+  const second = media.play();
+  f.foreground();
+  await first;
+  await second;
+  assert.equal(media.paused, false);
+});
