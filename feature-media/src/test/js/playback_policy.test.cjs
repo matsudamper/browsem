@@ -560,3 +560,16 @@ test("停止中の要素の音量設定では通知操作の許可を消費し�
   assert.equal(media.paused, false);
   assert.equal(media.muted, false);
 });
+
+test("同じソースのままタイトルだけが変わっても背景再生を続ける", async () => {
+  const f = fixture();
+  f.foreground();
+  f.navigator.mediaSession.metadata = {title: "番組1"};
+  const media = f.media();
+  await media.play();
+  f.background(media);
+  f.navigator.mediaSession.metadata = {title: "番組2"};
+  f.event("timeupdate", media);
+  assert.equal(media.paused, false);
+  assert.equal(media.muted, false);
+});

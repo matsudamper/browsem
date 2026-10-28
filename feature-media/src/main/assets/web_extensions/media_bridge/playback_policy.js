@@ -45,8 +45,8 @@ const backgroundPlaybackPolicy = (function () {
   function matches(previous, media) {
     if (!previous || previous.media !== media || media.ended) return false;
     const current = describe(media, previous.id);
-    if (previous.title && current.title && previous.title !== current.title) return false;
     if (previous.src === current.src && previous.srcObject === current.srcObject) return true;
+    if (previous.title && current.title && previous.title !== current.title) return false;
     // URL が変わった画質変更は、同じ要素で再生位置と長さを維持したときだけ継続する。
     return previous.srcObject === current.srcObject && previous.position > 1 &&
       Math.abs(previous.position - current.position) <= 1 &&
