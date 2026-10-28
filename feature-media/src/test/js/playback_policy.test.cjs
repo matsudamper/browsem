@@ -74,7 +74,8 @@ function fixture() {
     document: {
       title: "X",
       visibilityState: "visible",
-      querySelectorAll: () => elements,
+      querySelectorAll: () => elements.filter(element => element.isConnected),
+      contains: element => element.isConnected,
       querySelector: () => null,
       addEventListener(name, listener) {
         if (!listeners.has(name)) listeners.set(name, new Set());
@@ -614,4 +615,27 @@ test("初回ポリシー待機中の複数の play() は pause() がなければ
   await first;
   await second;
   assert.equal(media.paused, false);
+});
+
+test("DOM 外の要素の再生も背景移行時の継続対象に含める", async () => {
+  const f = fixture();
+  f.foreground();
+  const media = f.media();
+  media.isConnected = false;
+  await media.play();
+  f.background(media);
+  media.pause();
+  await media.play();
+  assert.equal(media.paused, false);
+  assert.equal(media.muted, false);
+});
+
+test("DOM 外の要素の再生を通知の snapshot に反映する", async () => {
+  const f = fixture();
+  f.startContent();
+  f.receive({type: "playbackPolicy", inBackground: false});
+  const media = f.media();
+  media.isConnected = false;
+  await media.play();
+  assert.equal(f.publish().isPlaying, true);
 });

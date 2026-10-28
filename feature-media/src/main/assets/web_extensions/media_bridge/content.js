@@ -1,6 +1,5 @@
 (function () {
   const NATIVE_APP = "mediaBridge";
-  const MEDIA_SELECTOR = "video, audio";
   const ATTACHED_MEDIA = new WeakSet();
   const STARTED_MEDIA = new WeakSet();
   const KNOWN_MEDIA = new Set();
@@ -118,14 +117,14 @@
   }
 
   function listMediaElements() {
-    return Array.from(document.querySelectorAll(MEDIA_SELECTOR));
+    return backgroundPlaybackPolicy.mediaElements();
   }
 
   function listKnownMediaElements() {
     const mediaElements = listMediaElements();
     mediaElements.forEach((media) => KNOWN_MEDIA.add(media));
     KNOWN_MEDIA.forEach((media) => {
-      if (!media.isConnected) {
+      if (!mediaElements.includes(media)) {
         KNOWN_MEDIA.delete(media);
         if (media === lastPrimaryMedia) {
           lastPrimaryMedia = null;
@@ -301,6 +300,11 @@
   function attachAllMediaListeners() {
     listMediaElements().forEach(attachMediaListeners);
   }
+
+  backgroundPlaybackPolicy.setOutsideDocumentMediaListener(function (media) {
+    attachMediaListeners(media);
+    schedulePublish("outsideDocumentMedia");
+  });
 
   const observer = new MutationObserver(function () {
     attachAllMediaListeners();

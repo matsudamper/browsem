@@ -9,6 +9,8 @@ const backgroundPlaybackPolicy = (function () {
   const forcedMuted = new Map();
   const pendingInitialPlayback = new Set();
   const pauseCounts = new WeakMap();
+  const outsideDocumentMedia = new Set();
+  const listenedOutsideDocument = new WeakSet();
   const documentId = Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-");
   let serial = 0;
   let inBackground = null;
@@ -20,6 +22,7 @@ const backgroundPlaybackPolicy = (function () {
   let commandExpiresAt = 0;
   let onBlocked = function () {};
   let onDiagnostic = function () {};
+  let onOutsideDocumentMedia = function () {};
   const startedAt = performance.now();
   let commandIssuedAt = 0;
   let resolveReady;
@@ -130,6 +133,7 @@ const backgroundPlaybackPolicy = (function () {
   }
 
   function play(media) {
+    trackOutsideDocument(media);
     if (inBackground === null) {
       const pauseCount = pauseCounts.get(media) || 0;
       return ready.then(exportFunction(function () {
@@ -234,9 +238,31 @@ const backgroundPlaybackPolicy = (function () {
     }
   }
 
-  ["play", "playing", "volumechange", "ended", "timeupdate", "loadedmetadata", "emptied"].forEach(function (name) {
+  const MEDIA_EVENTS = ["play", "playing", "volumechange", "ended", "timeupdate", "loadedmetadata", "emptied"];
+  MEDIA_EVENTS.forEach(function (name) {
     document.addEventListener(name, handleEvent, true);
   });
+
+  // new Audio() や Shadow DOM 内の要素は querySelectorAll で見つからず、イベントも document の capture に届かない。
+  function trackOutsideDocument(media) {
+    if (document.contains(media)) return;
+    outsideDocumentMedia.add(media);
+    if (listenedOutsideDocument.has(media)) return;
+    listenedOutsideDocument.add(media);
+    MEDIA_EVENTS.forEach(function (name) {
+      media.addEventListener(name, function (event) {
+        if (!document.contains(media)) handleEvent(event);
+      }, true);
+    });
+    onOutsideDocumentMedia(media);
+  }
+
+  function mediaElements() {
+    outsideDocumentMedia.forEach(function (media) {
+      if (media.ended || document.contains(media)) outsideDocumentMedia.delete(media);
+    });
+    return Array.from(document.querySelectorAll("video, audio")).concat(Array.from(outsideDocumentMedia));
+  }
 
   function applyVisibleFallback() {
     if (receivedNativePolicy || performance.now() < initialPolicyDeadline) return;
@@ -251,7 +277,7 @@ const backgroundPlaybackPolicy = (function () {
       pendingInitialPlayback.clear();
       resolveReady();
     } else {
-      document.querySelectorAll("video, audio").forEach(protect);
+      mediaElements().forEach(protect);
     }
   }
 
@@ -265,6 +291,8 @@ const backgroundPlaybackPolicy = (function () {
     isRetained: function (media) { return !!media && matches(retainedPlayback, media); },
     setBlockedListener: function (listener) { onBlocked = listener; },
     setDiagnosticListener: function (listener) { onDiagnostic = listener; },
+    setOutsideDocumentMediaListener: function (listener) { onOutsideDocumentMedia = listener; },
+    mediaElements: mediaElements,
     connectionLost: function () {
       if (!receivedNativePolicy) {
         applyVisibleFallback();
@@ -273,7 +301,7 @@ const backgroundPlaybackPolicy = (function () {
       inBackground = true;
       continuation = null;
       commandExpiresAt = 0;
-      document.querySelectorAll("video, audio").forEach(function (media) { silence(media, false); });
+      mediaElements().forEach(function (media) { silence(media, false); });
     },
     state: function () { return {inBackground: inBackground, visibleFallback: visibleFallback, nativePolicy: receivedNativePolicy}; },
     apply: function (message) {
@@ -294,7 +322,7 @@ const backgroundPlaybackPolicy = (function () {
         } else if (wasInBackground !== true) {
           continuation = null;
           retainedPlayback = null;
-          document.querySelectorAll("video, audio").forEach(function (media) {
+          mediaElements().forEach(function (media) {
             if (identity(media) === message.activePlaybackId) {
               retainedPlayback = describe(media, message.activePlaybackId);
             }
@@ -305,7 +333,7 @@ const backgroundPlaybackPolicy = (function () {
             }
           });
         }
-        document.querySelectorAll("video, audio").forEach(protect);
+        mediaElements().forEach(protect);
         pendingInitialPlayback.clear();
         resolveReady();
         if (firstPolicy) diagnostic("初回policy", null, "native", "playbackPolicy受信");
@@ -318,7 +346,7 @@ const backgroundPlaybackPolicy = (function () {
         if (continuation) retainedPlayback = continuation;
         continuation = null;
         commandExpiresAt = 0;
-        document.querySelectorAll("video, audio").forEach(function (media) { silence(media, false); });
+        mediaElements().forEach(function (media) { silence(media, false); });
       }
     },
   };
