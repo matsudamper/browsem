@@ -168,7 +168,8 @@ const backgroundPlaybackPolicy = (function () {
         if ((name === "muted" && !value) || (name === "volume" && value > 0)) {
           const reason = reasonFor(media);
           const origin = name === "muted" ? "アンミュート" : "音量変更";
-          if (!permit(media, true)) {
+          // 停止中の要素への設定は聞こえないため、通知操作の許可は実際の play() まで消費しない。
+          if (!permit(media, !media.paused)) {
             silence(media, true, origin);
             if (name === "muted") {
               forcedMuted.set(media, !!value);
@@ -197,7 +198,7 @@ const backgroundPlaybackPolicy = (function () {
       protect(media);
     } else if (event.type === "play" || event.type === "playing" || event.type === "volumechange") {
       const reason = reasonFor(media);
-      if (!permit(media, true)) silence(media, true, "event:" + event.type);
+      if (!permit(media, event.type !== "volumechange" || !media.paused)) silence(media, true, "event:" + event.type);
       else {
         if (inBackground && event.type !== "volumechange") diagnostic("ページ許可", media, "event:" + event.type, reason);
         restoreMuted(media);

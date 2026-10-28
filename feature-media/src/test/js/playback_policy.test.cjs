@@ -544,3 +544,19 @@ test("ポートオブジェクトだけがあり初回応答が来ない場合�
   assert.equal(relayed.some(message => message.payload.event === "フォールバック"), true);
   assert.equal(f.messages.some(message => message.event === "フォールバック"), false);
 });
+
+test("停止中の要素の音量設定では通知操作の許可を消費しない", async () => {
+  const f = fixture();
+  f.foreground();
+  const media = f.media();
+  await media.play();
+  f.background(media);
+  f.stop();
+  f.allow();
+  media.volume = 0.5;
+  f.event("volumechange", media);
+  media.src = "next-track";
+  await media.play();
+  assert.equal(media.paused, false);
+  assert.equal(media.muted, false);
+});
