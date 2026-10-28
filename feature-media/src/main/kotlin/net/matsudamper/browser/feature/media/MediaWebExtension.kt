@@ -115,20 +115,20 @@ class MediaWebExtension(
                                     port.disconnect()
                                     return
                                 }
-                            diagnosticRelayConnections++
-                            MediaTraceLog.d("WX diagnosticRelay connected count=$diagnosticRelayConnections")
-                            if (diagnosticRelayConnections > 1L) {
-                                MediaTraceLog.event("接続", "relayReconnect", "origin=extension-relay reason=診断中継ポート再接続")
-                            }
+                                diagnosticRelayConnections++
+                                MediaTraceLog.d("WX diagnosticRelay connected count=$diagnosticRelayConnections")
+                                if (diagnosticRelayConnections > 1L) {
+                                    MediaTraceLog.event("接続", "relayReconnect", "origin=extension-relay reason=診断中継ポート再接続")
+                                }
                                 port.setDelegate(object : WebExtension.PortDelegate {
                                     override fun onPortMessage(message: Any, port: WebExtension.Port) {
                                         val json = message as? JSONObject ?: return
                                         recordPageDiagnostic("extension-relay", json)
                                     }
 
-                                override fun onDisconnect(port: WebExtension.Port) {
-                                    MediaTraceLog.event("接続", "relayDisconnect", "origin=extension-relay reason=診断中継ポート切断")
-                                }
+                                    override fun onDisconnect(port: WebExtension.Port) {
+                                        MediaTraceLog.event("接続", "relayDisconnect", "origin=extension-relay reason=診断中継ポート切断")
+                                    }
                                 })
                                 port.postMessage(JSONObject().put("type", "diagnosticsReady"))
                             }
