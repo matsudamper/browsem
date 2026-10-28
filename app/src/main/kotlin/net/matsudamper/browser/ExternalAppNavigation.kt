@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import java.net.URI
 import java.util.Locale
 
 internal data class PendingExternalAppLaunch(
@@ -364,7 +363,7 @@ internal fun isSameDomainRedirect(
 
 private fun normalizedDomainOf(uri: String): String? {
     if (!isHttpUri(uri)) return null
-    val host = runCatching { URI(uri).host }.getOrNull()
+    val host = runCatching { Uri.parse(uri).host }.getOrNull()
         ?.lowercase(Locale.US)
         ?.takeIf { it.isNotBlank() }
         ?: return null
