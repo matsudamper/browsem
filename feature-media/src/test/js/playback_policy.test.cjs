@@ -573,3 +573,12 @@ test("同じソースのままタイトルだけが変わっても背景再生�
   assert.equal(media.paused, false);
   assert.equal(media.muted, false);
 });
+
+test("ネイティブからのメッセージ受信を切断として記録しない", () => {
+  const f = fixture();
+  const relayed = [];
+  f.relay(message => { relayed.push(message); return Promise.resolve(true); });
+  f.startContent();
+  f.receive({type: "playbackPolicy", inBackground: false});
+  assert.equal(relayed.some(message => message.payload.reason === "切断"), false);
+});

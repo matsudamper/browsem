@@ -51,7 +51,6 @@
       if (connectAttempts > 1) postDiagnostic({event: "接続", origin: "port", reason: "再接続", elapsedMs: performance.now(), attempt: connectAttempts});
       connectedPort.onMessage.addListener(function (message) {
         if (port !== connectedPort) return;
-        postDiagnostic({event: "接続", origin: "port", reason: "切断", elapsedMs: performance.now()});
         backgroundPlaybackPolicy.apply(message);
         if (message.type === "playbackPolicy") {
           pendingDiagnostics.forEach(function (pending) {
