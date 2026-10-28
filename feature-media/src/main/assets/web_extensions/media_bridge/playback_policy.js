@@ -8,6 +8,7 @@ const backgroundPlaybackPolicy = (function () {
   const endedMedia = new WeakSet();
   const forcedMuted = new Map();
   const pendingInitialPlayback = new Set();
+  const pendingPlayRequests = new WeakMap();
   const documentId = Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-");
   let serial = 0;
   let inBackground = null;
@@ -129,7 +130,17 @@ const backgroundPlaybackPolicy = (function () {
   }
 
   function play(media) {
-    if (inBackground === null) return ready.then(exportFunction(function () { return play(media); }, page));
+    if (inBackground === null) {
+      const request = {};
+      pendingPlayRequests.set(media, request);
+      return ready.then(exportFunction(function () {
+        if (pendingPlayRequests.get(media) !== request) {
+          return page.Promise.reject(new page.DOMException("The play() request was interrupted by a call to pause()", "AbortError"));
+        }
+        pendingPlayRequests.delete(media);
+        return play(media);
+      }, page));
+    }
     const reason = reasonFor(media);
     if (!permit(media, true)) {
       silence(media, true, "ページの play()");
@@ -152,6 +163,17 @@ const backgroundPlaybackPolicy = (function () {
     writable: true,
     value: exportFunction(function () {
       return play(XPCNativeWrapper(this));
+    }, page),
+  });
+
+  Object.defineProperty(pagePrototype, "pause", {
+    configurable: true,
+    writable: true,
+    value: exportFunction(function () {
+      const media = XPCNativeWrapper(this);
+      pendingPlayRequests.delete(media);
+      pendingInitialPlayback.delete(media);
+      return nativePause.call(media);
     }, page),
   });
 

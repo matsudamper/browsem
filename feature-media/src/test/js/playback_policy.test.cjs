@@ -582,3 +582,25 @@ test("ネイティブからのメッセージ受信を切断として記録し�
   f.receive({type: "playbackPolicy", inBackground: false});
   assert.equal(relayed.some(message => message.payload.reason === "切断"), false);
 });
+
+test("初回ポリシー待機中の再生要求は pause() で取り消す", async () => {
+  const f = fixture();
+  const media = f.media();
+  const pending = media.play();
+  media.pause();
+  f.foreground();
+  await assert.rejects(pending, {name: "AbortError"});
+  assert.equal(f.calls.play, 0);
+  assert.equal(media.paused, true);
+});
+
+test("初回ポリシー待機中に無音化した自動再生も pause() で取り消す", async () => {
+  const f = fixture();
+  const media = f.media();
+  media.paused = false;
+  f.policy.protect(media);
+  media.pause();
+  f.foreground();
+  assert.equal(f.calls.play, 0);
+  assert.equal(media.paused, true);
+});
