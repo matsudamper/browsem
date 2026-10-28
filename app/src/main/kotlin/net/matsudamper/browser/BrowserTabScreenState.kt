@@ -350,6 +350,7 @@ internal class BrowserTabScreenState(
 
     // リダイレクトの直前のホップと比べるため、最後に onLoadRequest で受けた URI を持つ。
     // 外部から開いた新規タブでは表示中のページが無く、現在ページの URL とは比べられない。
+    // 新規ウィンドウの要求は別タブで読み込まれるため、このタブの直前のホップにしない。
     private var lastLoadRequestUri: String? = null
 
     var isFullScreen by mutableStateOf(false)
@@ -1144,7 +1145,9 @@ internal class BrowserTabScreenState(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
         val previousLoadRequestUri = lastLoadRequestUri
-        lastLoadRequestUri = request.uri
+        if (!request.isNewWindowTarget()) {
+            lastLoadRequestUri = request.uri
+        }
         if (skipExternalAppCheckForNextLoad) {
             skipExternalAppCheckForNextLoad = false
             return null
