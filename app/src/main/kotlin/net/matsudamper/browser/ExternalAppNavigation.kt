@@ -356,7 +356,8 @@ internal fun isSameDomainRedirect(
     previousUri: String?,
     uri: String,
 ): Boolean {
-    val previousDomain = previousUri?.let(::normalizedDomainOf) ?: return false
+    if (previousUri == null) return false
+    val previousDomain = normalizedDomainOf(previousUri) ?: return false
     val domain = normalizedDomainOf(uri) ?: return false
     return previousDomain == domain
 }
