@@ -96,10 +96,8 @@ class MediaPlaybackService : MediaSessionService() {
         // サービス起動前にonActivated()が呼ばれbridge状態にisActive=trueが反映済みのため、
         // 現在のBridge状態で初期化してSTATE_READYからスタートさせる
         val player = GeckoMediaPlayer(isUserCommand = {
-            val session = mediaSession
-            val controller = session?.controllerForCurrentRequest
-            // Media3 は System UI とメディアボタンの操作を通知コントローラーへ集約する。
-            controller != null && session.isMediaNotificationController(controller)
+            // 内部の状態更新では要求元がなく、通知・イヤホン・Android Auto・Wear OS などからの操作では要求元が入る。
+            mediaSession?.controllerForCurrentRequest != null
         })
         mediaSession = MediaSession.Builder(this, player).build().also { session ->
             addSession(session)
@@ -273,7 +271,7 @@ private class GeckoMediaPlayer(
         MediaTraceLog.event(
             "操作",
             "player:$playWhenReady:$fromUser",
-            "origin=${if (fromUser) "通知・メディアボタン" else "システム・内部（通知要求元なし）"} " +
+            "origin=${if (fromUser) "通知・メディアボタン・外部コントローラー" else "システム・内部（要求元なし）"} " +
                 "reason=${if (fromUser) "handleSetPlayWhenReady" else "PLY ignore playWhenReady"} playWhenReady=$playWhenReady",
         )
         if (playWhenReady && fromUser) {
