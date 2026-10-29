@@ -9,8 +9,8 @@ const backgroundPlaybackPolicy = (function () {
   const forcedMuted = new Map();
   const pendingInitialPlayback = new Set();
   const pauseCounts = new WeakMap();
-  const outsideDocumentMedia = new Set();
-  const listenedOutsideDocument = new WeakSet();
+  const trackedMedia = new Set();
+  const listenedMedia = new WeakSet();
   const documentId = Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-");
   let serial = 0;
   let inBackground = null;
@@ -125,6 +125,7 @@ const backgroundPlaybackPolicy = (function () {
   }
 
   function protect(media) {
+    track(media);
     if (permit(media, false)) {
       if (inBackground === false) restoreMuted(media);
     } else {
@@ -133,7 +134,7 @@ const backgroundPlaybackPolicy = (function () {
   }
 
   function play(media) {
-    trackOutsideDocument(media);
+    track(media);
     if (inBackground === null) {
       const pauseCount = pauseCounts.get(media) || 0;
       return ready.then(exportFunction(function () {
@@ -215,6 +216,7 @@ const backgroundPlaybackPolicy = (function () {
   function handleEvent(event) {
     const media = event.target;
     if (!(media instanceof HTMLMediaElement)) return;
+    track(media);
     if (event.type === "ended") {
       if (continuation && continuation.media === media) continuation = null;
       if (retainedPlayback && retainedPlayback.media === media) retainedPlayback = null;
@@ -243,25 +245,32 @@ const backgroundPlaybackPolicy = (function () {
     document.addEventListener(name, handleEvent, true);
   });
 
-  // new Audio() や Shadow DOM 内の要素は querySelectorAll で見つからず、イベントも document の capture に届かない。
-  function trackOutsideDocument(media) {
-    if (document.contains(media)) return;
-    outsideDocumentMedia.add(media);
-    if (listenedOutsideDocument.has(media)) return;
-    listenedOutsideDocument.add(media);
+  // new Audio() や Shadow DOM 内の要素、再生中に DOM から外された要素は querySelectorAll で見つからず、
+  // イベントも document の capture に届かない。一度見た要素を覚え、要素にも直接イベントを登録する。
+  function track(media) {
+    trackedMedia.add(media);
+    if (listenedMedia.has(media)) return;
+    listenedMedia.add(media);
     MEDIA_EVENTS.forEach(function (name) {
       media.addEventListener(name, function (event) {
         if (!document.contains(media)) handleEvent(event);
       }, true);
     });
-    onOutsideDocumentMedia(media);
+    if (!document.contains(media)) onOutsideDocumentMedia(media);
   }
 
   function mediaElements() {
-    outsideDocumentMedia.forEach(function (media) {
-      if (media.ended || document.contains(media)) outsideDocumentMedia.delete(media);
+    const elements = Array.from(document.querySelectorAll("video, audio"));
+    trackedMedia.forEach(function (media) {
+      if (document.contains(media)) return;
+      const retained = retainedPlayback && retainedPlayback.media === media;
+      if (media.ended || (media.paused && !retained)) {
+        trackedMedia.delete(media);
+      } else {
+        elements.push(media);
+      }
     });
-    return Array.from(document.querySelectorAll("video, audio")).concat(Array.from(outsideDocumentMedia));
+    return elements;
   }
 
   function applyVisibleFallback() {

@@ -639,3 +639,14 @@ test("DOM 外の要素の再生を通知の snapshot に反映する", async () 
   await media.play();
   assert.equal(f.publish().isPlaying, true);
 });
+
+test("再生中に DOM から外された要素も背景移行時に無音化する", async () => {
+  const f = fixture();
+  f.foreground();
+  const media = f.media();
+  await media.play();
+  media.isConnected = false;
+  f.background();
+  assert.equal(media.paused, true);
+  assert.equal(media.muted, true);
+});
