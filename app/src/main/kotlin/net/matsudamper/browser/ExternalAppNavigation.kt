@@ -344,6 +344,36 @@ internal fun shouldCheckExternalAppForNavigation(
 }
 
 /**
+ * リダイレクト元と同じドメインへのリダイレクトかどうかを返す。
+ *
+ * ログイン画面へ回すなど、サイト内でリダイレクトを連ねる作りでは、サイトのドメインごと
+ * App Link にしているアプリがあると 1 ホップごとに確認ダイアログが出てしまう。
+ * アプリへ渡すかどうかはドメインをまたいだときに 1 回聞けば足りるため、同じドメイン内は判定しない。
+ * Firefox Android の AppLinksInterceptor と同じく www. などの接頭辞は同一視する。
+ */
+internal fun isSameDomainRedirect(
+    previousUri: String?,
+    uri: String,
+): Boolean {
+    if (previousUri == null) return false
+    val previousDomain = normalizedDomainOf(previousUri) ?: return false
+    val domain = normalizedDomainOf(uri) ?: return false
+    return previousDomain == domain
+}
+
+private fun normalizedDomainOf(uri: String): String? {
+    if (!isHttpUri(uri)) return null
+    val host = runCatching { Uri.parse(uri).host }.getOrNull()
+        ?.lowercase(Locale.US)
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+    val prefix = sameDomainHostPrefixes.firstOrNull { host.startsWith(it) }
+    return if (prefix == null) host else host.removePrefix(prefix)
+}
+
+private val sameDomainHostPrefixes = listOf("www.", "m.", "mobile.")
+
+/**
  * リダイレクト先の http/https が App Link の場合に、アプリを開く要求を返す。
  *
  * マイナポータルのログインのように、ボタンからサーバーのリダイレクトを経てアプリの App Link へ

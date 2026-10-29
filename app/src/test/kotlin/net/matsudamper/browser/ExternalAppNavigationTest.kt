@@ -4,7 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class ExternalAppNavigationTest {
 
     @Test
@@ -87,5 +90,52 @@ class ExternalAppNavigationTest {
                 isRedirect = true,
             ),
         )
+    }
+
+    @Test
+    fun `同じドメインへのリダイレクトと判定される`() {
+        assertTrue(
+            isSameDomainRedirect(
+                previousUri = "https://www.amazon.co.jp/your-orders/pop?orderId=1",
+                uri = "https://www.amazon.co.jp/ap/signin?openid.return_to=x",
+            ),
+        )
+        // www. などの接頭辞は同一視する
+        assertTrue(
+            isSameDomainRedirect(
+                previousUri = "https://m.example.com/",
+                uri = "https://EXAMPLE.com/login",
+            ),
+        )
+        // java.net.URI が拒否する | を含む URL でもホストを取れる
+        assertTrue(
+            isSameDomainRedirect(
+                previousUri = "https://example.com/a|b",
+                uri = "https://example.com/login",
+            ),
+        )
+    }
+
+    @Test
+    fun `別ドメインへのリダイレクトは同じドメインと判定されない`() {
+        assertFalse(
+            isSameDomainRedirect(
+                previousUri = "https://www.amazon.jp/your-orders/pop",
+                uri = "https://www.amazon.co.jp/your-orders/pop",
+            ),
+        )
+        assertFalse(
+            isSameDomainRedirect(
+                previousUri = "https://shop.example.com/",
+                uri = "https://example.com/",
+            ),
+        )
+    }
+
+    @Test
+    fun `リダイレクト元が無いか http 以外なら同じドメインと判定されない`() {
+        assertFalse(isSameDomainRedirect(previousUri = null, uri = "https://example.com/"))
+        assertFalse(isSameDomainRedirect(previousUri = "about:blank", uri = "https://example.com/"))
+        assertFalse(isSameDomainRedirect(previousUri = "https://example.com/", uri = "myapp://example.com/"))
     }
 }
