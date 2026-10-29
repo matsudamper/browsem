@@ -184,7 +184,8 @@ class MediaWebExtension(
         sessionMediaSessions.remove(session)
         pendingTransportCommands.remove(session)
         playbackPorts.remove(session)
-        sessionPorts.remove(session)?.keys?.toList()?.forEach { it.disconnect() }
+        // ページ側の切断と重なると GeckoView が同じポートを二重に破棄してクラッシュするため、こちらからは切断しない。
+        sessionPorts.remove(session)
         publishPlayingTabIds()
         backgroundPlaybackGuard.forget(session)
         if (activeSession !== session) {
@@ -427,11 +428,9 @@ class MediaWebExtension(
         registeredSessions.clear()
         sessionTabIds.clear()
         sessionMediaSessions.clear()
-        val ports = sessionPorts.values.flatMap { it.keys }
         sessionPorts.clear()
         playbackPorts.clear()
         pendingTransportCommands.clear()
-        ports.forEach { it.disconnect() }
         releasedSessions.clear()
         _playingTabIds.value = setOf()
     }
