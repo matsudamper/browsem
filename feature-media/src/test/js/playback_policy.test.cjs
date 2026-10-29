@@ -650,3 +650,16 @@ test("再生中に DOM から外された要素も背景移行時に無音化す
   assert.equal(media.paused, true);
   assert.equal(media.muted, true);
 });
+
+test("停止中の要素の volumechange では遮断を重ねて報告しない", async () => {
+  const f = fixture();
+  f.foreground();
+  const media = f.media();
+  await media.play();
+  f.background();
+  const blocked = f.calls.blocked;
+  f.event("volumechange", media);
+  assert.equal(media.paused, true);
+  assert.equal(media.muted, true);
+  assert.equal(f.calls.blocked, blocked);
+});

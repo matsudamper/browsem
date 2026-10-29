@@ -224,7 +224,9 @@ const backgroundPlaybackPolicy = (function () {
       protect(media);
     } else if (event.type === "play" || event.type === "playing" || event.type === "volumechange") {
       const reason = reasonFor(media);
-      if (!permit(media, event.type !== "volumechange" || !media.paused)) silence(media, true, "event:" + event.type);
+      // 停止中の volumechange は無音化自身のミュートでも発生し再生の試みではないため、許可を消費せず遮断としても報告しない。
+      const playbackAttempt = event.type !== "volumechange" || !media.paused;
+      if (!permit(media, playbackAttempt)) silence(media, playbackAttempt, "event:" + event.type);
       else {
         if (inBackground && event.type !== "volumechange") diagnostic("ページ許可", media, "event:" + event.type, reason);
         restoreMuted(media);
