@@ -348,6 +348,11 @@ internal class BrowserTabScreenState(
     // 確定させ、遷移をそのまま続ける。
     private var heldRedirectLoadResult: GeckoResult<AllowOrDeny>? = null
 
+    // リダイレクトの直前のホップと比べるため、最後に onLoadRequest で受けた URI を持つ。
+    // 外部から開いた新規タブでは表示中のページが無く、現在ページの URL とは比べられない。
+    // 新規ウィンドウの要求は別タブで読み込まれるため、このタブの直前のホップにしない。
+    private var lastLoadRequestUri: String? = null
+
     var isFullScreen by mutableStateOf(false)
 
     var renderReady by mutableStateOf(false)
@@ -1139,6 +1144,10 @@ internal class BrowserTabScreenState(
     override fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
+        val previousLoadRequestUri = lastLoadRequestUri
+        if (!request.isNewWindowTarget()) {
+            lastLoadRequestUri = request.uri
+        }
         if (skipExternalAppCheckForNextLoad) {
             skipExternalAppCheckForNextLoad = false
             return null
@@ -1169,7 +1178,7 @@ internal class BrowserTabScreenState(
         } else {
             ExternalAppNavigationAction.AllowInBrowser
         }
-        if (request.isRedirect) {
+        if (request.isRedirect && !isSameDomainRedirect(previousLoadRequestUri, request.uri)) {
             val redirectAppLink = resolveRedirectAppLinkLaunch(context, request.uri)
             if (redirectAppLink != null) {
                 return holdRedirectForExternalAppLaunch(redirectAppLink)
