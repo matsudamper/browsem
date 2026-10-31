@@ -186,43 +186,12 @@ internal fun BrowserTabDialogLayer(
     }
 
     state.pendingExternalAppLaunch?.let { request ->
-        AlertDialog(
-            onDismissRequest = {
-                state.dismissPendingExternalAppLaunchAndLoadInBrowser()
-            },
-            title = { Text("アプリを開く") },
-            text = {
-                Column {
-                    if (request.appName != null) {
-                        Text("${request.appName} をアプリで開きますか？")
-                    } else {
-                        Text("このリンクをアプリで開きますか？")
-                    }
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        request.sourceUri,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = state::confirmPendingExternalAppLaunch) {
-                    Text("開く")
-                }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = state::copyPendingExternalAppLaunchUrl) {
-                        Text("リンクをコピー")
-                    }
-                    TextButton(onClick = {
-                        state.dismissPendingExternalAppLaunchAndLoadInBrowser()
-                    }) {
-                        Text("キャンセル")
-                    }
-                }
-            },
+        ExternalAppLaunchDialog(
+            appName = request.appName,
+            sourceUri = request.sourceUri,
+            onConfirm = state::confirmPendingExternalAppLaunch,
+            onCopyLink = state::copyPendingExternalAppLaunchUrl,
+            onDismiss = state::dismissPendingExternalAppLaunchAndLoadInBrowser,
         )
     }
 
@@ -567,6 +536,50 @@ private fun buildAddressDisplayText(
     if (address.tel.isNotEmpty()) add(address.tel)
     if (includeEmail && address.email.isNotEmpty()) add(address.email)
 }.joinToString(" ")
+
+@Composable
+private fun ExternalAppLaunchDialog(
+    appName: String?,
+    sourceUri: String,
+    onConfirm: () -> Unit,
+    onCopyLink: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("アプリを開く") },
+        text = {
+            Column {
+                if (appName != null) {
+                    Text("$appName をアプリで開きますか？")
+                } else {
+                    Text("このリンクをアプリで開きますか？")
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    sourceUri,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("開く")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onCopyLink) {
+                    Text("リンクをコピー")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("キャンセル")
+                }
+            }
+        },
+    )
+}
 
 @Composable
 private fun AutoplayPermissionDialog(
@@ -1335,6 +1348,20 @@ private fun PreviewAutoplayPermissionDialog() {
             onAllow = {},
             onAllowOnce = {},
             onDeny = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "ExternalAppLaunchDialog")
+@Composable
+private fun PreviewExternalAppLaunchDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        ExternalAppLaunchDialog(
+            appName = "YouTube",
+            sourceUri = "https://www.youtube.com/watch?v=example",
+            onConfirm = {},
+            onCopyLink = {},
             onDismiss = {},
         )
     }
