@@ -4,7 +4,7 @@ package net.matsudamper.browser.feature.media
  * 画面を閉じている間、通知操作以外で始まった再生を止めるための判定。
  *
  * 閉じた時点で鳴っていた再生の継続（バッファリング後の再開、画質変更）は許す。
- * URL とタイトルが両方変わった再生は、ページが次の動画を始めたものとして止める。
+ * ページ側で識別したメディア以外を、タイトルの一致だけで継続扱いにしない。
  */
 internal class BackgroundPlaybackGuard<Session> {
     private var inBackground = false
@@ -43,6 +43,18 @@ internal class BackgroundPlaybackGuard<Session> {
 
     fun isInBackground(): Boolean = inBackground
 
+    fun canActivate(session: Session, playback: PlaybackIdentity, nowMs: Long): Boolean {
+        val continuation = continuationBySession[session]
+        return !inBackground || (continuation != null && isContinuation(continuation, playback)) ||
+            (allowedCommandSession == session && nowMs - allowedCommandAtMs <= USER_COMMAND_WINDOW_MS)
+    }
+
+    fun onPlaybackEnded(session: Session, playbackId: String) {
+        if (continuationBySession[session]?.playbackId == playbackId) {
+            continuationBySession.remove(session)
+        }
+    }
+
     fun forget(session: Session) {
         continuationBySession.remove(session)
         if (allowedCommandSession == session) {
@@ -62,18 +74,28 @@ internal class BackgroundPlaybackGuard<Session> {
         isPlaying: Boolean,
         mediaSrc: String,
         title: String,
+        playbackId: String,
         nowMs: Long,
-    ): Boolean {
+    ): Boolean = evaluate(session, isPlaying, mediaSrc, title, playbackId, nowMs).shouldPause
+
+    fun evaluate(
+        session: Session,
+        isPlaying: Boolean,
+        mediaSrc: String,
+        title: String,
+        playbackId: String,
+        nowMs: Long,
+    ): BackgroundPlaybackDecision {
         if (!inBackground || !isPlaying) {
-            return false
+            return BackgroundPlaybackDecision(false, "前面または非再生", null, null)
         }
-        val current = PlaybackIdentity(mediaSrc = mediaSrc, title = title)
+        val current = PlaybackIdentity(mediaSrc = mediaSrc, title = title, playbackId = playbackId)
         val continuation = continuationBySession[session]
         if (continuation != null && isContinuation(continuation, current)) {
             if (isMoreSpecific(current, continuation)) {
                 continuationBySession[session] = current
             }
-            return false
+            return BackgroundPlaybackDecision(false, "閉じた時点または通知操作で許可したidentityの継続", continuation, null)
         }
         val commandSession = allowedCommandSession
         val commandIsFresh = commandSession == session &&
@@ -81,12 +103,12 @@ internal class BackgroundPlaybackGuard<Session> {
         if (commandIsFresh) {
             allowedCommandSession = null
             continuationBySession[session] = current
-            return false
+            return BackgroundPlaybackDecision(false, "通知操作の猶予内", null, nowMs - allowedCommandAtMs)
         }
         if (commandSession == session) {
             allowedCommandSession = null
         }
-        return true
+        return BackgroundPlaybackDecision(true, "許可のない背景再生", continuation, null)
     }
 
     companion object {
@@ -97,36 +119,28 @@ internal class BackgroundPlaybackGuard<Session> {
 internal data class PlaybackIdentity(
     val mediaSrc: String,
     val title: String,
+    val playbackId: String,
 )
 
 /**
  * 閉じた時点の再生と、いま鳴っているものが同じかを返す。
  *
- * 同じ要素のまま配信 URL だけ変わる画質の切り替わりと、タイトルだけの更新は継続。
- * URL とタイトルが両方変わったときは次の動画なので継続ではない。
- * どちらかが未知のときは、鳴っている音を誤って切らないよう継続とみなす。
+ * ページ側の ID は、同じ要素で再生位置と長さを保つ画質変更でも維持される。
+ * ID がない Gecko のコールバックだけの場合は、既知の同一 URL に限定する。
  */
 internal fun isContinuation(previous: PlaybackIdentity, current: PlaybackIdentity): Boolean {
-    if (previous.mediaSrc.isNotEmpty() && previous.mediaSrc == current.mediaSrc) {
-        return true
+    if (previous.playbackId.isNotEmpty() && current.playbackId.isNotEmpty()) {
+        return previous.playbackId == current.playbackId
     }
-    if (previous.title.isNotEmpty() && previous.title == current.title) {
-        return true
-    }
-    val srcDisagrees = previous.mediaSrc.isNotEmpty() &&
-        current.mediaSrc.isNotEmpty() &&
-        previous.mediaSrc != current.mediaSrc
-    val titleDisagrees = previous.title.isNotEmpty() &&
-        current.title.isNotEmpty() &&
-        previous.title != current.title
-    return !srcDisagrees || !titleDisagrees
+    return previous.mediaSrc.isNotEmpty() && previous.mediaSrc == current.mediaSrc
 }
 
 /** 未知だった URL やタイトルが後から埋まったかを返す。継続判定をその値で更新するために使う。 */
 internal fun isMoreSpecific(current: PlaybackIdentity, previous: PlaybackIdentity): Boolean {
     val srcFilledIn = previous.mediaSrc.isEmpty() && current.mediaSrc.isNotEmpty()
     val titleFilledIn = previous.title.isEmpty() && current.title.isNotEmpty()
-    return srcFilledIn || titleFilledIn
+    val idFilledIn = previous.playbackId.isEmpty() && current.playbackId.isNotEmpty()
+    return srcFilledIn || titleFilledIn || idFilledIn
 }
 
 /**
@@ -164,3 +178,10 @@ internal class BlockedPlaybackNotice(
         return true
     }
 }
+
+internal data class BackgroundPlaybackDecision(
+    val shouldPause: Boolean,
+    val reason: String,
+    val matchedIdentity: PlaybackIdentity?,
+    val commandElapsedMs: Long?,
+)
