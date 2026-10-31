@@ -31,12 +31,15 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 1. `./gradlew :app:assembleDebug` でビルド確認
 2. `./gradlew detekt` で lint を確認
 
-## ビルド例
+## ビルド・lint例
 ```bash
 ./gradlew :app:assembleDebug
-./gradlew :app:testDebugUnitTest --tests 'net.matsudamper.browser.BrowserTabPoliciesTest'
 ./gradlew :app:lintDebug detekt
-./gradlew :app:pixel6Api34DebugAndroidTest
+```
+
+## 個別テスト例（テストのロジック変更時のみ）
+```bash
+./gradlew :app:testDebugUnitTest --tests 'net.matsudamper.browser.BrowserTabPoliciesTest'
 ```
 
 ## Git（browsem）
