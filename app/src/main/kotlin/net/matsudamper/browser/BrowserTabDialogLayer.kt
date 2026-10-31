@@ -556,11 +556,20 @@ private fun ExternalAppLaunchDialog(
                     Text("このリンクをアプリで開きますか？")
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    sourceUri,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        sourceUri,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    IconButton(onClick = onCopyLink) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_content_copy_24dp),
+                            contentDescription = "リンクをコピー",
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -569,13 +578,8 @@ private fun ExternalAppLaunchDialog(
             }
         },
         dismissButton = {
-            Row {
-                TextButton(onClick = onCopyLink) {
-                    Text("リンクをコピー")
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("キャンセル")
-                }
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
             }
         },
     )
