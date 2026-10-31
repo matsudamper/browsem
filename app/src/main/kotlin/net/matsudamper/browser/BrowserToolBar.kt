@@ -500,12 +500,16 @@ internal fun BrowserToolbar(
                         // （同一ノードに testTag を二重付与すると外側が優先され UrlBar が消えてしまう）。
                         UrlDisplay(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(end = 4.dp),
+                                .fillMaxWidth(),
                             value = urlInputState.value,
                             textColor = LocalContentColor.current,
                             enableSuggest = urlInputState.enableSuggest,
-                            paddingValues = urlBarPaddingValues,
+                            paddingValues = PaddingValues(
+                                start = 8.dp,
+                                top = 4.dp,
+                                end = 4.dp,
+                                bottom = 4.dp,
+                            ),
                             onClick = { urlInputState.onFocusChanged(true) },
                             onLongClick = onLongClickUrl,
                         )

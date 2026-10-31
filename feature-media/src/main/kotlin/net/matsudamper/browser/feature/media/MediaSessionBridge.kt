@@ -20,7 +20,7 @@ object MediaSessionBridge {
      * 通知の再生・次へ・前へ。
      * 画面を閉じている間の勝手な再生と区別するため、Gecko へコマンドを渡す前に通知する。
      */
-    var userTransportCommandListener: (() -> Unit)? = null
+    var userTransportCommandListener: ((() -> Unit) -> Unit)? = null
 
     /**
      * 通知の一時停止・停止。
@@ -86,28 +86,23 @@ object MediaSessionBridge {
     fun play() {
         Log.d(TAG, "play: hasMediaSession=${activeGeckoMediaSession != null}")
         MediaTraceLog.d("BRIDGE command play hasMediaSession=${activeGeckoMediaSession != null}")
-        notifyUserTransportCommand()
         activeGeckoMediaSession?.play()
     }
     fun pause() {
         Log.d(TAG, "pause: hasMediaSession=${activeGeckoMediaSession != null}")
         MediaTraceLog.d("BRIDGE command pause hasMediaSession=${activeGeckoMediaSession != null}")
-        notifyUserPauseCommand()
         activeGeckoMediaSession?.pause()
     }
     fun stop() {
         Log.d(TAG, "stop: hasMediaSession=${activeGeckoMediaSession != null}")
-        notifyUserPauseCommand()
         activeGeckoMediaSession?.stop()
     }
     fun nextTrack() {
         Log.d(TAG, "nextTrack: hasMediaSession=${activeGeckoMediaSession != null}")
-        notifyUserTransportCommand()
         activeGeckoMediaSession?.nextTrack()
     }
     fun previousTrack() {
         Log.d(TAG, "previousTrack: hasMediaSession=${activeGeckoMediaSession != null}")
-        notifyUserTransportCommand()
         activeGeckoMediaSession?.previousTrack()
     }
     fun seekTo(positionSeconds: Double) {
@@ -116,12 +111,38 @@ object MediaSessionBridge {
         activeGeckoMediaSession?.seekTo(positionSeconds, true)
     }
 
-    private fun notifyUserTransportCommand() {
-        userTransportCommandListener?.invoke()
+    fun playFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=play")
+        dispatchUserTransport(::play)
     }
 
-    private fun notifyUserPauseCommand() {
+    fun nextTrackFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=nextTrack")
+        dispatchUserTransport(::nextTrack)
+    }
+
+    fun previousTrackFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=previousTrack")
+        dispatchUserTransport(::previousTrack)
+    }
+
+    fun pauseFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=pause")
         userPauseCommandListener?.invoke()
+        pause()
+    }
+
+    fun stopFromUser() {
+        MediaTraceLog.d("BRIDGE userCommand=stop")
+        userPauseCommandListener?.invoke()
+        stop()
+    }
+
+    private fun dispatchUserTransport(command: () -> Unit) {
+        val listener = userTransportCommandListener
+        if (listener != null) {
+            listener(command)
+        }
     }
 
     private const val TAG = "MediaSessionBridge"

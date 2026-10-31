@@ -117,6 +117,7 @@ internal class BrowserViewModel(
         // ページ翻訳ブリッジは content script より先に MessageDelegate が要る。設定画面などで
         // タブの Composition が外れても外さないよう、セッションの寿命に合わせて張る。
         browserTabController.onTabSessionCreated = { session ->
+            mediaWebExtension.registerSession(session)
             pageTranslationWebExtension.registerSession(session)
         }
         browserTabController.onTabSessionDisposed = { session ->

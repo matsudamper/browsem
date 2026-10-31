@@ -238,7 +238,7 @@ internal fun mediaWebExtension(
 ): MediaWebExtension {
     return MediaWebExtension(
         context = context,
-        onBlockedPlayback = { tag, title, body ->
+        onPlaybackDiagnostic = { tag, title, body ->
             crashLogRepository.saveSync(tag = tag, title = title, body = body)
         },
     ).also { it.install(runtime) }

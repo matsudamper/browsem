@@ -37,7 +37,8 @@ fun Project.wireRobolectricPropertiesFromRoot() {
     }
 
     tasks.matching {
-        it.name == "processDebugUnitTestJavaRes" || it.name == "processReleaseUnitTestJavaRes"
+        it.name.endsWith("UnitTestJavaRes") &&
+            (it.name.startsWith("process") || it.name.startsWith("compress"))
     }.configureEach {
         dependsOn(rootProject.tasks.named("syncRobolectricProperties"))
     }
