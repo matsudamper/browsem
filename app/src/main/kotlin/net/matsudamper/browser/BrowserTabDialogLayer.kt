@@ -2,18 +2,23 @@ package net.matsudamper.browser
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AlertDialogDefaults
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -26,6 +31,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -537,6 +543,7 @@ private fun buildAddressDisplayText(
     if (includeEmail && address.email.isNotEmpty()) add(address.email)
 }.joinToString(" ")
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExternalAppLaunchDialog(
     appName: String?,
@@ -545,44 +552,58 @@ private fun ExternalAppLaunchDialog(
     onCopyLink: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("アプリを開く") },
-        text = {
-            Column {
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = AlertDialogDefaults.shape,
+            color = AlertDialogDefaults.containerColor,
+            tonalElevation = AlertDialogDefaults.TonalElevation,
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(
+                    text = "アプリを開く",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = AlertDialogDefaults.titleContentColor,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
                 if (appName != null) {
-                    Text("$appName をアプリで開きますか？")
+                    Text(
+                        text = "$appName をアプリで開きますか？",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AlertDialogDefaults.textContentColor,
+                    )
                 } else {
-                    Text("このリンクをアプリで開きますか？")
+                    Text(
+                        text = "このリンクをアプリで開きますか？",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AlertDialogDefaults.textContentColor,
+                    )
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        sourceUri,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    IconButton(onClick = onCopyLink) {
-                        Icon(
-                            painter = painterResource(ResourcesR.drawable.ic_content_copy_24dp),
-                            contentDescription = "リンクをコピー",
-                        )
+                Text(
+                    text = sourceUri,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AlertDialogDefaults.textContentColor,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                ) {
+                    TextButton(onClick = onCopyLink) {
+                        Text("リンクをコピー")
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text("キャンセル")
+                    }
+                    TextButton(onClick = onConfirm) {
+                        Text("開く")
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("開く")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("キャンセル")
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable
