@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -40,6 +39,14 @@ internal sealed interface AddToHomeScreenTarget {
     ) : AddToHomeScreenTarget
 }
 
+internal enum class HomePinResult {
+    Requested,
+    NotSupported,
+
+    /** Xiaomi の「ホーム画面ショートカット」権限が拒否されている */
+    PermissionDenied,
+}
+
 internal data class AddToHomeScreenDialogState(
     val target: AddToHomeScreenTarget,
     val favicon: Bitmap?,
@@ -68,6 +75,9 @@ internal class AddToHomeScreenDialogController(
     private val coroutineScope: CoroutineScope,
 ) {
     var state by mutableStateOf<AddToHomeScreenDialogState?>(null)
+        private set
+
+    var shortcutPermissionDialogVisible by mutableStateOf(false)
         private set
 
     private var iconJob: Job? = null
@@ -119,14 +129,23 @@ internal class AddToHomeScreenDialogController(
         iconJob = null
         state = null
     }
+
+    fun showShortcutPermissionDialog() {
+        shortcutPermissionDialogVisible = true
+    }
+
+    fun dismissShortcutPermissionDialog() {
+        shortcutPermissionDialogVisible = false
+    }
 }
 
 internal suspend fun requestPinRegisteredWebAppToHome(
     webAppShortcutManager: WebAppShortcutManager,
     target: AddToHomeScreenTarget.RegisteredWebApp,
     fallbackFavicon: Bitmap?,
-): Boolean {
-    if (!webAppShortcutManager.isPinSupported()) return false
+): HomePinResult {
+    if (!webAppShortcutManager.isPinSupported()) return HomePinResult.NotSupported
+    if (webAppShortcutManager.isPinPermissionDenied()) return HomePinResult.PermissionDenied
     // ホームから外されたショートカットはランチャーにアイコンが残らないため、毎回アイコンを渡す
     val favicon = fetchAddToHomeScreenIcon(
         pageUrl = target.url,
@@ -142,7 +161,7 @@ internal suspend fun requestPinRegisteredWebAppToHome(
         label = target.title.ifBlank { target.url },
         favicon = favicon,
     )
-    return true
+    return HomePinResult.Requested
 }
 
 internal suspend fun pinWebAppToHome(
@@ -151,8 +170,10 @@ internal suspend fun pinWebAppToHome(
     label: String,
     favicon: Bitmap?,
     onRegisterWebApp: suspend (url: String, title: String, profileId: String) -> String,
-): Boolean {
-    if (!webAppShortcutManager.isPinSupported()) return false
+): HomePinResult {
+    if (!webAppShortcutManager.isPinSupported()) return HomePinResult.NotSupported
+    // 登録してからピン留めが捨てられると登録だけ残るため、登録より前に判定する
+    if (webAppShortcutManager.isPinPermissionDenied()) return HomePinResult.PermissionDenied
     val resolvedLabel = label.ifBlank { target.url }
     val launchInfo = when (target) {
         is AddToHomeScreenTarget.NewPage -> {
@@ -177,7 +198,7 @@ internal suspend fun pinWebAppToHome(
         label = resolvedLabel,
         favicon = favicon,
     )
-    return true
+    return HomePinResult.Requested
 }
 
 internal fun pinUrlShortcutToHome(
@@ -185,11 +206,9 @@ internal fun pinUrlShortcutToHome(
     url: String,
     title: String,
     favicon: Bitmap?,
-): Boolean {
-    if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
-        Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
-        return false
-    }
+): HomePinResult {
+    if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) return HomePinResult.NotSupported
+    if (HomeShortcutPermission.isDenied(context)) return HomePinResult.PermissionDenied
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url), context, DeepLinkActivity::class.java)
     val icon = if (favicon != null) {
         IconCompat.createWithBitmap(favicon)
@@ -204,5 +223,5 @@ internal fun pinUrlShortcutToHome(
         .setIntent(intent)
         .build()
     ShortcutManagerCompat.requestPinShortcut(context, info, null)
-    return true
+    return HomePinResult.Requested
 }

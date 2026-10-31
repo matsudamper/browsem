@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
@@ -16,41 +17,58 @@ internal fun AddToHomeScreenDialogHost(
     onRegisterWebApp: suspend (url: String, title: String, profileId: String) -> String,
 ) {
     val context = LocalContext.current
-    val dialogState = controller.state ?: return
-    val target = dialogState.target
-    val showShortcutOption = target is AddToHomeScreenTarget.NewPage
-    AddToHomeScreenDialog(
-        url = target.url,
-        title = target.title,
-        favicon = dialogState.favicon,
-        isIconLoading = dialogState.isIconLoading,
-        showShortcutOption = showShortcutOption,
-        onAddWebApp = { title ->
-            pinWebAppScope.launch {
-                val isPinned = pinWebAppToHome(
-                    webAppShortcutManager = webAppShortcutManager,
-                    target = target,
-                    label = title,
-                    favicon = dialogState.favicon,
-                    onRegisterWebApp = onRegisterWebApp,
-                )
-                if (!isPinned) {
-                    Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
+    val dialogState = controller.state
+    if (dialogState != null) {
+        val target = dialogState.target
+        val showShortcutOption = target is AddToHomeScreenTarget.NewPage
+        AddToHomeScreenDialog(
+            url = target.url,
+            title = target.title,
+            favicon = dialogState.favicon,
+            isIconLoading = dialogState.isIconLoading,
+            showShortcutOption = showShortcutOption,
+            onAddWebApp = { title ->
+                pinWebAppScope.launch {
+                    val result = pinWebAppToHome(
+                        webAppShortcutManager = webAppShortcutManager,
+                        target = target,
+                        label = title,
+                        favicon = dialogState.favicon,
+                        onRegisterWebApp = onRegisterWebApp,
+                    )
+                    controller.handlePinResult(context, result)
                 }
-            }
-            controller.dismiss()
-        },
-        onAddShortcut = { title ->
-            pinUrlShortcutToHome(
-                context = context,
-                url = target.url,
-                title = title,
-                favicon = dialogState.favicon,
-            )
-            controller.dismiss()
-        },
-        onDismiss = controller::dismiss,
-    )
+                controller.dismiss()
+            },
+            onAddShortcut = { title ->
+                val result = pinUrlShortcutToHome(
+                    context = context,
+                    url = target.url,
+                    title = title,
+                    favicon = dialogState.favicon,
+                )
+                controller.handlePinResult(context, result)
+                controller.dismiss()
+            },
+            onDismiss = controller::dismiss,
+        )
+    }
+    if (controller.shortcutPermissionDialogVisible) {
+        HomeShortcutPermissionDialog(
+            onOpenSettings = { HomeShortcutPermission.openSettings(context) },
+            onDismiss = controller::dismissShortcutPermissionDialog,
+        )
+    }
+}
+
+internal fun AddToHomeScreenDialogController.handlePinResult(context: Context, result: HomePinResult) {
+    when (result) {
+        HomePinResult.Requested -> Unit
+        HomePinResult.NotSupported -> {
+            Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
+        }
+        HomePinResult.PermissionDenied -> showShortcutPermissionDialog()
+    }
 }
 
 internal fun AddToHomeScreenDialogController.requestFromPage(

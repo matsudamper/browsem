@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.AddToHomeScreenTarget
+import net.matsudamper.browser.HomePinResult
 import net.matsudamper.browser.WebAppShortcutManager
 import net.matsudamper.browser.data.ProfileData
 import net.matsudamper.browser.data.ProfileId
@@ -160,13 +161,15 @@ internal class WebAppsScreenViewModel(
                         profileId = webApp.profileId,
                     )
                     viewModelScope.launch {
-                        val isPinned = requestPinRegisteredWebAppToHome(
+                        val result = requestPinRegisteredWebAppToHome(
                             webAppShortcutManager = webAppShortcutManager,
                             target = target,
                             fallbackFavicon = null,
                         )
-                        if (!isPinned) {
-                            eventHandler.trySend { it.onPinNotSupported() }
+                        when (result) {
+                            HomePinResult.Requested -> Unit
+                            HomePinResult.NotSupported -> eventHandler.trySend { it.onPinNotSupported() }
+                            HomePinResult.PermissionDenied -> eventHandler.trySend { it.onPinPermissionDenied() }
                         }
                     }
                 }
@@ -181,6 +184,9 @@ internal class WebAppsScreenViewModel(
     interface Event {
         /** ランチャーがピン留めに対応していない */
         fun onPinNotSupported()
+
+        /** Xiaomi の「ホーム画面ショートカット」権限が拒否されている */
+        fun onPinPermissionDenied()
         fun onRenameFailed()
 
         /** ランチャーがアイコンの書き換えを拒否したため、削除を中止した（レート制限など） */

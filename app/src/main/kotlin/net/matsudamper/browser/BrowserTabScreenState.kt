@@ -797,14 +797,12 @@ internal class BrowserTabScreenState(
         )
         val fallbackFavicon = browserTab.faviconBitmap
         coroutineScope.launch {
-            val isPinned = requestPinRegisteredWebAppToHome(
+            val result = requestPinRegisteredWebAppToHome(
                 webAppShortcutManager = webAppShortcutManager,
                 target = target,
                 fallbackFavicon = fallbackFavicon,
             )
-            if (!isPinned) {
-                Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
-            }
+            addToHomeScreenDialogController.handlePinResult(context, result)
         }
     }
 

@@ -18,6 +18,8 @@ internal class WebAppShortcutManager(
 ) {
     fun isPinSupported(): Boolean = ShortcutManagerCompat.isRequestPinShortcutSupported(context)
 
+    fun isPinPermissionDenied(): Boolean = HomeShortcutPermission.isDenied(context)
+
     /**
      * 登録済みのウェブアプリをホームにピン留めする。
      * 専用の WebAppActivity で開き、ドキュメントタスクとして独立したRecentsエントリを持つ。

@@ -31,6 +31,8 @@ import net.matsudamper.browser.CustomTabActivity
 import net.matsudamper.browser.DefaultBrowserChecker
 import net.matsudamper.browser.ExtensionSettingsScreen
 import net.matsudamper.browser.GITHUB_RELEASES_URL
+import net.matsudamper.browser.HomeShortcutPermission
+import net.matsudamper.browser.HomeShortcutPermissionDialog
 import net.matsudamper.browser.OuterNavActions
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionSettingsScreenViewModel
@@ -314,6 +316,7 @@ internal fun WebAppsNavContent(navActions: OuterNavActions) {
     val context = LocalContext.current
     val webAppsViewModel: WebAppsScreenViewModel = koinViewModel()
     val webAppsUiState by webAppsViewModel.uiState.collectAsState()
+    var shortcutPermissionDialogVisible by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(webAppsViewModel) {
         webAppsViewModel.eventHandler.receiveAsFlow().collect { handler ->
             handler(object : WebAppsScreenViewModel.Event {
@@ -328,6 +331,10 @@ internal fun WebAppsNavContent(navActions: OuterNavActions) {
                 override fun onPinNotSupported() {
                     Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
                 }
+
+                override fun onPinPermissionDenied() {
+                    shortcutPermissionDialogVisible = true
+                }
             })
         }
     }
@@ -335,4 +342,10 @@ internal fun WebAppsNavContent(navActions: OuterNavActions) {
         uiState = webAppsUiState,
         onBack = { navActions.pop() },
     )
+    if (shortcutPermissionDialogVisible) {
+        HomeShortcutPermissionDialog(
+            onOpenSettings = { HomeShortcutPermission.openSettings(context) },
+            onDismiss = { shortcutPermissionDialogVisible = false },
+        )
+    }
 }
