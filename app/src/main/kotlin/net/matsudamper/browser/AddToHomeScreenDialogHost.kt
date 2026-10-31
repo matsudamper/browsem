@@ -64,9 +64,11 @@ internal fun AddToHomeScreenDialogHost(
 internal fun AddToHomeScreenDialogController.handlePinResult(context: Context, result: HomePinResult) {
     when (result) {
         HomePinResult.Requested -> Unit
+
         HomePinResult.NotSupported -> {
             Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
         }
+
         HomePinResult.PermissionDenied -> showShortcutPermissionDialog()
     }
 }
