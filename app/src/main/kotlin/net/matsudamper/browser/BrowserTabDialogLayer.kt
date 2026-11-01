@@ -564,27 +564,33 @@ private fun ExternalAppLaunchDialog(
                     color = AlertDialogDefaults.titleContentColor,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                if (appName != null) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    if (appName != null) {
+                        Text(
+                            text = "$appName をアプリで開きますか？",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AlertDialogDefaults.textContentColor,
+                        )
+                    } else {
+                        Text(
+                            text = "このリンクをアプリで開きますか？",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AlertDialogDefaults.textContentColor,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
                     Text(
-                        text = "$appName をアプリで開きますか？",
+                        text = sourceUri,
                         style = MaterialTheme.typography.bodyMedium,
                         color = AlertDialogDefaults.textContentColor,
-                    )
-                } else {
-                    Text(
-                        text = "このリンクをアプリで開きますか？",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AlertDialogDefaults.textContentColor,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = sourceUri,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AlertDialogDefaults.textContentColor,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
                 Spacer(modifier = Modifier.height(24.dp))
                 ExternalAppLaunchDialogActions(
                     copyLinkButton = {
