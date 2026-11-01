@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AlertDialogDefaults
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -26,6 +29,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -39,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
@@ -186,38 +191,12 @@ internal fun BrowserTabDialogLayer(
     }
 
     state.pendingExternalAppLaunch?.let { request ->
-        AlertDialog(
-            onDismissRequest = {
-                state.dismissPendingExternalAppLaunchAndLoadInBrowser()
-            },
-            title = { Text("アプリを開く") },
-            text = {
-                Column {
-                    if (request.appName != null) {
-                        Text("${request.appName} をアプリで開きますか？")
-                    } else {
-                        Text("このリンクをアプリで開きますか？")
-                    }
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        request.sourceUri,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = state::confirmPendingExternalAppLaunch) {
-                    Text("開く")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    state.dismissPendingExternalAppLaunchAndLoadInBrowser()
-                }) {
-                    Text("キャンセル")
-                }
-            },
+        ExternalAppLaunchDialog(
+            appName = request.appName,
+            sourceUri = request.sourceUri,
+            onConfirm = state::confirmPendingExternalAppLaunch,
+            onCopyLink = state::copyPendingExternalAppLaunchUrl,
+            onDismiss = state::dismissPendingExternalAppLaunchAndLoadInBrowser,
         )
     }
 
@@ -562,6 +541,124 @@ private fun buildAddressDisplayText(
     if (address.tel.isNotEmpty()) add(address.tel)
     if (includeEmail && address.email.isNotEmpty()) add(address.email)
 }.joinToString(" ")
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExternalAppLaunchDialog(
+    appName: String?,
+    sourceUri: String,
+    onConfirm: () -> Unit,
+    onCopyLink: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = AlertDialogDefaults.shape,
+            color = AlertDialogDefaults.containerColor,
+            tonalElevation = AlertDialogDefaults.TonalElevation,
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(
+                    text = "アプリを開く",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = AlertDialogDefaults.titleContentColor,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    if (appName != null) {
+                        Text(
+                            text = "$appName をアプリで開きますか？",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AlertDialogDefaults.textContentColor,
+                        )
+                    } else {
+                        Text(
+                            text = "このリンクをアプリで開きますか？",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AlertDialogDefaults.textContentColor,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = sourceUri,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AlertDialogDefaults.textContentColor,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                ExternalAppLaunchDialogActions(
+                    copyLinkButton = {
+                        TextButton(onClick = onCopyLink) {
+                            Text("リンクをコピー")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = onDismiss) {
+                            Text("キャンセル")
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = onConfirm) {
+                            Text("開く")
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Material 3 のダイアログのボタン配置。
+ * 横一列に収まるときは補助操作を左端、キャンセルと確定を右端に置き、収まらないときは確定を上にして右寄せで縦に積む。
+ */
+@Composable
+private fun ExternalAppLaunchDialogActions(
+    copyLinkButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit,
+    confirmButton: @Composable () -> Unit,
+) {
+    Layout(
+        modifier = Modifier.fillMaxWidth(),
+        content = {
+            copyLinkButton()
+            dismissButton()
+            confirmButton()
+        },
+    ) { measurables, constraints ->
+        val buttonSpacing = 8.dp.roundToPx()
+        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val (copyLink, dismiss, confirm) = measurables.map { it.measure(looseConstraints) }
+        val width = constraints.maxWidth
+        val fitsInRow = copyLink.width + dismiss.width + confirm.width + buttonSpacing * 2 <= width
+        if (fitsInRow) {
+            val height = maxOf(copyLink.height, dismiss.height, confirm.height)
+            layout(width, height) {
+                copyLink.placeRelative(0, (height - copyLink.height) / 2)
+                confirm.placeRelative(width - confirm.width, (height - confirm.height) / 2)
+                dismiss.placeRelative(
+                    width - confirm.width - buttonSpacing - dismiss.width,
+                    (height - dismiss.height) / 2,
+                )
+            }
+        } else {
+            val stackedButtons = listOf(confirm, dismiss, copyLink)
+            val height = stackedButtons.sumOf { it.height } + buttonSpacing * (stackedButtons.size - 1)
+            layout(width, height) {
+                stackedButtons.fold(0) { y, button ->
+                    button.placeRelative(width - button.width, y)
+                    y + button.height + buttonSpacing
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun AutoplayPermissionDialog(
@@ -1330,6 +1427,20 @@ private fun PreviewAutoplayPermissionDialog() {
             onAllow = {},
             onAllowOnce = {},
             onDeny = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "ExternalAppLaunchDialog")
+@Composable
+private fun PreviewExternalAppLaunchDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        ExternalAppLaunchDialog(
+            appName = "YouTube",
+            sourceUri = "https://www.youtube.com/watch?v=example",
+            onConfirm = {},
+            onCopyLink = {},
             onDismiss = {},
         )
     }
