@@ -2,10 +2,8 @@ package net.matsudamper.browser
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
@@ -587,19 +586,68 @@ private fun ExternalAppLaunchDialog(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(modifier = Modifier.height(24.dp))
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                ) {
-                    TextButton(onClick = onCopyLink) {
-                        Text("リンクをコピー")
-                    }
-                    TextButton(onClick = onDismiss) {
-                        Text("キャンセル")
-                    }
-                    TextButton(onClick = onConfirm) {
-                        Text("開く")
-                    }
+                ExternalAppLaunchDialogActions(
+                    copyLinkButton = {
+                        TextButton(onClick = onCopyLink) {
+                            Text("リンクをコピー")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = onDismiss) {
+                            Text("キャンセル")
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = onConfirm) {
+                            Text("開く")
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Material 3 のダイアログのボタン配置。
+ * 横一列に収まるときは補助操作を左端、キャンセルと確定を右端に置き、収まらないときは確定を上にして右寄せで縦に積む。
+ */
+@Composable
+private fun ExternalAppLaunchDialogActions(
+    copyLinkButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit,
+    confirmButton: @Composable () -> Unit,
+) {
+    Layout(
+        modifier = Modifier.fillMaxWidth(),
+        content = {
+            copyLinkButton()
+            dismissButton()
+            confirmButton()
+        },
+    ) { measurables, constraints ->
+        val buttonSpacing = 8.dp.roundToPx()
+        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val (copyLink, dismiss, confirm) = measurables.map { it.measure(looseConstraints) }
+        val width = constraints.maxWidth
+        val fitsInRow = copyLink.width + dismiss.width + confirm.width + buttonSpacing * 2 <= width
+        if (fitsInRow) {
+            val height = maxOf(copyLink.height, dismiss.height, confirm.height)
+            layout(width, height) {
+                copyLink.placeRelative(0, (height - copyLink.height) / 2)
+                confirm.placeRelative(width - confirm.width, (height - confirm.height) / 2)
+                dismiss.placeRelative(
+                    width - confirm.width - buttonSpacing - dismiss.width,
+                    (height - dismiss.height) / 2,
+                )
+            }
+        } else {
+            val stackedButtons = listOf(confirm, dismiss, copyLink)
+            val height = stackedButtons.sumOf { it.height } + buttonSpacing * (stackedButtons.size - 1)
+            layout(width, height) {
+                stackedButtons.fold(0) { y, button ->
+                    button.placeRelative(width - button.width, y)
+                    y + button.height + buttonSpacing
                 }
             }
         }
