@@ -124,6 +124,7 @@ internal fun rememberBrowserTabScreenState(
     DisposableEffect(state) {
         onDispose {
             state.translation.onScreenDisposed()
+            state.releaseHeldRedirect()
         }
     }
     state.homepageUrl = homepageUrl
@@ -345,6 +346,15 @@ internal class BrowserTabScreenState(
 
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
+
+    // 確認ダイアログの結果が出るまで保留しているリダイレクト。開くなら DENY、取りやめなら ALLOW で
+    // 確定させ、遷移をそのまま続ける。
+    private var heldRedirectLoadResult: GeckoResult<AllowOrDeny>? = null
+
+    // リダイレクトの直前のホップと比べるため、最後に onLoadRequest で受けた URI を持つ。
+    // 外部から開いた新規タブでは表示中のページが無く、現在ページの URL とは比べられない。
+    // 新規ウィンドウの要求は別タブで読み込まれるため、このタブの直前のホップにしない。
+    private var lastLoadRequestUri: String? = null
 
     var isFullScreen by mutableStateOf(false)
 
@@ -693,6 +703,13 @@ internal class BrowserTabScreenState(
         val request = pendingExternalAppLaunch ?: return
         pendingExternalAppLaunch = null
         val result = launchExternalApp(context, request)
+        val heldRedirect = heldRedirectLoadResult
+        if (heldRedirect != null) {
+            heldRedirectLoadResult = null
+            // 起動できなかった場合は、保留していたリダイレクトをブラウザで続ける
+            heldRedirect.complete(if (result.isSuccess) AllowOrDeny.DENY else AllowOrDeny.ALLOW)
+            return
+        }
         if (result.isSuccess) {
             queuedExternalAppLaunch = null
             return
@@ -716,10 +733,22 @@ internal class BrowserTabScreenState(
      * http/https の場合は sourceUri をそのまま使い、
      * intent:// 等のカスタムスキームの場合は fallbackUrl を使用する。
      */
+    fun copyPendingExternalAppLaunchUrl() {
+        val request = pendingExternalAppLaunch ?: return
+        copyUrlToClipboard(request.sourceUri)
+    }
+
     fun dismissPendingExternalAppLaunchAndLoadInBrowser() {
         val request = pendingExternalAppLaunch ?: return
         val loadsCurrentTab = canLoadPendingLaunchInCurrentTab
         pendingExternalAppLaunch = null
+
+        val heldRedirect = heldRedirectLoadResult
+        if (heldRedirect != null) {
+            heldRedirectLoadResult = null
+            heldRedirect.complete(AllowOrDeny.ALLOW)
+            return
+        }
 
         val queued = queuedExternalAppLaunch
         queuedExternalAppLaunch = null
@@ -1122,6 +1151,10 @@ internal class BrowserTabScreenState(
     override fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
+        val previousLoadRequestUri = lastLoadRequestUri
+        if (!request.isNewWindowTarget()) {
+            lastLoadRequestUri = request.uri
+        }
         if (skipExternalAppCheckForNextLoad) {
             skipExternalAppCheckForNextLoad = false
             return null
@@ -1151,6 +1184,12 @@ internal class BrowserTabScreenState(
             resolveExternalAppNavigationAction(context, request.uri)
         } else {
             ExternalAppNavigationAction.AllowInBrowser
+        }
+        if (request.isRedirect && !isSameDomainRedirect(previousLoadRequestUri, request.uri)) {
+            val redirectAppLink = resolveRedirectAppLinkLaunch(context, request.uri)
+            if (redirectAppLink != null) {
+                return holdRedirectForExternalAppLaunch(redirectAppLink)
+            }
         }
         // single-page でも TARGET_WINDOW_NEW は現在タブへ畳み込まない。
         // DENY + loadUri すると onNewSession が呼ばれず overlay が出せない。
@@ -1207,6 +1246,32 @@ internal class BrowserTabScreenState(
             action = action,
             loadsCurrentTab = false,
         )
+    }
+
+    /**
+     * 画面の破棄で確認ダイアログが失われても、GeckoSession は ViewModel 側で生き続ける。
+     * 保留を確定しないと Gecko がリダイレクトを待ち続けて読み込み中のまま止まるため、ブラウザで続ける。
+     */
+    fun releaseHeldRedirect() {
+        heldRedirectLoadResult?.complete(AllowOrDeny.ALLOW)
+        heldRedirectLoadResult = null
+    }
+
+    /**
+     * リダイレクト先の App Link を、遷移を止めずに保留して確認ダイアログを出す。
+     * DENY するとリダイレクトを連ねる SSO のフローごと失われるため、取りやめたら ALLOW で続ける。
+     *
+     * 未対応: 保留中に来た別の遷移との整合、保留が長引いたときのサーバー側のタイムアウト。
+     * 問題が出たら対応する。
+     */
+    private fun holdRedirectForExternalAppLaunch(
+        request: PendingExternalAppLaunch,
+    ): GeckoResult<AllowOrDeny> {
+        val result = GeckoResult<AllowOrDeny>()
+        heldRedirectLoadResult = result
+        pendingExternalAppLaunch = request
+        canLoadPendingLaunchInCurrentTab = false
+        return result
     }
 
     /**

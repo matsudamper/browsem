@@ -2,6 +2,9 @@
   "manifest_version": 2,
   "name": "Media Bridge",
   "version": "1.0",
+  "background": {
+    "scripts": ["diagnostics.js"]
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "media-bridge@browsem"
@@ -16,9 +19,12 @@
         "about:*"
       ],
       "js": [
+        "playback_policy.js",
         "content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
   "permissions": [

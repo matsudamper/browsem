@@ -32,6 +32,7 @@ class MediaWebExtensionSnapshotTest {
                     durationMs = 120_000L,
                     positionMs = 10_000L,
                     mediaSrc = "https://example.com/a",
+                    playbackId = "",
                 ),
             )
 
@@ -67,6 +68,7 @@ class MediaWebExtensionSnapshotTest {
                     durationMs = 0L,
                     positionMs = 0L,
                     mediaSrc = "",
+                    playbackId = "",
                 ),
             )
 

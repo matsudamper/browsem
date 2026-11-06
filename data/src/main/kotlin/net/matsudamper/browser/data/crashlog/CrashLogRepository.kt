@@ -30,18 +30,25 @@ class CrashLogRepository(context: Context) {
     }
 
     fun saveSync(tag: String, title: String, body: String) {
-        dao.insert(
-            CrashLogEntity(
-                occurredAt = System.currentTimeMillis(),
-                tag = tag,
-                title = title,
-                body = body,
-            ),
+        val entry = CrashLogEntity(
+            occurredAt = System.currentTimeMillis(),
+            tag = tag,
+            title = title,
+            body = body,
         )
+        if (tag.startsWith("MediaPlayback/")) {
+            db.runInTransaction {
+                dao.insert(entry)
+                dao.deleteOldMediaDiagnostics(MAX_MEDIA_DIAGNOSTICS)
+            }
+        } else {
+            dao.insert(entry)
+        }
     }
 
     companion object {
         const val TAG_CRASH = "Crash"
         const val TAG_LOG = "Log"
+        const val MAX_MEDIA_DIAGNOSTICS = 100
     }
 }

@@ -95,7 +95,10 @@ class MediaPlaybackService : MediaSessionService() {
 
         // サービス起動前にonActivated()が呼ばれbridge状態にisActive=trueが反映済みのため、
         // 現在のBridge状態で初期化してSTATE_READYからスタートさせる
-        val player = GeckoMediaPlayer()
+        val player = GeckoMediaPlayer(isUserCommand = {
+            // 内部の状態更新では要求元がなく、通知・イヤホン・Android Auto・Wear OS などからの操作では要求元が入る。
+            mediaSession?.controllerForCurrentRequest != null
+        })
         mediaSession = MediaSession.Builder(this, player).build().also { session ->
             addSession(session)
         }
@@ -181,7 +184,9 @@ class MediaPlaybackService : MediaSessionService() {
  * 実際の再生はGeckoViewが行い、このPlayerは状態の反映と制御の橋渡しのみ行う。
  */
 @OptIn(UnstableApi::class)
-private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
+private class GeckoMediaPlayer(
+    private val isUserCommand: () -> Boolean,
+) : SimpleBasePlayer(Looper.getMainLooper()) {
 
     // サービス起動前にonActivated()→activate()が呼ばれているため、
     // 現在のBridge状態で初期化することでSTATE_READYからスタートできる
@@ -262,16 +267,27 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     }
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
-        if (playWhenReady) {
-            MediaSessionBridge.play()
+        val fromUser = isUserCommand()
+        MediaTraceLog.event(
+            "操作",
+            "player:$playWhenReady:$fromUser",
+            "origin=${if (fromUser) "通知・メディアボタン・外部コントローラー" else "システム・内部（要求元なし）"} " +
+                "reason=${if (fromUser) "handleSetPlayWhenReady" else "PLY ignore playWhenReady"} playWhenReady=$playWhenReady",
+        )
+        if (playWhenReady && fromUser) {
+            MediaSessionBridge.playFromUser()
+        } else if (!playWhenReady && fromUser) {
+            MediaSessionBridge.pauseFromUser()
         } else {
-            MediaSessionBridge.pause()
+            MediaTraceLog.d("PLY ignore playWhenReady=$playWhenReady without user controller")
         }
         return Futures.immediateVoidFuture()
     }
 
     override fun handleStop(): ListenableFuture<*> {
-        MediaSessionBridge.stop()
+        if (isUserCommand()) {
+            MediaSessionBridge.stopFromUser()
+        }
         return Futures.immediateVoidFuture()
     }
 
@@ -280,13 +296,16 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         positionMs: Long,
         seekCommand: Int,
     ): ListenableFuture<*> {
+        if (!isUserCommand()) {
+            return Futures.immediateVoidFuture()
+        }
         when (seekCommand) {
             Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
-                MediaSessionBridge.nextTrack()
+                MediaSessionBridge.nextTrackFromUser()
             }
 
             Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
-                MediaSessionBridge.previousTrack()
+                MediaSessionBridge.previousTrackFromUser()
             }
 
             else -> {
