@@ -996,6 +996,8 @@ internal class BrowserTabScreenState(
     }
 
     override fun onTitleChange(title: String) {
+        // エラー表示中のタイトルは背後で復元した旧ページのもので、失敗 URL の履歴に適用すると取り違える
+        if (pageLoadError != null) return
         currentPageTitle = title
         val entryId = currentHistoryEntryId
         val callback = onHistoryTitleUpdate
