@@ -88,6 +88,9 @@ internal fun CrashLogsScreen(
                 },
                 actions = {
                     if (uiState.entries.isNotEmpty()) {
+                        TextButton(onClick = uiState.callbacks::onClickCopyAll) {
+                            Text("全コピー")
+                        }
                         TextButton(onClick = uiState.callbacks::onClickDeleteAll) {
                             Text("全削除")
                         }
@@ -233,6 +236,7 @@ private fun CrashLogSummaryListItem(
 }
 
 private val previewCallbacks = object : CrashLogsScreenUiState.Callbacks {
+    override fun onClickCopyAll() = Unit
     override fun onClickDeleteAll() = Unit
     override fun onConfirmDeleteAll() = Unit
     override fun onDismissDeleteAllDialog() = Unit
