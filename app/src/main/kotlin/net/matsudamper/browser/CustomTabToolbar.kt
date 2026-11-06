@@ -45,6 +45,7 @@ import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.defaultBrowserToolbarColor
 import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 
 internal sealed interface CustomTabToolbarTestTags {
@@ -107,7 +108,7 @@ internal fun CustomTabToolbar(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var menuAnchorBottomPx by remember { mutableIntStateOf(0) }
-    val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
+    val resolvedToolbarColor = toolbarColor ?: defaultBrowserToolbarColor()
     val toolbarContentColor = if (resolvedToolbarColor.luminance() >= 0.5f) {
         Color.Black
     } else {
