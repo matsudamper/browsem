@@ -250,7 +250,7 @@ internal fun BrowserContentHost(
         }
         if (!state.renderReady) {
             val bitmap = previewBitmap
-            if (bitmap != null) {
+            if (bitmap != null && state.pageLoadError == null) {
                 Image(
                     modifier = Modifier.fillMaxSize(),
                     bitmap = bitmap.asImageBitmap(),

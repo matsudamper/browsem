@@ -95,6 +95,13 @@ class BrowserSessionLifecycleController(
                 return
             }
         }
+        // 読み込み失敗オーバーレイ表示中は、失敗 URL と無関係な初回 URL を背後で読み込まない
+        if (tab.tabPageLoadError != null) {
+            tab.session.loadUri("about:blank")
+            tab.setSessionActive(true)
+            markActiveForExtensions(tab.session)
+            return
+        }
         // 初回ロードは GeckoView の Surface サイズ確定後まで遅延する。
         // 未確定 viewport でロードすると ImageDocument (画像単体表示) の
         // shrink-to-fit スケールが誤計算され、画像が小さく低解像度で表示されるため。

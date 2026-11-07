@@ -17,6 +17,13 @@ data class TabSecurityInfo(
     val certificate: X509Certificate?,
 )
 
+/** 読み込み失敗オーバーレイ表示中の状態。タブ切替やセッション復元後も維持する。 */
+data class TabPageLoadError(
+    val title: String,
+    val message: String,
+    val failingUrl: String,
+)
+
 /**
  * 現在生存しているブラウザタブの GeckoSession を弱参照で追跡する。
  * ランタイム設定変更後に既存ドキュメントを再読み込みする用途で使用する。
@@ -148,6 +155,9 @@ class BrowserTab(
     // フルページロード中かどうか。タブ切替で BrowserTabScreenState が再生成されても
     // ロード状態を維持し、再接続時に停止ボタンを正しく表示するために使う。
     var isPageLoading: Boolean = false
+
+    // 読み込み失敗オーバーレイ。セッション状態の復元で直前の成功ページが戻るのを防ぐ。
+    var tabPageLoadError: TabPageLoadError? = null
 
     internal var pendingSessionState: String? by mutableStateOf(null)
 
