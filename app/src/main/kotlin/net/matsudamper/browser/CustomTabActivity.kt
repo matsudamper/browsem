@@ -29,7 +29,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -46,7 +45,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SemanticSearchProvider
@@ -410,7 +408,7 @@ private fun CustomTabScreen(
             currentOnOpenInBrowser(
                 openInBrowserUrl,
                 activeTab,
-                captureFreshSessionState(activeTab),
+                activeTab.flushAndCaptureSessionState(),
             )
         }
         return
@@ -543,19 +541,3 @@ private fun PreviewCustomTabOpaqueShell() {
         }
     }
 }
-
-/**
- * flushSessionState() で最新の SessionState を onSessionStateChange 経由で反映させ、
- * 更新後の [BrowserTab.sessionState] を返す。引き渡したセッションが閉じていた場合の復元に使うため、
- * 直前のナビゲーションを取りこぼさないようにする。
- * 反映が一定時間内に来ない場合（既に最新の場合を含む）は現在のキャッシュ値を返す。
- */
-private suspend fun captureFreshSessionState(tab: BrowserTab): String {
-    val before = tab.sessionState
-    tab.session.flushSessionState()
-    return withTimeoutOrNull(FLUSH_SESSION_STATE_TIMEOUT_MS) {
-        snapshotFlow { tab.sessionState }.first { it != before }
-    } ?: tab.sessionState
-}
-
-private const val FLUSH_SESSION_STATE_TIMEOUT_MS = 300L
