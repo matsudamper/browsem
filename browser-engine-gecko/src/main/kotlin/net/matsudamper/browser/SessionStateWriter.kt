@@ -23,11 +23,14 @@ internal class SessionStateWriter(private val tab: BrowserTab) {
                     serializeSessionState(
                         serialize = { latestState.toString() },
                         onRejected = { reason ->
-                            Log.w(TAG, "セッション状態の保存を見送りました: tabId=${tab.tabId}, $reason")
+                            Log.w(TAG, "セッション状態の文字列化を中止しました: tabId=${tab.tabId}, $reason")
                         },
                     )
                 }
                 if (serialized != null) {
+                    if (serialized.isEmpty()) {
+                        tab.pendingSessionState = null
+                    }
                     tab.sessionState = serialized
                 }
             }
@@ -56,6 +59,7 @@ internal class SessionStateWriter(private val tab: BrowserTab) {
 
 internal const val MAX_SESSION_STATE_CHARS = 1024 * 1024
 
+/** 空文字は保存済み履歴の削除、null は前回値の維持を表す。 */
 internal fun serializeSessionState(
     serialize: () -> String?,
     onRejected: (String) -> Unit,
@@ -64,10 +68,10 @@ internal fun serializeSessionState(
         serialize()
     } catch (_: OutOfMemoryError) {
         onRejected("reason=OutOfMemoryError, chars=unknown")
-        return null
+        return ""
     } catch (error: RuntimeException) {
         onRejected("reason=${error.javaClass.simpleName}, chars=unknown")
-        return null
+        return ""
     }
     return when {
         serialized.isNullOrBlank() -> {
@@ -76,7 +80,7 @@ internal fun serializeSessionState(
         }
         serialized.length > MAX_SESSION_STATE_CHARS -> {
             onRejected("reason=size_limit, chars=${serialized.length}, limit=$MAX_SESSION_STATE_CHARS")
-            null
+            ""
         }
         else -> serialized
     }

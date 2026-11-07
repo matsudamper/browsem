@@ -13,25 +13,25 @@ class SessionStateSerializationTest {
     }
 
     @Test
-    fun `上限超過は保存せず文字数を報告する`() {
+    fun `上限超過は保存済み履歴を削除する空文字と文字数を返す`() {
         val reasons = mutableListOf<String>()
         val state = "a".repeat(MAX_SESSION_STATE_CHARS + 1)
-        assertNull(serializeSessionState({ state }, reasons::add))
+        assertEquals("", serializeSessionState({ state }, reasons::add))
         assertTrue(reasons.single().contains("chars=${state.length}"))
         assertTrue(reasons.single().contains("reason=size_limit"))
     }
 
     @Test
-    fun `OOM は呼び出し元に伝播せず理由を報告する`() {
+    fun `OOM は保存済み履歴を削除する空文字と理由を返す`() {
         val reasons = mutableListOf<String>()
-        assertNull(serializeSessionState({ throw OutOfMemoryError("テスト用") }, reasons::add))
+        assertEquals("", serializeSessionState({ throw OutOfMemoryError("テスト用") }, reasons::add))
         assertEquals(listOf("reason=OutOfMemoryError, chars=unknown"), reasons)
     }
 
     @Test
-    fun `実行時例外は呼び出し元に伝播せず理由を報告する`() {
+    fun `実行時例外は保存済み履歴を削除する空文字と理由を返す`() {
         val reasons = mutableListOf<String>()
-        assertNull(serializeSessionState({ throw IllegalStateException("テスト用") }, reasons::add))
+        assertEquals("", serializeSessionState({ throw IllegalStateException("テスト用") }, reasons::add))
         assertEquals(listOf("reason=IllegalStateException, chars=unknown"), reasons)
     }
 
