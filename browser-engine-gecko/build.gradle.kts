@@ -13,6 +13,7 @@ dependencies {
     implementation(libs.mozilla.geckoview)
     api(project(":browser-core"))
     implementation(project(":data"))
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.junit4)
     testImplementation(libs.mockk)
 }

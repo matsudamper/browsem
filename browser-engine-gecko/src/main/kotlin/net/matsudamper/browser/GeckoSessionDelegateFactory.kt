@@ -726,6 +726,8 @@ internal class BrowserTabSessionDelegateHost(
         browserTab.isPageLoading = false
     }
 
+    suspend fun flushAndCaptureSessionState(): String = sessionStateWriter.flushAndCapture()
+
     fun failPendingRequests(cause: Throwable) {
         sessionStateWriter.close()
         val newSessions: List<PendingNewSessionRequest>

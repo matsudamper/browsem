@@ -238,6 +238,12 @@ class BrowserTab(
         )
     }
 
+    /**
+     * flush 後の受信を300ms待ち、受信済みなら最新世代の文字列化完了まで最大5秒待つ。
+     * 上限到達・タブ破棄時は、その時点で反映済みの状態を返す。
+     */
+    suspend fun flushAndCaptureSessionState(): String = sessionDelegateHost.flushAndCaptureSessionState()
+
     fun detachSessionCallbacks() {
         sessionDelegateHost.detachUi()
     }
