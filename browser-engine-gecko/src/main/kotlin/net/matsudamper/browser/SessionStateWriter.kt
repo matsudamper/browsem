@@ -4,7 +4,6 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -14,9 +13,9 @@ import org.mozilla.geckoview.GeckoSession
 internal class SessionStateWriter(private val tab: BrowserTab) {
     private val states = Channel<ReceivedState>(Channel.CONFLATED)
     private val progress = SessionStateProgress()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val workerJob = SupervisorJob()
     private val worker by lazy {
-        scope.launch {
+        CoroutineScope(workerJob + Dispatchers.Main.immediate).launch {
             for (state in states) {
                 delay(COALESCE_DELAY_MS)
                 val latestState = states.tryReceive().getOrNull() ?: state
@@ -66,7 +65,7 @@ internal class SessionStateWriter(private val tab: BrowserTab) {
     fun close() {
         progress.close()
         states.cancel()
-        scope.cancel()
+        workerJob.cancel()
     }
 
     private data class ReceivedState(val generation: Long, val state: GeckoSession.SessionState)
