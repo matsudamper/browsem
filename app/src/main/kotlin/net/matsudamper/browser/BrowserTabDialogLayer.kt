@@ -641,11 +641,11 @@ private fun ExternalAppLaunchDialogActions(
             val height = maxOf(copyLink.height, dismiss.height, confirm.height)
             layout(width, height) {
                 dismiss.placeRelative(0, (height - dismiss.height) / 2)
-                confirm.placeRelative(width - confirm.width, (height - confirm.height) / 2)
                 copyLink.placeRelative(
                     width - confirm.width - buttonSpacing - copyLink.width,
                     (height - copyLink.height) / 2,
                 )
+                confirm.placeRelative(width - confirm.width, (height - confirm.height) / 2)
             }
         } else {
             val stackedButtons = listOf(confirm, copyLink, dismiss)
