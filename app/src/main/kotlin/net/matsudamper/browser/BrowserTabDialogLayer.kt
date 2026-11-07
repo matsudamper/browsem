@@ -616,7 +616,7 @@ private fun ExternalAppLaunchDialog(
 
 /**
  * Material 3 のダイアログのボタン配置。
- * 横一列に収まるときは補助操作を左端、キャンセルと確定を右端に置き、収まらないときは確定を上にして右寄せで縦に積む。
+ * 横一列に収まるときはキャンセルを左端、補助操作と確定を右端に置き、収まらないときは確定を上・キャンセルを下にして右寄せで縦に積む。
  */
 @Composable
 private fun ExternalAppLaunchDialogActions(
@@ -640,15 +640,15 @@ private fun ExternalAppLaunchDialogActions(
         if (fitsInRow) {
             val height = maxOf(copyLink.height, dismiss.height, confirm.height)
             layout(width, height) {
-                copyLink.placeRelative(0, (height - copyLink.height) / 2)
+                dismiss.placeRelative(0, (height - dismiss.height) / 2)
                 confirm.placeRelative(width - confirm.width, (height - confirm.height) / 2)
-                dismiss.placeRelative(
-                    width - confirm.width - buttonSpacing - dismiss.width,
-                    (height - dismiss.height) / 2,
+                copyLink.placeRelative(
+                    width - confirm.width - buttonSpacing - copyLink.width,
+                    (height - copyLink.height) / 2,
                 )
             }
         } else {
-            val stackedButtons = listOf(confirm, dismiss, copyLink)
+            val stackedButtons = listOf(confirm, copyLink, dismiss)
             val height = stackedButtons.sumOf { it.height } + buttonSpacing * (stackedButtons.size - 1)
             layout(width, height) {
                 stackedButtons.fold(0) { y, button ->
