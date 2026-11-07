@@ -27,12 +27,10 @@ internal class SessionStateWriter(private val tab: BrowserTab) {
                         },
                     )
                 }
-                if (serialized != null) {
-                    if (serialized.isEmpty()) {
-                        tab.pendingSessionState = null
-                    }
-                    tab.sessionState = serialized
+                if (serialized.isEmpty()) {
+                    tab.pendingSessionState = null
                 }
+                tab.sessionState = serialized
                 progress.applied(latestState.generation)
             }
         }
@@ -81,33 +79,12 @@ internal class SessionStateWriter(private val tab: BrowserTab) {
     }
 }
 
-internal const val MAX_SESSION_STATE_CHARS = 1024 * 1024
-
-/** 空文字は保存済み履歴の削除、null は前回値の維持を表す。 */
 internal fun serializeSessionState(
     serialize: () -> String?,
     onRejected: (String) -> Unit,
-): String? {
-    val serialized = try {
-        serialize()
-    } catch (_: OutOfMemoryError) {
-        onRejected("reason=OutOfMemoryError, chars=unknown")
-        return ""
-    } catch (error: RuntimeException) {
-        onRejected("reason=${error.javaClass.simpleName}, chars=unknown")
-        return ""
-    }
-    return when {
-        serialized.isNullOrBlank() -> {
-            onRejected("reason=empty, chars=${serialized?.length}")
-            null
-        }
-
-        serialized.length > MAX_SESSION_STATE_CHARS -> {
-            onRejected("reason=size_limit, chars=${serialized.length}, limit=$MAX_SESSION_STATE_CHARS")
-            ""
-        }
-
-        else -> serialized
-    }
+): String = try {
+    serialize().orEmpty()
+} catch (_: OutOfMemoryError) {
+    onRejected("reason=OutOfMemoryError, chars=unknown")
+    ""
 }
