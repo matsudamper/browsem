@@ -103,10 +103,12 @@ internal fun serializeSessionState(
             onRejected("reason=empty, chars=${serialized?.length}")
             null
         }
+
         serialized.length > MAX_SESSION_STATE_CHARS -> {
             onRejected("reason=size_limit, chars=${serialized.length}, limit=$MAX_SESSION_STATE_CHARS")
             ""
         }
+
         else -> serialized
     }
 }
