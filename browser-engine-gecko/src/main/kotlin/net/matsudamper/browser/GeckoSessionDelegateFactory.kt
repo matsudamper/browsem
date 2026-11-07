@@ -364,6 +364,7 @@ internal class BrowserTabSessionDelegateHost(
     private val browserTab: BrowserTab,
 ) {
     private val lock = Any()
+    private val sessionStateWriter = SessionStateWriter(browserTab)
     private var callbacks: BrowserSessionStateCallbacks? = null
     private var onOpenNewSessionRequest: ((String) -> GeckoResult<GeckoSession>)? = null
     private var onCloseRequest: (() -> Unit)? = null
@@ -483,7 +484,7 @@ internal class BrowserTabSessionDelegateHost(
             }
 
             override fun onSessionStateChange(sessionState: GeckoSession.SessionState) {
-                browserTab.sessionState = sessionState.toString().orEmpty()
+                sessionStateWriter.update(sessionState)
                 currentCallbacks()?.onSessionStateChange(sessionState)
             }
 
@@ -726,6 +727,7 @@ internal class BrowserTabSessionDelegateHost(
     }
 
     fun failPendingRequests(cause: Throwable) {
+        sessionStateWriter.close()
         val newSessions: List<PendingNewSessionRequest>
         synchronized(lock) {
             newSessions = pendingNewSessionRequests.toList()
