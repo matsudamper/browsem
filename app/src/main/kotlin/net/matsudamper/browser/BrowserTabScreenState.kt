@@ -747,17 +747,20 @@ internal class BrowserTabScreenState(
 
         val queued = queuedExternalAppLaunch
         queuedExternalAppLaunch = null
-        if (queued != null) {
+        if (queued != null && !isDeclinedDomainLaunch(queued)) {
             pendingExternalAppLaunch = queued
             canLoadPendingLaunchInCurrentTab = canLoadQueuedLaunchInCurrentTab
             return
         }
-        if (!loadsCurrentTab) return
+        // 後続の要求も開かないを選んだドメインなら、確認を出さずにそちらをブラウザで読み込む
+        val requestToLoad = queued ?: request
+        val loadsRequestInCurrentTab = if (queued != null) canLoadQueuedLaunchInCurrentTab else loadsCurrentTab
+        if (!loadsRequestInCurrentTab) return
 
-        val url = if (isHttpUri(request.sourceUri)) {
-            request.sourceUri
+        val url = if (isHttpUri(requestToLoad.sourceUri)) {
+            requestToLoad.sourceUri
         } else {
-            request.fallbackUrl
+            requestToLoad.fallbackUrl
         }
         if (url != null) {
             skipExternalAppCheckForNextLoad = true
