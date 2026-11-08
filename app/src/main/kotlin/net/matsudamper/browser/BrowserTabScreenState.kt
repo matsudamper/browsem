@@ -745,22 +745,22 @@ internal class BrowserTabScreenState(
             return
         }
 
-        val queued = queuedExternalAppLaunch
-        queuedExternalAppLaunch = null
-        if (queued != null && !isDeclinedDomainLaunch(queued)) {
-            pendingExternalAppLaunch = queued
-            canLoadPendingLaunchInCurrentTab = canLoadQueuedLaunchInCurrentTab
+        if (queuedExternalAppLaunch != null) {
+            promoteQueuedExternalAppLaunch()
             return
         }
-        // 後続の要求も開かないを選んだドメインなら、確認を出さずにそちらをブラウザで読み込む
-        val requestToLoad = queued ?: request
-        val loadsRequestInCurrentTab = if (queued != null) canLoadQueuedLaunchInCurrentTab else loadsCurrentTab
-        if (!loadsRequestInCurrentTab) return
+        loadDeclinedLaunchInBrowser(request = request, loadsCurrentTab = loadsCurrentTab)
+    }
 
-        val url = if (isHttpUri(requestToLoad.sourceUri)) {
-            requestToLoad.sourceUri
+    private fun loadDeclinedLaunchInBrowser(
+        request: PendingExternalAppLaunch,
+        loadsCurrentTab: Boolean,
+    ) {
+        if (!loadsCurrentTab) return
+        val url = if (isHttpUri(request.sourceUri)) {
+            request.sourceUri
         } else {
-            requestToLoad.fallbackUrl
+            request.fallbackUrl
         }
         if (url != null) {
             skipExternalAppCheckForNextLoad = true
@@ -771,6 +771,10 @@ internal class BrowserTabScreenState(
     private fun promoteQueuedExternalAppLaunch() {
         val queued = queuedExternalAppLaunch ?: return
         queuedExternalAppLaunch = null
+        if (isDeclinedDomainLaunch(queued)) {
+            loadDeclinedLaunchInBrowser(request = queued, loadsCurrentTab = canLoadQueuedLaunchInCurrentTab)
+            return
+        }
         pendingExternalAppLaunch = queued
         canLoadPendingLaunchInCurrentTab = canLoadQueuedLaunchInCurrentTab
     }
@@ -1176,8 +1180,9 @@ internal class BrowserTabScreenState(
             if (!shouldCheckExternalAppForNavigation(uri = request.uri, isRedirect = request.isRedirect)) {
                 return null
             }
+            // 開かないの記録はキューから取り出すときに適用する。ここで変換するとキューに入らず、
+            // 確認を閉じた後にブラウザで読み込む要求が失われる。
             val externalAction = resolveExternalAppNavigationAction(context, request.uri)
-                .replaceDeclinedDomainLaunch()
             if (externalAction is ExternalAppNavigationAction.Launch) {
                 queuedExternalAppLaunch = externalAction.request
                 canLoadQueuedLaunchInCurrentTab = !request.isNewWindowTarget()
