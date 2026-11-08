@@ -331,6 +331,8 @@ internal class BrowserTabScreenState(
     // 同じ URI では出し直さず、タブあたりの回数も制限する。
     private val promptedSubframeExternalAppUris = mutableSetOf<String>()
 
+    private val externalAppDeclinedDomains = mutableSetOf<String>()
+
     // 確認ダイアログを閉じたときに、その要求の URL を現在のタブで読み込んでよいか。
     // 現在ページを置き換えるはずだった遷移だけが対象。新規ウィンドウやサブフレームからの
     // 要求で読み込むと、そのまま残るはずの現在ページが失われる。
@@ -730,6 +732,13 @@ internal class BrowserTabScreenState(
         val request = pendingExternalAppLaunch ?: return
         val loadsCurrentTab = canLoadPendingLaunchInCurrentTab
         pendingExternalAppLaunch = null
+        val declinedDomain = externalAppDeclineDomainOf(
+            sourceUri = request.sourceUri,
+            requestingPageUri = currentPageUrl,
+        )
+        if (declinedDomain != null) {
+            externalAppDeclinedDomains.add(declinedDomain)
+        }
 
         val heldRedirect = heldRedirectLoadResult
         if (heldRedirect != null) {
@@ -1167,6 +1176,7 @@ internal class BrowserTabScreenState(
                 return null
             }
             val externalAction = resolveExternalAppNavigationAction(context, request.uri)
+                .replaceDeclinedDomainLaunch()
             if (externalAction is ExternalAppNavigationAction.Launch) {
                 queuedExternalAppLaunch = externalAction.request
                 canLoadQueuedLaunchInCurrentTab = !request.isNewWindowTarget()
@@ -1180,12 +1190,13 @@ internal class BrowserTabScreenState(
             )
         ) {
             resolveExternalAppNavigationAction(context, request.uri)
+                .replaceDeclinedDomainLaunch()
         } else {
             ExternalAppNavigationAction.AllowInBrowser
         }
         if (request.isRedirect && !isSameDomainRedirect(previousLoadRequestUri, request.uri)) {
             val redirectAppLink = resolveRedirectAppLinkLaunch(context, request.uri)
-            if (redirectAppLink != null) {
+            if (redirectAppLink != null && !isDeclinedDomainLaunch(redirectAppLink)) {
                 return holdRedirectForExternalAppLaunch(redirectAppLink)
             }
         }
@@ -1221,6 +1232,7 @@ internal class BrowserTabScreenState(
     ): GeckoResult<AllowOrDeny>? {
         if (isHttpUri(request.uri)) return null
         val action = resolveExternalAppNavigationAction(context, request.uri)
+            .replaceDeclinedDomainLaunch()
         // blob: や data: など Gecko が扱うスキームはそのまま読み込ませる。
         // 確認ダイアログの表示中かどうかより先に判定する。外部アプリと関係のない iframe の
         // 読み込みまで巻き添えで失敗させないため。
@@ -1272,6 +1284,19 @@ internal class BrowserTabScreenState(
         return result
     }
 
+    private fun ExternalAppNavigationAction.replaceDeclinedDomainLaunch(): ExternalAppNavigationAction {
+        if (this !is ExternalAppNavigationAction.Launch) return this
+        return if (isDeclinedDomainLaunch(request)) toDeclinedAction() else this
+    }
+
+    private fun isDeclinedDomainLaunch(request: PendingExternalAppLaunch): Boolean {
+        val domain = externalAppDeclineDomainOf(
+            sourceUri = request.sourceUri,
+            requestingPageUri = currentPageUrl,
+        ) ?: return false
+        return domain in externalAppDeclinedDomains
+    }
+
     /**
      * @param loadsCurrentTab 現在ページを置き換えるはずだった遷移かどうか。ダイアログを閉じた
      * ときに読み込み直してよいかの判断に使う。
@@ -1282,6 +1307,8 @@ internal class BrowserTabScreenState(
     ): GeckoResult<AllowOrDeny>? {
         return when (action) {
             ExternalAppNavigationAction.AllowInBrowser -> null
+
+            ExternalAppNavigationAction.Declined -> GeckoResult.fromValue(AllowOrDeny.DENY)
 
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()

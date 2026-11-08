@@ -19,6 +19,9 @@ internal sealed interface ExternalAppNavigationAction {
     data class Launch(val request: PendingExternalAppLaunch) : ExternalAppNavigationAction
     data class OpenFallback(val url: String) : ExternalAppNavigationAction
     data object AppNotFound : ExternalAppNavigationAction
+
+    /** 開かないを選んだドメインからの要求。何も表示せずに止める。 */
+    data object Declined : ExternalAppNavigationAction
 }
 
 internal fun resolveExternalAppNavigationAction(
@@ -372,6 +375,31 @@ private fun normalizedDomainOf(uri: String): String? {
 }
 
 private val sameDomainHostPrefixes = listOf("www.", "m.", "mobile.")
+
+/**
+ * 確認ダイアログで開かないを選んだときに記録し、以降の要求と照合するドメインを返す。
+ *
+ * App Link はリンク先のドメインで扱う。独自スキームはリンク先にドメインがなく、アプリへの
+ * 受け渡しを繰り返すのは要求したページのため、そのページのドメインで扱う。
+ */
+internal fun externalAppDeclineDomainOf(
+    sourceUri: String,
+    requestingPageUri: String?,
+): String? {
+    if (isHttpUri(sourceUri)) return normalizedDomainOf(sourceUri)
+    if (requestingPageUri == null) return null
+    return normalizedDomainOf(requestingPageUri)
+}
+
+/**
+ * 開かないを選んだドメインへの起動要求を、確認ダイアログを出さない動作へ置き換える。
+ * 確認ダイアログで開かないを選んだときと同じく、ブラウザで読み込める URL があれば読み込む。
+ */
+internal fun ExternalAppNavigationAction.Launch.toDeclinedAction(): ExternalAppNavigationAction {
+    if (isHttpUri(request.sourceUri)) return ExternalAppNavigationAction.AllowInBrowser
+    val fallbackUrl = request.fallbackUrl ?: return ExternalAppNavigationAction.Declined
+    return ExternalAppNavigationAction.OpenFallback(fallbackUrl)
+}
 
 /**
  * リダイレクト先の http/https が App Link の場合に、アプリを開く要求を返す。

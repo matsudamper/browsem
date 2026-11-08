@@ -1,7 +1,9 @@
 package net.matsudamper.browser
 
+import android.content.Intent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -137,5 +139,62 @@ class ExternalAppNavigationTest {
         assertFalse(isSameDomainRedirect(previousUri = null, uri = "https://example.com/"))
         assertFalse(isSameDomainRedirect(previousUri = "about:blank", uri = "https://example.com/"))
         assertFalse(isSameDomainRedirect(previousUri = "https://example.com/", uri = "myapp://example.com/"))
+    }
+
+    @Test
+    fun `App Link はリンク先のドメインで開かないを記録する`() {
+        assertEquals(
+            "youtube.com",
+            externalAppDeclineDomainOf(
+                sourceUri = "https://m.youtube.com/watch?v=1",
+                requestingPageUri = "https://example.com/",
+            ),
+        )
+    }
+
+    @Test
+    fun `独自スキームは要求したページのドメインで開かないを記録する`() {
+        assertEquals(
+            "example.com",
+            externalAppDeclineDomainOf(
+                sourceUri = "intent://open#Intent;scheme=myapp;end",
+                requestingPageUri = "https://www.example.com/page",
+            ),
+        )
+        assertNull(
+            externalAppDeclineDomainOf(
+                sourceUri = "myapp://open",
+                requestingPageUri = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `開かないを選んだドメインの App Link はブラウザで読み込む`() {
+        val launch = launchOf(sourceUri = "https://youtube.com/watch?v=1", fallbackUrl = null)
+        assertEquals(ExternalAppNavigationAction.AllowInBrowser, launch.toDeclinedAction())
+    }
+
+    @Test
+    fun `開かないを選んだドメインの独自スキームは fallback URL があれば読み込む`() {
+        val launch = launchOf(sourceUri = "intent://open#Intent;scheme=myapp;end", fallbackUrl = "https://example.com/")
+        assertEquals(ExternalAppNavigationAction.OpenFallback("https://example.com/"), launch.toDeclinedAction())
+    }
+
+    @Test
+    fun `開かないを選んだドメインの独自スキームは fallback URL が無ければ止める`() {
+        val launch = launchOf(sourceUri = "myapp://open", fallbackUrl = null)
+        assertEquals(ExternalAppNavigationAction.Declined, launch.toDeclinedAction())
+    }
+
+    private fun launchOf(sourceUri: String, fallbackUrl: String?): ExternalAppNavigationAction.Launch {
+        return ExternalAppNavigationAction.Launch(
+            PendingExternalAppLaunch(
+                sourceUri = sourceUri,
+                intent = Intent(),
+                appName = null,
+                fallbackUrl = fallbackUrl,
+            ),
+        )
     }
 }
