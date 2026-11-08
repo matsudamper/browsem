@@ -331,8 +331,6 @@ internal class BrowserTabScreenState(
     // 同じ URI では出し直さず、タブあたりの回数も制限する。
     private val promptedSubframeExternalAppUris = mutableSetOf<String>()
 
-    private val externalAppDeclinedDomains = mutableSetOf<String>()
-
     // 確認ダイアログを閉じたときに、その要求の URL を現在のタブで読み込んでよいか。
     // 現在ページを置き換えるはずだった遷移だけが対象。新規ウィンドウやサブフレームからの
     // 要求で読み込むと、そのまま残るはずの現在ページが失われる。
@@ -737,7 +735,7 @@ internal class BrowserTabScreenState(
             requestingPageUri = currentPageUrl,
         )
         if (declinedDomain != null) {
-            externalAppDeclinedDomains.add(declinedDomain)
+            browserTab.externalAppDeclinedDomains.add(declinedDomain)
         }
 
         val heldRedirect = heldRedirectLoadResult
@@ -1294,7 +1292,7 @@ internal class BrowserTabScreenState(
             sourceUri = request.sourceUri,
             requestingPageUri = currentPageUrl,
         ) ?: return false
-        return domain in externalAppDeclinedDomains
+        return domain in browserTab.externalAppDeclinedDomains
     }
 
     /**

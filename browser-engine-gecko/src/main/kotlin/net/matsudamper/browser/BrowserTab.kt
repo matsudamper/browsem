@@ -149,6 +149,10 @@ class BrowserTab(
     // ロード状態を維持し、再接続時に停止ボタンを正しく表示するために使う。
     var isPageLoading: Boolean = false
 
+    // アプリを開く確認で開かないを選んだドメイン。タブ切替や画面回転で BrowserTabScreenState が
+    // 再生成されても、同じタブでは確認を出し直さないためにここで保持する。
+    val externalAppDeclinedDomains: MutableSet<String> = mutableSetOf()
+
     internal var pendingSessionState: String? by mutableStateOf(null)
 
     // onNewSession 経由で作成されたタブの初回ナビゲーション完了までの目印。
