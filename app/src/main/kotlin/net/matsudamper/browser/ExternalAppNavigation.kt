@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -234,9 +233,9 @@ internal fun launchExternalApp(
     request: PendingExternalAppLaunch,
 ): Result<Unit> {
     return runCatching {
-        if (context !is Activity) {
-            request.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        // NEW_TASK が無いと launchMode が standard の外部アプリの Activity がブラウザのタスクに積まれ、
+        // アプリ内で開いたように見えるため、常に別タスクで起動する
+        request.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(request.intent)
     }
 }
