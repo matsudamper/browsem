@@ -191,7 +191,6 @@ dependencies {
     testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.uiautomator)
     // テスト用ページを 127.0.0.1 の HTTP で配信するローカルサーバー (LocalHttpServer)
