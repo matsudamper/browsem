@@ -176,15 +176,9 @@ class ExternalAppNavigationTest {
     }
 
     @Test
-    fun `開かないを選んだドメインの独自スキームは fallback URL があれば読み込む`() {
-        val launch = launchOf(sourceUri = "intent://open#Intent;scheme=myapp;end", fallbackUrl = "https://example.com/")
-        assertEquals(ExternalAppNavigationAction.OpenFallback("https://example.com/"), launch.toDeclinedAction())
-    }
-
-    @Test
-    fun `開かないを選んだドメインの独自スキームは fallback URL が無ければ止める`() {
-        val launch = launchOf(sourceUri = "myapp://open", fallbackUrl = null)
-        assertEquals(ExternalAppNavigationAction.Declined, launch.toDeclinedAction())
+    fun `開かないを選んだドメインの独自スキームは開かないを選んだときと同じ経路で扱う`() {
+        val launch = launchOf(sourceUri = "intent://open#Intent;scheme=myapp;end", fallbackUrl = "https://play.google.com/store/apps/details?id=a")
+        assertEquals(ExternalAppNavigationAction.Declined(launch.request), launch.toDeclinedAction())
     }
 
     private fun launchOf(sourceUri: String, fallbackUrl: String?): ExternalAppNavigationAction.Launch {

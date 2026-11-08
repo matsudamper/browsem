@@ -1314,7 +1314,10 @@ internal class BrowserTabScreenState(
         return when (action) {
             ExternalAppNavigationAction.AllowInBrowser -> null
 
-            ExternalAppNavigationAction.Declined -> GeckoResult.fromValue(AllowOrDeny.DENY)
+            is ExternalAppNavigationAction.Declined -> {
+                loadDeclinedLaunchInBrowser(request = action.request, loadsCurrentTab = loadsCurrentTab)
+                GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
 
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()

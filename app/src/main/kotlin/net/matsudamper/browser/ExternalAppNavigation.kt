@@ -20,8 +20,8 @@ internal sealed interface ExternalAppNavigationAction {
     data class OpenFallback(val url: String) : ExternalAppNavigationAction
     data object AppNotFound : ExternalAppNavigationAction
 
-    /** 開かないを選んだドメインからの要求。何も表示せずに止める。 */
-    data object Declined : ExternalAppNavigationAction
+    /** 開かないを選んだドメインからの要求。確認を出さず、開かないを選んだときと同じ経路でブラウザで読み込む。 */
+    data class Declined(val request: PendingExternalAppLaunch) : ExternalAppNavigationAction
 }
 
 internal fun resolveExternalAppNavigationAction(
@@ -393,12 +393,13 @@ internal fun externalAppDeclineDomainOf(
 
 /**
  * 開かないを選んだドメインへの起動要求を、確認ダイアログを出さない動作へ置き換える。
- * 確認ダイアログで開かないを選んだときと同じく、ブラウザで読み込める URL があれば読み込む。
+ *
+ * 独自スキームの fallback URL は App Link のこともあるため、[ExternalAppNavigationAction.OpenFallback] で
+ * 読み込むと fallback 側の確認が出てしまう。開かないを選んだときと同じ経路で読み込ませる。
  */
 internal fun ExternalAppNavigationAction.Launch.toDeclinedAction(): ExternalAppNavigationAction {
     if (isHttpUri(request.sourceUri)) return ExternalAppNavigationAction.AllowInBrowser
-    val fallbackUrl = request.fallbackUrl ?: return ExternalAppNavigationAction.Declined
-    return ExternalAppNavigationAction.OpenFallback(fallbackUrl)
+    return ExternalAppNavigationAction.Declined(request)
 }
 
 /**
