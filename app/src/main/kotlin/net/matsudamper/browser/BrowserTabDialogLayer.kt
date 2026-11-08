@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -27,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -43,7 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
@@ -592,68 +593,25 @@ private fun ExternalAppLaunchDialog(
                     )
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                ExternalAppLaunchDialogActions(
-                    copyLinkButton = {
-                        TextButton(onClick = onCopyLink) {
-                            Text("リンクをコピー")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = onDismiss) {
-                            Text("キャンセル")
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = onConfirm) {
-                            Text("開く")
-                        }
-                    },
-                )
-            }
-        }
-    }
-}
-
-/**
- * Material 3 のダイアログのボタン配置。
- * 横一列に収まるときは補助操作を左端、キャンセルと確定を右端に置き、収まらないときは確定を上にして右寄せで縦に積む。
- */
-@Composable
-private fun ExternalAppLaunchDialogActions(
-    copyLinkButton: @Composable () -> Unit,
-    dismissButton: @Composable () -> Unit,
-    confirmButton: @Composable () -> Unit,
-) {
-    Layout(
-        modifier = Modifier.fillMaxWidth(),
-        content = {
-            copyLinkButton()
-            dismissButton()
-            confirmButton()
-        },
-    ) { measurables, constraints ->
-        val buttonSpacing = 8.dp.roundToPx()
-        val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
-        val (copyLink, dismiss, confirm) = measurables.map { it.measure(looseConstraints) }
-        val width = constraints.maxWidth
-        val fitsInRow = copyLink.width + dismiss.width + confirm.width + buttonSpacing * 2 <= width
-        if (fitsInRow) {
-            val height = maxOf(copyLink.height, dismiss.height, confirm.height)
-            layout(width, height) {
-                copyLink.placeRelative(0, (height - copyLink.height) / 2)
-                confirm.placeRelative(width - confirm.width, (height - confirm.height) / 2)
-                dismiss.placeRelative(
-                    width - confirm.width - buttonSpacing - dismiss.width,
-                    (height - dismiss.height) / 2,
-                )
-            }
-        } else {
-            val stackedButtons = listOf(confirm, dismiss, copyLink)
-            val height = stackedButtons.sumOf { it.height } + buttonSpacing * (stackedButtons.size - 1)
-            layout(width, height) {
-                stackedButtons.fold(0) { y, button ->
-                    button.placeRelative(width - button.width, y)
-                    y + button.height + buttonSpacing
+                Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("開く")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onCopyLink,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("リンクをコピー")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("キャンセル")
                 }
             }
         }
