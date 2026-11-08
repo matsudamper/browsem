@@ -337,6 +337,11 @@ internal class BrowserTabScreenState(
     private var canLoadPendingLaunchInCurrentTab = false
     private var canLoadQueuedLaunchInCurrentTab = false
 
+    // 要求を受けた時点のページ。独自スキームの開かないはこのドメインで記録する。確認中にリダイレクトで
+    // currentPageUrl が変わると、要求していない別ドメインを記録してしまうため要求時点で保持する。
+    private var pendingLaunchRequestingPageUrl: String? = null
+    private var queuedLaunchRequestingPageUrl: String? = null
+
     // 外部アプリ確認ダイアログ表示中に到着した後続の外部アプリナビゲーション。
     // ダイアログをキャンセルした場合にこちらを表示する（アプリ起動した場合は破棄する）。
     private var queuedExternalAppLaunch: PendingExternalAppLaunch? = null
@@ -732,7 +737,7 @@ internal class BrowserTabScreenState(
         pendingExternalAppLaunch = null
         val declinedDomain = externalAppDeclineDomainOf(
             sourceUri = request.sourceUri,
-            requestingPageUri = currentPageUrl,
+            requestingPageUri = pendingLaunchRequestingPageUrl,
         )
         if (declinedDomain != null) {
             browserTab.externalAppDeclinedDomains.add(declinedDomain)
@@ -771,12 +776,13 @@ internal class BrowserTabScreenState(
     private fun promoteQueuedExternalAppLaunch() {
         val queued = queuedExternalAppLaunch ?: return
         queuedExternalAppLaunch = null
-        if (isDeclinedDomainLaunch(queued)) {
+        if (isDeclinedDomainLaunch(request = queued, requestingPageUrl = queuedLaunchRequestingPageUrl)) {
             loadDeclinedLaunchInBrowser(request = queued, loadsCurrentTab = canLoadQueuedLaunchInCurrentTab)
             return
         }
         pendingExternalAppLaunch = queued
         canLoadPendingLaunchInCurrentTab = canLoadQueuedLaunchInCurrentTab
+        pendingLaunchRequestingPageUrl = queuedLaunchRequestingPageUrl
     }
 
     fun restoreCurrentPageUrlToInput() {
@@ -1186,6 +1192,7 @@ internal class BrowserTabScreenState(
             if (externalAction is ExternalAppNavigationAction.Launch) {
                 queuedExternalAppLaunch = externalAction.request
                 canLoadQueuedLaunchInCurrentTab = !request.isNewWindowTarget()
+                queuedLaunchRequestingPageUrl = currentPageUrl
             }
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
@@ -1202,7 +1209,9 @@ internal class BrowserTabScreenState(
         }
         if (request.isRedirect && !isSameDomainRedirect(previousLoadRequestUri, request.uri)) {
             val redirectAppLink = resolveRedirectAppLinkLaunch(context, request.uri)
-            if (redirectAppLink != null && !isDeclinedDomainLaunch(redirectAppLink)) {
+            if (redirectAppLink != null &&
+                !isDeclinedDomainLaunch(request = redirectAppLink, requestingPageUrl = currentPageUrl)
+            ) {
                 return holdRedirectForExternalAppLaunch(redirectAppLink)
             }
         }
@@ -1287,18 +1296,22 @@ internal class BrowserTabScreenState(
         heldRedirectLoadResult = result
         pendingExternalAppLaunch = request
         canLoadPendingLaunchInCurrentTab = false
+        pendingLaunchRequestingPageUrl = currentPageUrl
         return result
     }
 
     private fun ExternalAppNavigationAction.replaceDeclinedDomainLaunch(): ExternalAppNavigationAction {
         if (this !is ExternalAppNavigationAction.Launch) return this
-        return if (isDeclinedDomainLaunch(request)) toDeclinedAction() else this
+        return if (isDeclinedDomainLaunch(request = request, requestingPageUrl = currentPageUrl)) toDeclinedAction() else this
     }
 
-    private fun isDeclinedDomainLaunch(request: PendingExternalAppLaunch): Boolean {
+    private fun isDeclinedDomainLaunch(
+        request: PendingExternalAppLaunch,
+        requestingPageUrl: String?,
+    ): Boolean {
         val domain = externalAppDeclineDomainOf(
             sourceUri = request.sourceUri,
-            requestingPageUri = currentPageUrl,
+            requestingPageUri = requestingPageUrl,
         ) ?: return false
         return domain in browserTab.externalAppDeclinedDomains
     }
@@ -1327,6 +1340,7 @@ internal class BrowserTabScreenState(
             is ExternalAppNavigationAction.Launch -> {
                 pendingExternalAppLaunch = action.request
                 canLoadPendingLaunchInCurrentTab = loadsCurrentTab
+                pendingLaunchRequestingPageUrl = currentPageUrl
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
 
