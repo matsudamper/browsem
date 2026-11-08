@@ -31,6 +31,12 @@
     },
     {
       "matchPackageNames": [
+        "io.mockk:mockk"
+      ],
+      "automerge": true
+    },
+    {
+      "matchPackageNames": [
         "/^org\\.jetbrains\\.kotlin[.:]/"
       ],
       "automerge": true
