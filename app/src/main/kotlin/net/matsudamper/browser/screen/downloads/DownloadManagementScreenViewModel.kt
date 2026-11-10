@@ -7,6 +7,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.ui.graphics.asImageBitmap
@@ -32,6 +33,7 @@ import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.download.DownloadByteFormat
 import net.matsudamper.browser.download.DownloadMediaStoreMimeType
 import net.matsudamper.browser.download.DownloadThumbnail
 import net.matsudamper.browser.download.DownloadThumbnailLoader
@@ -73,6 +75,12 @@ internal class DownloadManagementScreenViewModel(
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
+    /**
+     * 完了済みファイルのサイズのキャッシュ。キーはファイル URI。
+     * 進捗更新のたびに一覧全体が再発火するため、完了済みファイルを毎回 ContentResolver に問い合わせない
+     */
+    private val completedFileSizeCache = mutableMapOf<String, Long?>()
+
     /** resumeDownload から最新のレコードを参照するためのキャッシュ */
     private var currentRecords: List<DownloadRecord> = listOf()
 
@@ -96,7 +104,8 @@ internal class DownloadManagementScreenViewModel(
                     return@collectLatest
                 }
                 currentRecords = records
-                val items = records.map { record -> record.toDownloadItem() }
+                val completedFileSizes = loadCompletedFileSizes(records)
+                val items = records.map { record -> record.toDownloadItem(completedFileSizes) }
                 val hasClearableHistory =
                     records.any { it.status !in ACTIVE_DOWNLOAD_STATUSES } &&
                         records.none { it.status in ACTIVE_DOWNLOAD_STATUSES }
@@ -197,13 +206,42 @@ internal class DownloadManagementScreenViewModel(
         }.getOrNull()
     }
 
-    private fun DownloadRecord.toDownloadItem(): DownloadManagementScreenUiState.DownloadItem {
+    /**
+     * DB の totalRead は進捗更新を間引いているため最終サイズにならないことがある。
+     * 実ファイルのサイズを ContentResolver から取得する
+     */
+    private suspend fun loadCompletedFileSizes(records: List<DownloadRecord>): Map<String, Long?> {
+        val completedFileUris = records
+            .filter { it.status == DownloadRecordStatus.SUCCEEDED }
+            .mapNotNull { it.fileUri }
+        withContext(Dispatchers.IO) {
+            completedFileUris
+                .filterNot { it in completedFileSizeCache }
+                .forEach { uri -> completedFileSizeCache[uri] = querySize(uri.toUri()) }
+        }
+        return completedFileUris.associateWith { completedFileSizeCache[it] }
+    }
+
+    private fun querySize(uri: Uri): Long? {
+        return runCatching {
+            getApplication<Application>().contentResolver
+                .query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+                ?.use { cursor ->
+                    if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+                }
+        }.getOrNull()
+    }
+
+    private fun DownloadRecord.toDownloadItem(
+        completedFileSizes: Map<String, Long?>,
+    ): DownloadManagementScreenUiState.DownloadItem {
         val uiStatus = when (status) {
             DownloadRecordStatus.SUCCEEDED -> {
                 val uri = fileUri
                 if (uri != null) {
                     DownloadManagementScreenUiState.DownloadStatus.Completed(
                         fileUri = uri,
+                        fileSizeText = completedFileSizes[uri]?.let { DownloadByteFormat.format(it) },
                     )
                 } else {
                     DownloadManagementScreenUiState.DownloadStatus.Failed(
