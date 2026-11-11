@@ -1345,6 +1345,10 @@ internal class BrowserTabScreenState(
             onReject()
             return
         }
+        if (isShowingRestoredPageBehindLoadError()) {
+            onReject()
+            return
+        }
         coroutineScope.launch {
             // OS の権限要求の前に、サイトごとのマイク許可を確認する
             if (Manifest.permission.RECORD_AUDIO in perms) {
@@ -1370,6 +1374,10 @@ internal class BrowserTabScreenState(
         hasAudio: Boolean,
         onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
     ) {
+        if (isShowingRestoredPageBehindLoadError()) {
+            onResult(false, false)
+            return
+        }
         // マイクを含まない要求（カメラのみ等）はサイト設定を確認せず許可する
         if (!hasAudio) {
             onResult(hasVideo, false)
@@ -1388,6 +1396,10 @@ internal class BrowserTabScreenState(
         uri: String?,
         onResult: (allow: Boolean) -> Unit,
     ) {
+        if (isShowingRestoredPageBehindLoadError()) {
+            onResult(false)
+            return
+        }
         // Gecko の GeckoResult を未解決のまま残さないよう、onResult は必ず一度呼ぶ
         val completed = AtomicBoolean(false)
         val job = coroutineScope.launch {
@@ -1415,6 +1427,10 @@ internal class BrowserTabScreenState(
         uri: String?,
         onResult: (allow: Boolean) -> Unit,
     ) {
+        if (isShowingRestoredPageBehindLoadError()) {
+            onResult(false)
+            return
+        }
         // Gecko の GeckoResult を未解決のまま残さないよう、onResult は必ず一度呼ぶ
         val completed = AtomicBoolean(false)
         val job = coroutineScope.launch {
@@ -1471,6 +1487,12 @@ internal class BrowserTabScreenState(
         }
         session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE)
     }
+
+    /**
+     * エラー表示中の権限要求は、オーバーレイの背後で復元した旧ページ由来。
+     * currentPageUrl は失敗 URL を指すため、そのサイト設定で判定すると別サイトに権限を渡してしまう。
+     */
+    private fun isShowingRestoredPageBehindLoadError(): Boolean = pageLoadError != null
 
     private fun clearPageLoadError() {
         pageLoadError = null
