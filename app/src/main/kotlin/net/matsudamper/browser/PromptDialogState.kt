@@ -103,6 +103,7 @@ internal class PromptDialogState(
                     onClick = item.onClick,
                 )
             },
+            onCloseClick = ::hideAddressAutofillBar,
         )
     }
 
