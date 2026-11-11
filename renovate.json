@@ -5,6 +5,11 @@
   ],
   "packageRules": [
     {
+      "matchManagers": ["gradle"],
+      "matchPackageNames": ["/^androidx\\.test(?:[.:]|$)/"],
+      "automerge": true
+    },
+    {
       "groupName": "mozilla",
       "matchPackageNames": [
         "org.mozilla.components:**",
@@ -26,6 +31,12 @@
       ],
       "matchPackageNames": [
         "/^actions\\//"
+      ],
+      "automerge": true
+    },
+    {
+      "matchPackageNames": [
+        "io.mockk:mockk"
       ],
       "automerge": true
     },

@@ -111,6 +111,7 @@ import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
+import net.matsudamper.browser.ui.common.defaultBrowserToolbarColor
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
@@ -227,7 +228,7 @@ internal fun GeckoBrowserTab(
 
     val toolbarColors = resolveBrowserToolbarColors(
         toolbarColor = state.toolbarColor,
-        defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
+        defaultToolbarColor = defaultBrowserToolbarColor(),
     )
     if (!state.isFullScreen) {
         StatusBarAppearanceEffect(toolbarColors.resolvedToolbarColor)

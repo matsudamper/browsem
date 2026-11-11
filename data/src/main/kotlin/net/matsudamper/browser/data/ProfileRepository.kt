@@ -77,6 +77,7 @@ class ProfileRepositoryImpl(context: Context) : ProfileRepository {
                 groupId = TabGroupId.generate().value,
                 name = DEFAULT_GROUP_NAME,
                 sortOrder = 0,
+                isDefault = true,
                 profileId = id.value,
             ),
         )

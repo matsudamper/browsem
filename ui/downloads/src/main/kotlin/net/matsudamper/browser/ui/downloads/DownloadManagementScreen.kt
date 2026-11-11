@@ -434,7 +434,7 @@ private fun DownloadItemRow(
 
                     is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
                         Text(
-                            text = "完了",
+                            text = status.fileSizeText?.let { "完了 $it" } ?: "完了",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -643,6 +643,7 @@ private fun PreviewCompletedWithThumbnail() {
                 fileName = "photo.png",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/1",
+                    fileSizeText = "2.4 MB",
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
@@ -681,6 +682,7 @@ private fun PreviewCompletedWithAppIcon() {
                 fileName = "sample-app.apk",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/4",
+                    fileSizeText = "2.4 MB",
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
@@ -712,6 +714,7 @@ private fun PreviewCompletedFileTypeIcons() {
                         fileName = fileName,
                         status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                             fileUri = "content://media/external/downloads/$index",
+                            fileSizeText = "2.4 MB",
                         ),
                         enqueuedAt = 0L,
                         originPageUrl = null,
@@ -763,6 +766,7 @@ private fun PreviewLongFileName() {
                 fileName = "very_long_file_name_that_should_wrap_to_two_lines_example_document.pdf",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/3",
+                    fileSizeText = "2.4 MB",
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
@@ -792,6 +796,7 @@ private fun PreviewDownloadManagementScreen() {
                         fileName = "example.zip",
                         status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                             fileUri = "content://media/external/downloads/1",
+                            fileSizeText = "2.4 MB",
                         ),
                         enqueuedAt = 0L,
                         originPageUrl = "https://example.com/page",

@@ -83,6 +83,7 @@ import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.defaultBrowserToolbarColor
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.common.toArgbHex
 import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
@@ -309,7 +310,7 @@ internal fun BrowserToolbar(
 
     val toolbarColors = resolveBrowserToolbarColors(
         toolbarColor = toolbarColor,
-        defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
+        defaultToolbarColor = defaultBrowserToolbarColor(),
     )
 
     Surface(
