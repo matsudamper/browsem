@@ -24,6 +24,8 @@ data class DownloadManagementScreenUiState(
 
         data class Completed(
             val fileUri: String,
+            /** 取得できない場合は null */
+            val fileSizeText: String?,
         ) : DownloadStatus
 
         /**
