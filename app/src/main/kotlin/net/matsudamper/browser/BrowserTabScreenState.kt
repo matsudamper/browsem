@@ -1502,7 +1502,11 @@ internal class BrowserTabScreenState(
     private fun recordBrowsingHistory(url: String, title: String, appendToTabHistory: Boolean = true) {
         val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
         val skip = skipHistoryRecordCount > 0
-        if (skip) skipHistoryRecordCount--
+        if (skip) {
+            skipHistoryRecordCount--
+            // 移動先のタイトル変更を、移動前に記録したエントリ（失敗 URL 等）へ適用しないため
+            invalidateCurrentHistoryEntry()
+        }
         if (!shouldRecord || skip) return
         if (appendToTabHistory) {
             val newItem = TabHistoryItem(uri = url, title = title)
@@ -1510,10 +1514,8 @@ internal class BrowserTabScreenState(
             tabHistoryCurrentIndex = tabHistoryItems.lastIndex
         }
 
-        historyRecordSequence++
+        invalidateCurrentHistoryEntry()
         val sequence = historyRecordSequence
-        currentHistoryEntryId = null
-        pendingHistoryTitle = null
         val callback = onHistoryRecord
         if (callback != null) {
             coroutineScope.launch {
@@ -1529,6 +1531,12 @@ internal class BrowserTabScreenState(
                 applyPendingHistoryTitle(historyEntryId)
             }
         }
+    }
+
+    private fun invalidateCurrentHistoryEntry() {
+        historyRecordSequence++
+        currentHistoryEntryId = null
+        pendingHistoryTitle = null
     }
 
     private fun applyPendingHistoryTitle(entryId: Long) {
