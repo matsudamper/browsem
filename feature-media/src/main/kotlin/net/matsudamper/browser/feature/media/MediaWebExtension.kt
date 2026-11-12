@@ -455,11 +455,8 @@ class MediaWebExtension(
                             val json = message as? JSONObject ?: return
                             when (json.optString("type")) {
                                 "diagnostic" -> recordPageDiagnostic(session.logKey(), json)
-
                                 "policyReady" -> completeUserTransportCommand(session, port, json.optLong("commandId"))
-
                                 "blocked" -> recordPageDiagnostic(session.logKey(), json)
-
                                 else -> receiveSnapshot(session, port, json)
                             }
                         }
