@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
@@ -11,7 +12,9 @@ import androidx.work.await
 import androidx.work.workDataOf
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.download.ResumeRevertPoint
 import net.matsudamper.browser.download.PendingDownloadBodyStore
@@ -142,6 +145,9 @@ internal class GeckoDownloadManager(
                 downloadRepository.updateCancelled(workRequest.id.toString())
             },
         )
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, R.string.download_toast_started, Toast.LENGTH_SHORT).show()
+        }
     }
 
     /** Worker がフォアグラウンド通知を出すまでの間だけ表示する、進捗不定の通知を作る */
