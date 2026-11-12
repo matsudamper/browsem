@@ -6,7 +6,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import android.widget.Toast
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -60,9 +59,6 @@ class MediaWebExtension(
     val playingTabIds: StateFlow<Set<String>> = _playingTabIds.asStateFlow()
     private val artworkRequestSerial = AtomicLong(0L)
     private val backgroundPlaybackGuard = BackgroundPlaybackGuard<GeckoSession>()
-    private val blockedPlaybackNotice = BlockedPlaybackNotice(
-        repeatIntervalMs = BLOCKED_PLAYBACK_NOTICE_INTERVAL_MS,
-    )
     private val artworkTargetSizePx by lazy(LazyThreadSafetyMode.NONE) {
         max(
             context.resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_width),
@@ -393,9 +389,6 @@ class MediaWebExtension(
         sessionPorts.forEach { (session, ports) ->
             ports.keys.forEach { pushPlaybackPolicy(session, it) }
         }
-        if (blockedPlaybackNotice.onEnteredForeground(SystemClock.elapsedRealtime())) {
-            showBlockedPlaybackToast()
-        }
     }
 
     /**
@@ -462,14 +455,8 @@ class MediaWebExtension(
                             val json = message as? JSONObject ?: return
                             when (json.optString("type")) {
                                 "diagnostic" -> recordPageDiagnostic(session.logKey(), json)
-
                                 "policyReady" -> completeUserTransportCommand(session, port, json.optLong("commandId"))
-
-                                "blocked" -> {
-                                    recordPageDiagnostic(session.logKey(), json)
-                                    showBlockedNoticeIfDue()
-                                }
-
+                                "blocked" -> recordPageDiagnostic(session.logKey(), json)
                                 else -> receiveSnapshot(session, port, json)
                             }
                         }
@@ -712,19 +699,6 @@ class MediaWebExtension(
             "origin=$origin reason=背景再生を遮断 stopPath=$stopPath session=${session.logKey()} " +
                 "identity=${snapshot.playbackId} title=${snapshot.title.take(160)} src=${snapshot.mediaSrc.take(1024)}",
         )
-        showBlockedNoticeIfDue()
-    }
-
-    private fun showBlockedNoticeIfDue() {
-        if (backgroundPlaybackGuard.isInBackground() && blockedPlaybackNotice.onBlocked(SystemClock.elapsedRealtime())) {
-            showBlockedPlaybackToast()
-        }
-    }
-
-    private fun showBlockedPlaybackToast() {
-        mainHandler.post {
-            Toast.makeText(context, BLOCKED_PLAYBACK_TOAST, Toast.LENGTH_SHORT).show()
-        }
     }
 
     private fun recordPageDiagnostic(sessionKey: String, json: JSONObject) {
@@ -923,8 +897,6 @@ class MediaWebExtension(
             "resource://android/assets/web_extensions/media_bridge/"
         private const val DEFAULT_ARTWORK_SIZE_PX = 256
         private const val DEACTIVATION_GRACE_PERIOD_MS = 5_000L
-        private const val BLOCKED_PLAYBACK_NOTICE_INTERVAL_MS = 4_000L
-        private const val BLOCKED_PLAYBACK_TOAST = "再生を止めました"
     }
 }
 
