@@ -143,42 +143,6 @@ internal fun isMoreSpecific(current: PlaybackIdentity, previous: PlaybackIdentit
     return srcFilledIn || titleFilledIn || idFilledIn
 }
 
-/**
- * 勝手な再生を止めたことを、連続した再試行では一度だけ知らせる。
- * 画面オフ中の Toast は見えないことがあるため、前面に戻ったときにもう一度出す。
- */
-internal class BlockedPlaybackNotice(
-    private val repeatIntervalMs: Long,
-) {
-    private var pendingForegroundNotice = false
-    private var hasShown = false
-    private var lastShownAtMs = 0L
-
-    /** 今 Toast を出すべきなら true。 */
-    fun onBlocked(nowMs: Long): Boolean {
-        pendingForegroundNotice = true
-        return showIfDue(nowMs)
-    }
-
-    /** 前面に戻ったとき、未表示の停止があれば Toast を出すべきなら true。 */
-    fun onEnteredForeground(nowMs: Long): Boolean {
-        if (!pendingForegroundNotice) {
-            return false
-        }
-        pendingForegroundNotice = false
-        return showIfDue(nowMs)
-    }
-
-    private fun showIfDue(nowMs: Long): Boolean {
-        if (hasShown && nowMs - lastShownAtMs < repeatIntervalMs) {
-            return false
-        }
-        hasShown = true
-        lastShownAtMs = nowMs
-        return true
-    }
-}
-
 internal data class BackgroundPlaybackDecision(
     val shouldPause: Boolean,
     val reason: String,
