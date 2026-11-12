@@ -1616,6 +1616,7 @@ internal fun GeckoBrowserTab(
                     state.onUrlSubmit(url)
                     closeUrlInput(false)
                 },
+                onUrlSuggestionCloseClick = { closeUrlInput(true) },
                 // edge-to-edge ではどのモードでもウィンドウが縮まないため、
                 // 候補リストが IME に隠れないよう自前で余白を取る。
                 modifier = Modifier

@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +62,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
@@ -278,6 +280,7 @@ internal fun BrowserTabOverlayLayer(
     onWebSuggestionClick: (String) -> Unit,
     clipboardUrl: String?,
     onClipboardUrlClick: (String) -> Unit,
+    onUrlSuggestionCloseClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -318,6 +321,7 @@ internal fun BrowserTabOverlayLayer(
                     onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
                     clipboardUrl = clipboardUrl,
                     onClipboardUrlClick = onClipboardUrlClick,
+                    onCloseClick = onUrlSuggestionCloseClick,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -337,12 +341,60 @@ internal fun UrlSuggestionList(
     onRestoreCurrentUrl: () -> Unit,
     clipboardUrl: String?,
     onClipboardUrlClick: (String) -> Unit,
+    onCloseClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            IconButton(
+                onClick = onCloseClick,
+                modifier = Modifier.testTag(BrowserTabSurfaceTestTags.UrlSuggestionCloseButton.testTag),
+            ) {
+                Icon(
+                    painter = painterResource(ResourcesR.drawable.close_24dp),
+                    contentDescription = "閉じる",
+                )
+            }
+        }
+        UrlSuggestionLazyList(
+            currentPageUrl = currentPageUrl,
+            historySuggestions = historySuggestions,
+            webSuggestions = webSuggestions,
+            isLoadingWebSuggestions = isLoadingWebSuggestions,
+            onHistorySuggestionClick = onHistorySuggestionClick,
+            onWebSuggestionClick = onWebSuggestionClick,
+            onCopyCurrentUrl = onCopyCurrentUrl,
+            onRestoreCurrentUrl = onRestoreCurrentUrl,
+            clipboardUrl = clipboardUrl,
+            onClipboardUrlClick = onClipboardUrlClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false),
+        )
+    }
+}
+
+@Composable
+private fun UrlSuggestionLazyList(
+    currentPageUrl: String,
+    historySuggestions: List<UrlBarSuggestionsUiState.HistorySuggestion>,
+    webSuggestions: List<String>,
+    isLoadingWebSuggestions: Boolean,
+    onHistorySuggestionClick: (UrlBarSuggestionsUiState.HistorySuggestion) -> Unit,
+    onWebSuggestionClick: (String) -> Unit,
+    onCopyCurrentUrl: () -> Unit,
+    onRestoreCurrentUrl: () -> Unit,
+    clipboardUrl: String?,
+    onClipboardUrlClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val hasHistorySuggestions = historySuggestions.isNotEmpty()
     val hasWebSuggestions = webSuggestions.isNotEmpty() || isLoadingWebSuggestions
 
-    LazyColumn(modifier = modifier.fillMaxWidth()) {
+    LazyColumn(modifier = modifier) {
         if (currentPageUrl.isNotBlank()) {
             item(key = "current_page_url") {
                 CurrentPageUrlListItem(
@@ -596,6 +648,7 @@ private fun PreviewUrlSuggestionListLight() {
                 onRestoreCurrentUrl = {},
                 clipboardUrl = PREVIEW_SUGGESTION_CLIPBOARD_URL,
                 onClipboardUrlClick = {},
+                onCloseClick = {},
             )
         }
     }
@@ -617,6 +670,7 @@ private fun PreviewUrlSuggestionListDark() {
                 onRestoreCurrentUrl = {},
                 clipboardUrl = PREVIEW_SUGGESTION_CLIPBOARD_URL,
                 onClipboardUrlClick = {},
+                onCloseClick = {},
             )
         }
     }
@@ -704,6 +758,9 @@ sealed interface BrowserTabSurfaceTestTags {
 
     object UrlSuggestionList : BrowserTabSurfaceTestTags {
         override val id = "url_suggestion_list"
+    }
+    object UrlSuggestionCloseButton : BrowserTabSurfaceTestTags {
+        override val id = "url_suggestion_close_button"
     }
     object WebSuggestionSection : BrowserTabSurfaceTestTags {
         override val id = "web_suggestion_section"

@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -20,11 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionKind
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
@@ -34,6 +38,7 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 @Stable
 internal data class AddressAutofillBarUiState(
     val items: List<Item>,
+    val onCloseClick: () -> Unit,
 ) {
     @Stable
     data class Item(
@@ -58,15 +63,32 @@ internal fun AddressAutofillSuggestionBar(
         shadowElevation = 6.dp,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            uiState.items.forEach { item ->
-                AddressAutofillSuggestionButton(item = item)
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(start = 8.dp, top = 8.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                uiState.items.forEach { item ->
+                    AddressAutofillSuggestionButton(item = item)
+                }
+            }
+            IconButton(
+                onClick = uiState.onCloseClick,
+                modifier = Modifier
+                    .testTag(AddressAutofillSuggestionBarTestTags.CloseButton.testTag)
+                    // Gecko の入力フォーカスと IME を奪わない
+                    .focusProperties { canFocus = false },
+            ) {
+                Icon(
+                    painter = painterResource(ResourcesR.drawable.close_24dp),
+                    contentDescription = "閉じる",
+                )
             }
         }
     }
@@ -101,6 +123,10 @@ sealed interface AddressAutofillSuggestionBarTestTags {
 
     data object Bar : AddressAutofillSuggestionBarTestTags {
         override val id = "address_autofill_suggestion_bar"
+    }
+
+    data object CloseButton : AddressAutofillSuggestionBarTestTags {
+        override val id = "address_autofill_suggestion_close_button"
     }
 
     data object Option : AddressAutofillSuggestionBarTestTags {
@@ -151,6 +177,7 @@ private fun PreviewAddressAutofillSuggestionBar() {
                             onClick = {},
                         ),
                     ),
+                    onCloseClick = {},
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -179,6 +206,7 @@ private fun PreviewAddressAutofillSuggestionBarAddress() {
                             onClick = {},
                         ),
                     ),
+                    onCloseClick = {},
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -202,6 +230,7 @@ private fun PreviewAddressAutofillSuggestionBarFormField() {
                             onClick = {},
                         ),
                     ),
+                    onCloseClick = {},
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -225,6 +254,7 @@ private fun PreviewAddressAutofillSuggestionBarEmail() {
                             onClick = {},
                         ),
                     ),
+                    onCloseClick = {},
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
