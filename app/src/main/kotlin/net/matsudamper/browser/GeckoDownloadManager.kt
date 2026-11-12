@@ -3,7 +3,9 @@ package net.matsudamper.browser
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -142,6 +144,10 @@ internal class GeckoDownloadManager(
                 downloadRepository.updateCancelled(workRequest.id.toString())
             },
         )
+        // エンキュー後に中断点を作ると、キャンセル時に呼び出し元が失敗扱いでレスポンスボディを閉じてしまう
+        ContextCompat.getMainExecutor(context).execute {
+            Toast.makeText(context, R.string.download_toast_started, Toast.LENGTH_SHORT).show()
+        }
     }
 
     /** Worker がフォアグラウンド通知を出すまでの間だけ表示する、進捗不定の通知を作る */
