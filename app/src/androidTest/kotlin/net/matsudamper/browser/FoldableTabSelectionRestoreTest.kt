@@ -59,6 +59,8 @@ class FoldableTabSelectionRestoreTest {
         selectTabShowing(FIRST_PAGE_FILE)
 
         composeRule.activityRule.scenario.recreate()
+        // recreate 直後に Compose が旧ツリーを measure すると detached LayoutNode で落ちることがある
+        composeRule.waitForIdle()
         waitForBrowserScreen()
         composeRule.waitForUrlBarContains(FIRST_PAGE_FILE, timeoutMillis = 60_000)
     }
