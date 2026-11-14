@@ -18,9 +18,9 @@ data class BrowserScreenUiState(
 
     @Stable
     data class SwipePreviewUiState(
-        val previousTab: AdjacentTabPreview? = null,
-        val nextTab: AdjacentTabPreview? = null,
-        val backToOpenerListener: BackToOpenerListener? = null,
+        val previousTab: AdjacentTabPreview?,
+        val nextTab: AdjacentTabPreview?,
+        val backToOpenerListener: BackToOpenerListener?,
     ) {
         @Stable
         interface BackToOpenerListener {

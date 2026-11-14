@@ -19,7 +19,7 @@ data class ProfileSwitcherUiState(
         val tabCount: Int,
         val isActive: Boolean,
         /** デフォルトプロファイルは削除できないため false */
-        val isDeletable: Boolean,
+        val deleteMenuEnabled: Boolean,
         val listener: Listener,
     ) {
         @Stable

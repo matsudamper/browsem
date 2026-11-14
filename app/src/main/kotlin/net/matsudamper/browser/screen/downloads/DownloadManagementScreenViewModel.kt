@@ -245,7 +245,7 @@ internal class DownloadManagementScreenViewModel(
                     )
                 } else {
                     DownloadManagementScreenUiState.DownloadStatus.Failed(
-                        canResume = false,
+                        resumeButtonVisible = false,
                         reason = failureReason,
                     )
                 }
@@ -254,7 +254,7 @@ internal class DownloadManagementScreenViewModel(
             DownloadRecordStatus.FAILED -> {
                 DownloadManagementScreenUiState.DownloadStatus.Failed(
                     // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
-                    canResume = partialFileUri != null && DownloadUrl.isRefetchable(url),
+                    resumeButtonVisible = partialFileUri != null && DownloadUrl.isRefetchable(url),
                     reason = failureReason,
                 )
             }
@@ -285,7 +285,7 @@ internal class DownloadManagementScreenViewModel(
                     totalRead = totalRead,
                     contentLength = contentLength,
                     // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
-                    canResume = DownloadUrl.isRefetchable(url),
+                    resumeButtonVisible = DownloadUrl.isRefetchable(url),
                 )
             }
         }

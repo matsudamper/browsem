@@ -1,9 +1,9 @@
 package net.matsudamper.browser.ui.browser
 
 data class UrlBarSuggestionsUiState(
-    val historySuggestions: List<HistorySuggestion> = listOf(),
-    val webSuggestions: List<String> = listOf(),
-    val isLoadingWebSuggestions: Boolean = false,
+    val historySuggestions: List<HistorySuggestion>,
+    val webSuggestions: List<String>,
+    val isLoadingWebSuggestions: Boolean,
 ) {
     data class HistorySuggestion(
         val id: Long,

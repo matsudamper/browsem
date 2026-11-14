@@ -1277,11 +1277,7 @@ internal fun GeckoBrowserTab(
     }
 
     PredictiveBackHandler(
-        enabled = state.isFullScreen ||
-            state.findInPage.isVisible ||
-            state.semanticFindInPage.isVisible ||
-            state.isUrlInputFocused ||
-            state.canGoBack,
+        enabled = state.predictiveBackEnabled,
     ) { progress ->
         state.isBackGestureInProgress = true
         try {

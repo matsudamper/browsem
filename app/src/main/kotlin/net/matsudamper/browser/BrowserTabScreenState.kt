@@ -425,6 +425,13 @@ internal class BrowserTabScreenState(
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
 
+    val predictiveBackEnabled: Boolean
+        get() = isFullScreen ||
+            findInPage.isVisible ||
+            semanticFindInPage.isVisible ||
+            isUrlInputFocused ||
+            canGoBack
+
     // メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない
     val extensionActionScrollState = ScrollState(initial = 0)
 

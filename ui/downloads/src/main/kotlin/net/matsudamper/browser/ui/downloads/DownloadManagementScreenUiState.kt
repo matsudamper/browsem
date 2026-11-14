@@ -30,11 +30,10 @@ data class DownloadManagementScreenUiState(
 
         /**
          * ダウンロード失敗。
-         * [canResume] が true の場合は再開ボタンを表示する。
          * [reason] は失敗原因の説明。取得できていない場合は null
          */
         data class Failed(
-            val canResume: Boolean,
+            val resumeButtonVisible: Boolean,
             val reason: String?,
         ) : DownloadStatus
 
@@ -42,13 +41,12 @@ data class DownloadManagementScreenUiState(
 
         /**
          * ダウンロード一時停止中。
-         * [canResume] が true の場合は再開ボタンを表示する
          */
         data class Paused(
             val progress: Int,
             val totalRead: Long,
             val contentLength: Long,
-            val canResume: Boolean,
+            val resumeButtonVisible: Boolean,
         ) : DownloadStatus
     }
 
