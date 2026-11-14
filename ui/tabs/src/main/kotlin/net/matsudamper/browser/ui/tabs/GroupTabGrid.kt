@@ -118,8 +118,8 @@ internal fun GroupTabGrid(
         }
 
         LaunchedEffect(Unit) {
-            val selectedIndex = tabs.indexOfFirst { it.id == selectedTabId }
-            if (selectedIndex >= 0) {
+            val selectedIndex = tabs.indexOfFirst { it.id == selectedTabId }.takeIf { it >= 0 }
+            if (selectedIndex != null) {
                 val targetRow = selectedIndex / columns
                 gridState.scrollToItem(targetRow * columns)
             }
