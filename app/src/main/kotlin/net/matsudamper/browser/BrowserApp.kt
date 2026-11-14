@@ -125,6 +125,9 @@ internal fun BrowserApp(
             val tabGroupRepository: TabGroupRepository = koinInject()
             val profileRepository: ProfileRepository = koinInject()
             val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
+            // uiState を直接キャプチャすると更新のたびにラムダが作り直され、
+            // BrowserAppShell の外部タブ要求の収集が再起動して処理中の要求が失われる
+            val callbacks = uiState.callbacks
             BrowserAppShell(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
@@ -185,7 +188,7 @@ internal fun BrowserApp(
                             pageTranslationWebExtension.unregisterSession(requestedSession)
                         }
                     }
-                    uiState.callbacks.onExternalTabOpened(newTab.tabId, request.url)
+                    callbacks.onExternalTabOpened(newTab.tabId, request.url)
                     selectTabRequester.request(newTab.tabId)
                 },
                 onNavigateToUrl = { url ->
