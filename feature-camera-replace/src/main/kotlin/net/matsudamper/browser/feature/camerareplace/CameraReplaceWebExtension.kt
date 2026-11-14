@@ -73,6 +73,20 @@ class CameraReplaceWebExtension {
         return topHost ?: senderHost
     }
 
+    private fun isCrossOriginSubframe(session: GeckoSession, sender: WebExtension.MessageSender): Boolean {
+        if (sender.isTopLevel) return false
+        val senderOrigin = originOf(sender.url)
+        val topOrigin = sessionRegistrations[session]?.topUrlProvider?.invoke()?.let(::originOf)
+        return senderOrigin == null || senderOrigin != topOrigin
+    }
+
+    private fun originOf(url: String): String? {
+        val uri = runCatching { URI(url) }.getOrNull() ?: return null
+        val scheme = uri.scheme ?: return null
+        val host = uri.host ?: return null
+        return "$scheme://$host:${uri.port}"
+    }
+
     private fun attachSessionDelegate(session: GeckoSession, ext: WebExtension) {
         if (!sessionRegistrations.containsKey(session)) return
         session.webExtensionController.setMessageDelegate(
@@ -86,6 +100,11 @@ class CameraReplaceWebExtension {
                     val json = message as? JSONObject ?: return null
                     if (json.optString("action") != "resolveCamera") return null
                     val registration = sessionRegistrations[session] ?: return null
+                    if (isCrossOriginSubframe(session, sender)) {
+                        // 画像を返すとカメラ利用を委譲されていない iframe にも画像が渡ってしまう。
+                        // 委譲の確認は Gecko 本体の getUserMedia が行うため、そちらへ任せる
+                        return GeckoResult.fromValue(CameraDecision.Real.toJson())
+                    }
                     val host = resolveHost(session, sender)
                     if (host == null) {
                         return GeckoResult.fromValue(CameraDecision.Deny.toJson())
