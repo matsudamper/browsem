@@ -59,7 +59,19 @@ internal data class BrowserAppUiState(
     val geminiNanoSemanticSearchModelKey: String,
     val semanticSearchProvider: SemanticSearchProvider,
     val googleAiStudioApiKey: String,
-)
+    val callbacks: Callbacks,
+) {
+    @Stable
+    interface Callbacks {
+        /** 外部 Intent から開いたタブを登録する。開く前の選択タブを記録するため、タブを選択する前に呼ぶ */
+        fun onExternalTabOpened(tabId: String, initialUrl: String)
+        fun onExternalDownloadDialogResolved(tabId: String)
+        fun onMoveTabToProfile(tabId: String, url: String, profileId: ProfileId)
+
+        /** ホームページを開くタブを作成し、そのタブ ID を返す */
+        suspend fun onCreateHomepageTab(tabId: String, insertAfterSelectedTab: Boolean, profileId: ProfileId?): String
+    }
+}
 
 private data class BrowserLogicSettings(
     val themeMode: ThemeMode,
@@ -153,11 +165,39 @@ internal class BrowserViewModel(
     }
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
+
+    // uiState の初期化で即時に参照されるため、uiState より前に定義する
+    private val uiCallbacks = object : BrowserAppUiState.Callbacks {
+        override fun onExternalTabOpened(tabId: String, initialUrl: String) {
+            registerExternalTab(tabId, initialUrl)
+        }
+
+        override fun onExternalDownloadDialogResolved(tabId: String) {
+            resolveExternalDownloadDialog(tabId)
+        }
+
+        override fun onMoveTabToProfile(tabId: String, url: String, profileId: ProfileId) {
+            moveTabToProfile(tabId, url, profileId)
+        }
+
+        override suspend fun onCreateHomepageTab(
+            tabId: String,
+            insertAfterSelectedTab: Boolean,
+            profileId: ProfileId?,
+        ): String {
+            return createTabWithHomepage(
+                tabId = tabId,
+                insertAfterSelectedTab = insertAfterSelectedTab,
+                profileId = profileId,
+            ).tabId
+        }
+    }
+
     val uiState: StateFlow<BrowserAppUiState?> = MutableStateFlow<BrowserAppUiState?>(null)
         .also { uiStateFlow ->
             viewModelScope.launch {
                 viewModelStateFlow.collectLatest { state ->
-                    uiStateFlow.update { state.logicSettings?.toBrowserAppUiState() }
+                    uiStateFlow.update { state.logicSettings?.toBrowserAppUiState(uiCallbacks) }
                 }
             }
         }.asStateFlow()
@@ -445,7 +485,7 @@ internal class BrowserViewModel(
      * GeckoSession は contextId（プロファイル）ごとに固定で差し替えられないため、
      * 実装上は現在のタブを閉じて移動先プロファイルに同じ URL の新規タブを開き直す。
      */
-    fun moveTabToProfile(tabId: String, url: String, profileId: ProfileId) {
+    private fun moveTabToProfile(tabId: String, url: String, profileId: ProfileId) {
         viewModelScope.launch {
             val tab = browserTabController.tabStoreState.value.tabs.firstOrNull { it.id == tabId }
             if (tab == null || tab.profileId == profileId.value) return@launch
@@ -468,7 +508,7 @@ internal class BrowserViewModel(
         }
     }
 
-    suspend fun createTabWithHomepage(
+    private suspend fun createTabWithHomepage(
         tabId: String,
         insertAfterSelectedTab: Boolean = true,
         profileId: ProfileId? = null,
@@ -495,7 +535,7 @@ internal class BrowserViewModel(
      * 外部タブ登録時に呼ぶ。呼び出し時点の selectedTabId（= 外部タブ開封前のタブ）を記録する。
      * [selectTab] より前に呼び出すこと。
      */
-    fun registerExternalTab(tabId: String, initialUrl: String) {
+    private fun registerExternalTab(tabId: String, initialUrl: String) {
         externalTabPreviousTabs[tabId] = browserTabController.selectedTabId
         externalTabInitialUrlByTabId[tabId] = initialUrl
         externalTabIdsFlow.update { it + tabId }
@@ -506,7 +546,7 @@ internal class BrowserViewModel(
      * 外部ダウンロードタブの確認ダイアログで確定/キャンセルされた後に呼ぶ。
      * viewModelScope でタブ閉鎖を完了し、遷移先タブ ID を UI に通知する。
      */
-    fun onExternalDownloadDialogResolved(tabId: String) {
+    private fun resolveExternalDownloadDialog(tabId: String) {
         viewModelScope.launch {
             val targetTabId = finishExternalDownloadTab(tabId)
             eventHandler.trySend { it.onExternalDownloadTabClosed(targetTabId) }
@@ -630,7 +670,9 @@ internal class BrowserViewModel(
     }
 }
 
-private fun BrowserLogicSettings.toBrowserAppUiState(): BrowserAppUiState = BrowserAppUiState(
+private fun BrowserLogicSettings.toBrowserAppUiState(
+    callbacks: BrowserAppUiState.Callbacks,
+): BrowserAppUiState = BrowserAppUiState(
     themeMode = themeMode,
     homepageUrl = homepageUrl,
     searchTemplate = searchTemplate,
@@ -639,6 +681,7 @@ private fun BrowserLogicSettings.toBrowserAppUiState(): BrowserAppUiState = Brow
     geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
     semanticSearchProvider = semanticSearchProvider,
     googleAiStudioApiKey = googleAiStudioApiKey,
+    callbacks = callbacks,
 )
 
 private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = BrowserLogicSettings(

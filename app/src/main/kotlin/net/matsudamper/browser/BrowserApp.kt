@@ -187,7 +187,7 @@ internal fun BrowserApp(
                             pageTranslationWebExtension.unregisterSession(requestedSession)
                         }
                     }
-                    viewModel.registerExternalTab(newTab.tabId, request.url)
+                    uiState.callbacks.onExternalTabOpened(newTab.tabId, request.url)
                     selectTabRequester.request(newTab.tabId)
                 },
                 onNavigateToUrl = { url ->
@@ -634,7 +634,7 @@ private fun MainBrowserContent(
                                 }
 
                                 override fun onExternalDownloadDialogResolved(tabId: String) {
-                                    viewModel.onExternalDownloadDialogResolved(tabId)
+                                    uiState.callbacks.onExternalDownloadDialogResolved(tabId)
                                 }
                             })
                         }
@@ -719,7 +719,7 @@ private fun MainBrowserContent(
                                     onOpenTabs = { innerBackStack.add(BrowserNavDestination.Tabs) },
                                     profileSwitcher = profileSwitcher,
                                     onMoveTabToProfile = { tabId, url, profileId ->
-                                        viewModel.moveTabToProfile(tabId, url, profileId)
+                                        uiState.callbacks.onMoveTabToProfile(tabId, url, profileId)
                                     },
                                     browserSessionLifecycleController = browserSessionLifecycleController,
                                     onOpenNewSessionRequest = { uri ->
@@ -800,10 +800,12 @@ private fun MainBrowserContent(
                                     // 表示中のタブを閉じた場合だけ代替タブを作る
                                     if (nextSelectedTabId == null && wasCurrentBrowserTab) {
                                         scope.launch {
-                                            val newTab = viewModel.createTabWithHomepage(
+                                            val newTabId = uiState.callbacks.onCreateHomepageTab(
                                                 tabId = UUID.randomUUID().toString(),
+                                                insertAfterSelectedTab = true,
+                                                profileId = null,
                                             )
-                                            selectTab(newTab.tabId, null)
+                                            selectTab(newTabId, null)
                                         }
                                     } else if (wasCurrentBrowserTab && nextSelectedTabId != null) {
                                         navController.replaceCurrentBrowserTab(nextSelectedTabId)
@@ -825,12 +827,12 @@ private fun MainBrowserContent(
                                         if (currentGroupId != null) {
                                             tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                         }
-                                        val newTab = viewModel.createTabWithHomepage(
+                                        val newTabId = uiState.callbacks.onCreateHomepageTab(
                                             tabId = tabId,
                                             insertAfterSelectedTab = false,
                                             profileId = profileId,
                                         )
-                                        selectTab(newTab.tabId, null)
+                                        selectTab(newTabId, null)
                                     }
                                 }
                             })
