@@ -90,11 +90,8 @@ internal object HomeScreenIconFetcher {
                     .thenByDescending { it.size },
             )
 
-        var attemptCount = 0
-        for (candidate in candidates) {
+        for (candidate in candidates.take(MAX_ICON_FETCH_ATTEMPTS)) {
             if (Thread.currentThread().isInterrupted) break
-            if (attemptCount >= MAX_ICON_FETCH_ATTEMPTS) break
-            attemptCount++
             val bitmap = fetchBitmap(candidate.url) ?: continue
             return bitmap.scaleForShortcut()
         }
@@ -281,10 +278,8 @@ internal object HomeScreenIconFetcher {
         val width = boundsOptions.outWidth
         val height = boundsOptions.outHeight
         if (width <= 0 || height <= 0) return null
-        var sampleSize = 1
-        while (max(width, height) / sampleSize > MAX_DECODED_ICON_DIMENSION) {
-            sampleSize *= 2
-        }
+        val sampleSize = generateSequence(1) { it * 2 }
+            .first { max(width, height) / it <= MAX_DECODED_ICON_DIMENSION }
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
     }
