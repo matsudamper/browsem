@@ -19,7 +19,7 @@ data class AddressEditScreenUiState(
     val country: String,
     val tel: String,
     val email: String,
-    val canSave: Boolean,
+    val saveButtonEnabled: Boolean,
 ) {
     interface Callbacks {
         fun onGivenNameChange(value: String)

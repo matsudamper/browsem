@@ -883,7 +883,7 @@ private fun PreviewToolbarMenuCustomTab() {
                 icon = ProfileIcon.PERSON,
                 tabCount = 2,
                 isActive = false,
-                isDeletable = false,
+                deleteMenuEnabled = false,
                 listener = PreviewProfileItemListener,
             ),
             ProfileSwitcherUiState.ProfileItem(
@@ -892,7 +892,7 @@ private fun PreviewToolbarMenuCustomTab() {
                 icon = ProfileIcon.WORK,
                 tabCount = 1,
                 isActive = true,
-                isDeletable = true,
+                deleteMenuEnabled = true,
                 listener = PreviewProfileItemListener,
             ),
         ),

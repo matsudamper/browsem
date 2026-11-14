@@ -62,7 +62,11 @@ internal class UrlBarSuggestionsStateOwner(
     }
 
     val urlBarSuggestions: StateFlow<UrlBarSuggestionsUiState> = MutableStateFlow(
-        UrlBarSuggestionsUiState(),
+        UrlBarSuggestionsUiState(
+            historySuggestions = listOf(),
+            webSuggestions = listOf(),
+            isLoadingWebSuggestions = false,
+        ),
     ).also { uiStateFlow ->
         scope.launch {
             viewModelStateFlow.collectLatest { state ->

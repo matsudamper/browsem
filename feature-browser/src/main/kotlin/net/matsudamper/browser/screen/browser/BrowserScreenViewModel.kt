@@ -73,8 +73,16 @@ class BrowserScreenViewModel(
 
     val uiState: StateFlow<BrowserScreenUiState> = MutableStateFlow(
         BrowserScreenUiState(
-            urlBarSuggestions = UrlBarSuggestionsUiState(),
-            swipePreview = BrowserScreenUiState.SwipePreviewUiState(),
+            urlBarSuggestions = UrlBarSuggestionsUiState(
+                historySuggestions = listOf(),
+                webSuggestions = listOf(),
+                isLoadingWebSuggestions = false,
+            ),
+            swipePreview = BrowserScreenUiState.SwipePreviewUiState(
+                previousTab = null,
+                nextTab = null,
+                backToOpenerListener = null,
+            ),
             groupTabCount = null,
             externalDownloadDialogListener = null,
             externalTabInitialUrl = null,
@@ -209,7 +217,11 @@ private sealed interface Loadable<out T> {
 }
 
 private data class ViewModelState(
-    val urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
+    val urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(
+        historySuggestions = listOf(),
+        webSuggestions = listOf(),
+        isLoadingWebSuggestions = false,
+    ),
     val tabGroups: Loadable<List<TabGroupData>> = Loadable.Loading,
     val tabGroupAssignments: Loadable<List<TabGroupAssignment>> = Loadable.Loading,
     val browserTabs: List<BrowserTab> = listOf(),

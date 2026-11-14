@@ -14,8 +14,8 @@ internal data class NetworkLogUiState(
     val summary: Summary,
     /** タブを特定できていない等、一覧の前提を伝える案内。不要な場合は null */
     val notice: String?,
-    /** ログ消去を行えるかどうか。タブを特定できていない間は行えない */
-    val canClear: Boolean,
+    /** タブを特定できていない間は false */
+    val clearButtonEnabled: Boolean,
     /** 詳細を開いている場合の内容。一覧表示中は null */
     val detail: Detail?,
 ) {
@@ -90,8 +90,7 @@ internal data class NetworkLogUiState(
         val name: String,
         val url: String,
         val items: List<Item>,
-        /** 画像として保存できるかどうか。保存ボタンの表示に使う */
-        val canSaveImage: Boolean,
+        val saveImageButtonVisible: Boolean,
         val requestHeaders: List<Header>,
         val responseHeaders: List<Header>,
         val preview: Preview,
@@ -117,8 +116,8 @@ internal data class NetworkLogUiState(
         data class Image(
             val bitmap: ImageBitmap,
             val sizeLabel: String,
-            /** SVG のように元がテキストで、本文をコピーできる場合は true */
-            val canCopyBody: Boolean,
+            /** SVG のように元がテキストの場合だけ true */
+            val copyBodyButtonVisible: Boolean,
         ) : Preview
 
         data class Text(

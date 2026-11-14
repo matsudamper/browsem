@@ -107,7 +107,7 @@ internal class DevToolsConsoleStateHolder(
             callbacks = callbacks,
             entries = entries.map { entry -> createEntry(entry) },
             scriptText = scriptText,
-            canExecute = scriptText.isNotBlank() && !isExecuting,
+            executeButtonEnabled = scriptText.isNotBlank() && !isExecuting,
             isExecuting = isExecuting,
             detail = if (selected == null) {
                 null

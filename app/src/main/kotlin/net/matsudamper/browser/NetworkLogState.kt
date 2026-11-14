@@ -207,7 +207,7 @@ internal class NetworkLogStateHolder(
             } else {
                 null
             },
-            canClear = tabId != null,
+            clearButtonEnabled = tabId != null,
             detail = detail,
         )
     }
@@ -438,7 +438,7 @@ internal class NetworkLogStateHolder(
                     NetworkLogUiState.Preview.Image(
                         bitmap = svgBitmap.asImageBitmap(),
                         sizeLabel = "SVG · ${NetworkLogFormat.formatBytes(sizeBytes)}",
-                        canCopyBody = true,
+                        copyBodyButtonVisible = true,
                     )
                 } else {
                     NetworkLogUiState.Preview.Text(
@@ -463,7 +463,7 @@ internal class NetworkLogStateHolder(
                         bitmap = bitmap.asImageBitmap(),
                         sizeLabel = "${bitmap.width} × ${bitmap.height} · " +
                             NetworkLogFormat.formatBytes(sizeBytes),
-                        canCopyBody = false,
+                        copyBodyButtonVisible = false,
                     )
                 }
             }
@@ -573,7 +573,7 @@ internal class NetworkLogStateHolder(
                 )
                 error?.let { add(NetworkLogUiState.Detail.Item(label = "エラー", value = it)) }
             },
-            canSaveImage = preview is NetworkLogUiState.Preview.Image && previewBytes != null,
+            saveImageButtonVisible = preview is NetworkLogUiState.Preview.Image && previewBytes != null,
             requestHeaders = requestHeaders.map {
                 NetworkLogUiState.Header(name = it.name, value = it.value)
             },

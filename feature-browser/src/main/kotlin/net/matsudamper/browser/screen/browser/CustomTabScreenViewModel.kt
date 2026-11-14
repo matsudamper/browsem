@@ -37,8 +37,16 @@ class CustomTabScreenViewModel(
 
     val uiState: StateFlow<BrowserScreenUiState> = MutableStateFlow(
         BrowserScreenUiState(
-            urlBarSuggestions = UrlBarSuggestionsUiState(),
-            swipePreview = BrowserScreenUiState.SwipePreviewUiState(),
+            urlBarSuggestions = UrlBarSuggestionsUiState(
+                historySuggestions = listOf(),
+                webSuggestions = listOf(),
+                isLoadingWebSuggestions = false,
+            ),
+            swipePreview = BrowserScreenUiState.SwipePreviewUiState(
+                previousTab = null,
+                nextTab = null,
+                backToOpenerListener = null,
+            ),
             groupTabCount = null,
             externalDownloadDialogListener = null,
             externalTabInitialUrl = null,
@@ -50,7 +58,11 @@ class CustomTabScreenViewModel(
                 uiStateFlow.update {
                     BrowserScreenUiState(
                         urlBarSuggestions = suggestions,
-                        swipePreview = BrowserScreenUiState.SwipePreviewUiState(),
+                        swipePreview = BrowserScreenUiState.SwipePreviewUiState(
+                            previousTab = null,
+                            nextTab = null,
+                            backToOpenerListener = null,
+                        ),
                         groupTabCount = null,
                         externalDownloadDialogListener = null,
                         externalTabInitialUrl = null,
