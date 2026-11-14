@@ -284,7 +284,7 @@ internal class NetworkLogStateHolder(
     /** ログから消えたリクエストのサムネイルを捨てる */
     private fun pruneThumbnails() {
         if (thumbnails.isEmpty()) return
-        val livingIds = store.entries.value.mapTo(mutableSetOf()) { it.requestId }
+        val livingIds = store.entries.value.map { it.requestId }.toSet()
         if (thumbnails.keys.retainAll(livingIds)) {
             thumbnailOrder.retainAll(livingIds)
         }
