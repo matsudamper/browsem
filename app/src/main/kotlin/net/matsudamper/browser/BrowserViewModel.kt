@@ -528,23 +528,11 @@ internal class BrowserViewModel(
             // セッションが表示される
             val storeState = browserTabController.tabStoreState.value
             val tabsInActiveProfile = storeState.tabs.filter { it.profileId == activeProfileId.value }
-            var targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
+            val targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
                 state = storeState.copy(tabs = tabsInActiveProfile),
                 defaultGroupId = defaultGroupId?.value,
                 excludingTabId = tabId,
-            )
-            if (targetTabId == null) {
-                val newTabId = UUID.randomUUID().toString()
-                val newTabGroupId = tabGroupRepository.getGroupIdForExternalTab(activeProfileId)
-                if (newTabGroupId != null) {
-                    tabGroupRepository.assignTabToGroup(newTabId, newTabGroupId)
-                }
-                targetTabId = createTabWithHomepage(
-                    tabId = newTabId,
-                    insertAfterSelectedTab = false,
-                    profileId = activeProfileId,
-                ).tabId
-            }
+            ) ?: createExternalTabReplacement(activeProfileId)
             externalTabPreviousTabs.remove(tabId)
             externalTabInitialUrlByTabId.remove(tabId)
             externalTabIdsFlow.update { it - tabId }
@@ -617,6 +605,19 @@ internal class BrowserViewModel(
         }
         externalTabFinishCleanupJob = job
         job.await()
+    }
+
+    private suspend fun createExternalTabReplacement(activeProfileId: ProfileId): String {
+        val newTabId = UUID.randomUUID().toString()
+        val newTabGroupId = tabGroupRepository.getGroupIdForExternalTab(activeProfileId)
+        if (newTabGroupId != null) {
+            tabGroupRepository.assignTabToGroup(newTabId, newTabGroupId)
+        }
+        return createTabWithHomepage(
+            tabId = newTabId,
+            insertAfterSelectedTab = false,
+            profileId = activeProfileId,
+        ).tabId
     }
 
     private fun currentHomepageUrl(): String {
