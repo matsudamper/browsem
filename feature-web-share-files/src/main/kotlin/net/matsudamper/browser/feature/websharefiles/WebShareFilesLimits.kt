@@ -13,11 +13,10 @@ object WebShareFilesLimits {
     fun maxBase64CharsPerFile(): Int = 4 * ((MAX_FILE_BYTES + 2) / 3)
 
     fun estimateDecodedBytes(base64: String): Int {
-        var padding = 0
-        if (base64.endsWith("==")) {
-            padding = 2
-        } else if (base64.endsWith("=")) {
-            padding = 1
+        val padding = when {
+            base64.endsWith("==") -> 2
+            base64.endsWith("=") -> 1
+            else -> 0
         }
         return (base64.length * 3) / 4 - padding
     }
