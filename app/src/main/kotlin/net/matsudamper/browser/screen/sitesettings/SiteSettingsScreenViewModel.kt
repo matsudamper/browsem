@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.TabSecurityInfo
 import net.matsudamper.browser.awaitGecko
+import net.matsudamper.browser.data.SiteCameraState
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -51,6 +52,12 @@ internal class SiteSettingsScreenViewModel(
         override fun setMicrophonePermission(state: SitePermissionState) {
             viewModelScope.launch {
                 siteSettingsRepository.setMicrophonePermission(host, state)
+            }
+        }
+
+        override fun setCameraState(state: SiteCameraState) {
+            viewModelScope.launch {
+                siteSettingsRepository.setCameraState(host, state)
             }
         }
 
@@ -117,6 +124,7 @@ internal class SiteSettingsScreenViewModel(
             host = host,
             microphonePermission = null,
             geolocationState = null,
+            cameraState = null,
             autoplayPermission = null,
             tlsCertificate = createTlsCertificateUiState(securityInfo),
             clearDataConfirmDialog = null,
@@ -139,6 +147,11 @@ internal class SiteSettingsScreenViewModel(
         viewModelScope.launch {
             siteSettingsRepository.requestedGeolocationState(host).collectLatest { state ->
                 uiStateFlow.update { it.copy(geolocationState = state) }
+            }
+        }
+        viewModelScope.launch {
+            siteSettingsRepository.requestedCameraState(host).collectLatest { state ->
+                uiStateFlow.update { it.copy(cameraState = state) }
             }
         }
         viewModelScope.launch {
