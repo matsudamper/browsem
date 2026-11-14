@@ -11,7 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -20,7 +19,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -59,6 +57,10 @@ internal data class BrowserAppUiState(
     val geminiNanoSemanticSearchModelKey: String,
     val semanticSearchProvider: SemanticSearchProvider,
     val googleAiStudioApiKey: String,
+    /** タブメニューのプロファイル切り替えアイコンから開く、プロファイル管理ダイアログの状態 */
+    val profileSwitcher: ProfileSwitcherUiState,
+    /** タブ一覧から開くプロファイル管理ダイアログの状態。選択・削除しても一覧を閉じない */
+    val tabsProfileSwitcher: ProfileSwitcherUiState,
     val callbacks: Callbacks,
 ) {
     @Stable
@@ -87,6 +89,8 @@ private data class BrowserLogicSettings(
 
 private data class ViewModelState(
     val logicSettings: BrowserLogicSettings? = null,
+    val profiles: List<ProfileData> = listOf(),
+    val profileTabCounts: Map<ProfileId, Int> = mapOf(),
 )
 
 internal data class ExternalTabFinishCleanup(
@@ -167,6 +171,12 @@ internal class BrowserViewModel(
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
 
     // uiState の初期化で即時に参照されるため、uiState より前に定義する
+    private val profileCallbacks = object : ProfileSwitcherUiState.Callbacks {
+        override fun onAddProfile() {
+            addProfile()
+        }
+    }
+
     private val uiCallbacks = object : BrowserAppUiState.Callbacks {
         override fun onExternalTabOpened(tabId: String, initialUrl: String) {
             registerExternalTab(tabId, initialUrl)
@@ -197,12 +207,21 @@ internal class BrowserViewModel(
         .also { uiStateFlow ->
             viewModelScope.launch {
                 viewModelStateFlow.collectLatest { state ->
-                    uiStateFlow.update { state.logicSettings?.toBrowserAppUiState(uiCallbacks) }
+                    uiStateFlow.update { state.toBrowserAppUiState() }
                 }
             }
         }.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            combine(
+                profileRepository.observeProfiles(),
+                profileRepository.observeTabCounts(),
+            ) { profiles, tabCounts -> profiles to tabCounts }
+                .collect { (profiles, tabCounts) ->
+                    viewModelStateFlow.update { it.copy(profiles = profiles, profileTabCounts = tabCounts) }
+                }
+        }
         viewModelScope.launch {
             settingsRepository.settings.collectLatest { settings ->
                 viewModelStateFlow.update {
@@ -328,22 +347,18 @@ internal class BrowserViewModel(
         }
     }
 
-    private val profileCallbacks = object : ProfileSwitcherUiState.Callbacks {
-        override fun onAddProfile() {
-            addProfile()
-        }
-    }
-
-    /** タブメニューのプロファイル切り替えアイコンから開く、プロファイル管理ダイアログの状態 */
-    val profileSwitcher: StateFlow<ProfileSwitcherUiState> = combine(
-        profileRepository.observeProfiles(),
-        profileRepository.observeTabCounts(),
-    ) { profiles, tabCounts -> buildProfileSwitcher(profiles, tabCounts) }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = buildProfileSwitcher(profiles = listOf(), tabCounts = mapOf()),
+    private fun ViewModelState.toBrowserAppUiState(): BrowserAppUiState? {
+        val settings = logicSettings ?: return null
+        val profileSwitcher = buildProfileSwitcher(profiles = profiles, tabCounts = profileTabCounts)
+        return settings.toBrowserAppUiState(
+            profileSwitcher = profileSwitcher,
+            tabsProfileSwitcher = profileSwitcher.keepingTabsScreen(
+                onSelect = ::switchProfileKeepingTabsScreen,
+                onDelete = ::deleteProfileKeepingTabsScreen,
+            ),
+            callbacks = uiCallbacks,
         )
+    }
 
     private fun buildProfileSwitcher(
         profiles: List<ProfileData>,
@@ -388,7 +403,7 @@ internal class BrowserViewModel(
 
     private fun addProfile() {
         viewModelScope.launch {
-            val profileCount = profileSwitcher.value.profiles.size
+            val profileCount = viewModelStateFlow.value.profiles.size
             profileRepository.addProfile(
                 name = "プロファイル ${profileCount + 1}",
                 icon = ProfileIcon.PERSON,
@@ -406,7 +421,7 @@ internal class BrowserViewModel(
      * タブ一覧を開いたままプロファイルを切り替える。
      * 切り替え先のタブは背後の Browser だけ差し替え、Tabs destination は残す。
      */
-    fun switchProfileKeepingTabsScreen(profileId: ProfileId) {
+    private fun switchProfileKeepingTabsScreen(profileId: ProfileId) {
         if (browserTabController.activeProfileId == profileId) return
         viewModelScope.launch { switchProfileNow(profileId, ::notifyReplaceSelectedBrowserTab) }
     }
@@ -456,7 +471,7 @@ internal class BrowserViewModel(
     }
 
     /** タブ一覧を残したままプロファイルを削除する */
-    fun deleteProfileKeepingTabsScreen(profileId: ProfileId) {
+    private fun deleteProfileKeepingTabsScreen(profileId: ProfileId) {
         deleteProfile(profileId, ::notifyReplaceSelectedBrowserTab)
     }
 
@@ -671,6 +686,8 @@ internal class BrowserViewModel(
 }
 
 private fun BrowserLogicSettings.toBrowserAppUiState(
+    profileSwitcher: ProfileSwitcherUiState,
+    tabsProfileSwitcher: ProfileSwitcherUiState,
     callbacks: BrowserAppUiState.Callbacks,
 ): BrowserAppUiState = BrowserAppUiState(
     themeMode = themeMode,
@@ -681,6 +698,8 @@ private fun BrowserLogicSettings.toBrowserAppUiState(
     geminiNanoSemanticSearchModelKey = geminiNanoSemanticSearchModelKey,
     semanticSearchProvider = semanticSearchProvider,
     googleAiStudioApiKey = googleAiStudioApiKey,
+    profileSwitcher = profileSwitcher,
+    tabsProfileSwitcher = tabsProfileSwitcher,
     callbacks = callbacks,
 )
 
@@ -702,4 +721,38 @@ private fun SiteGeolocationState.toGeolocationMode(): MockLocationWebExtension.G
         SiteGeolocationState.SITE_GEOLOCATION_REAL -> MockLocationWebExtension.GeolocationMode.REAL
         else -> MockLocationWebExtension.GeolocationMode.MOCK
     }
+}
+
+/**
+ * タブ一覧上のプロファイル操作は、Tabs destination を残す通知へ差し替える。
+ * 名前変更とアイコン変更は画面遷移を伴わないため元の listener のままにする。
+ */
+private fun ProfileSwitcherUiState.keepingTabsScreen(
+    onSelect: (ProfileId) -> Unit,
+    onDelete: (ProfileId) -> Unit,
+): ProfileSwitcherUiState {
+    return copy(
+        profiles = profiles.map { profile ->
+            val listener = profile.listener
+            profile.copy(
+                listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
+                    override fun onSelect() {
+                        onSelect(profile.id)
+                    }
+
+                    override fun onRename(newName: String) {
+                        listener.onRename(newName)
+                    }
+
+                    override fun onChangeIcon(icon: ProfileIcon) {
+                        listener.onChangeIcon(icon)
+                    }
+
+                    override fun onDelete() {
+                        onDelete(profile.id)
+                    }
+                },
+            )
+        },
+    )
 }

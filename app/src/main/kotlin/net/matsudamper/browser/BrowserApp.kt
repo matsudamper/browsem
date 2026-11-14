@@ -57,7 +57,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BackupRepository
-import net.matsudamper.browser.data.ProfileIcon
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
@@ -94,7 +93,6 @@ import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
-import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -451,7 +449,7 @@ private fun MainBrowserContent(
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
     val themeColorExtension = viewModel.themeColorExtension
     val mediaWebExtension = viewModel.mediaWebExtension
-    val profileSwitcher by viewModel.profileSwitcher.collectAsState()
+    val profileSwitcher = uiState.profileSwitcher
 
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
@@ -838,15 +836,9 @@ private fun MainBrowserContent(
                             })
                         }
                     }
-                    val tabsProfileSwitcher = remember(profileSwitcher) {
-                        profileSwitcher.keepingTabsScreen(
-                            onSelect = viewModel::switchProfileKeepingTabsScreen,
-                            onDelete = viewModel::deleteProfileKeepingTabsScreen,
-                        )
-                    }
                     TabsScreen(
                         uiState = tabsUiState,
-                        profileSwitcher = tabsProfileSwitcher,
+                        profileSwitcher = uiState.tabsProfileSwitcher,
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.surface),
@@ -875,40 +867,6 @@ internal fun copyTextToClipboard(
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-}
-
-/**
- * タブ一覧上のプロファイル操作は、Tabs destination を残す通知へ差し替える。
- * 名前変更とアイコン変更は画面遷移を伴わないため元の listener のままにする。
- */
-private fun ProfileSwitcherUiState.keepingTabsScreen(
-    onSelect: (ProfileId) -> Unit,
-    onDelete: (ProfileId) -> Unit,
-): ProfileSwitcherUiState {
-    return copy(
-        profiles = profiles.map { profile ->
-            val listener = profile.listener
-            profile.copy(
-                listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
-                    override fun onSelect() {
-                        onSelect(profile.id)
-                    }
-
-                    override fun onRename(newName: String) {
-                        listener.onRename(newName)
-                    }
-
-                    override fun onChangeIcon(icon: ProfileIcon) {
-                        listener.onChangeIcon(icon)
-                    }
-
-                    override fun onDelete() {
-                        onDelete(profile.id)
-                    }
-                },
-            )
-        },
-    )
 }
 
 internal fun navEntry(
