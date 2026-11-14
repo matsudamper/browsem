@@ -734,7 +734,7 @@ private fun BrowserToolBarPreviewContent(
         canGoBack = canGoBack,
         onLongPressHistory = {},
         onTranslatePage = {},
-        extensionActions = emptyList(),
+        extensionActions = listOf(),
         extensionActionScrollState = null,
         onExtensionActionMove = { _, _ -> },
         onExtensionActionMoveEnd = {},
