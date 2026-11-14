@@ -61,7 +61,7 @@ internal fun SettingsNavContent(navActions: OuterNavActions) {
     val cameraReplacementImagePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
-        settingsViewModel.onCameraReplacementImagePicked(uri)
+        settingsViewModel.uiState.value?.callbacks?.onCameraReplacementImagePicked(uri)
     }
     DisposableEffect(lifecycleOwner, settingsViewModel) {
         val observer = LifecycleEventObserver { _, event ->

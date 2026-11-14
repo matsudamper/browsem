@@ -1,5 +1,6 @@
 package net.matsudamper.browser.ui.settings
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -955,6 +956,7 @@ private fun SettingsScreenPreviewContent(
                     override fun setMockLocationInput(input: String) = Unit
                     override fun openMockLocationOnMap() = Unit
                     override fun pickCameraReplacementImage() = Unit
+                    override fun onCameraReplacementImagePicked(uri: Uri?) = Unit
                     override fun clearCameraReplacementImage() = Unit
                     override fun requestBackupExport() = Unit
                     override fun requestBackupImport() = Unit

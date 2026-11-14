@@ -204,6 +204,15 @@ internal class SettingsScreenViewModel(
             eventHandler.trySend { it.onPickCameraReplacementImage() }
         }
 
+        override fun onCameraReplacementImagePicked(uri: Uri?) {
+            uri ?: return
+            viewModelScope.launch {
+                if (!cameraReplacementImageRepository.save(uri)) {
+                    eventHandler.trySend { it.onCameraReplacementImageSaveFailed() }
+                }
+            }
+        }
+
         override fun clearCameraReplacementImage() {
             viewModelScope.launch { cameraReplacementImageRepository.clear() }
         }
@@ -234,16 +243,6 @@ internal class SettingsScreenViewModel(
 
         override fun openDefaultBrowserSettings() {
             eventHandler.trySend { it.onOpenDefaultBrowserSettings() }
-        }
-    }
-
-    /** 画像選択の結果。選択されなかった場合は何もしない */
-    fun onCameraReplacementImagePicked(uri: Uri?) {
-        uri ?: return
-        viewModelScope.launch {
-            if (!cameraReplacementImageRepository.save(uri)) {
-                eventHandler.trySend { it.onCameraReplacementImageSaveFailed() }
-            }
         }
     }
 

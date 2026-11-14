@@ -1,5 +1,6 @@
 package net.matsudamper.browser.ui.settings
 
+import android.net.Uri
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.ImageBitmap
 import net.matsudamper.browser.data.HomepageType
@@ -71,6 +72,9 @@ data class SettingsScreenUiState(
         fun setMockLocationInput(input: String)
         fun openMockLocationOnMap()
         fun pickCameraReplacementImage()
+
+        /** 写真選択ツールの結果。選択されなかった場合は null */
+        fun onCameraReplacementImagePicked(uri: Uri?)
         fun clearCameraReplacementImage()
 
         /** バックアップのエクスポートを要求する（確認ダイアログを表示） */
