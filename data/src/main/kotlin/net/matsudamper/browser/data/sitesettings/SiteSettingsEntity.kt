@@ -1,5 +1,6 @@
 package net.matsudamper.browser.data.sitesettings
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -12,6 +13,8 @@ internal data class SiteSettingsEntity(
     val geolocationRequested: Boolean,
     val autoplay: Int,
     val autoplayRequested: Boolean,
+    @ColumnInfo(defaultValue = "0") val camera: Int,
+    @ColumnInfo(defaultValue = "0") val cameraRequested: Boolean,
 )
 
 @Entity(tableName = "site_settings_migration")

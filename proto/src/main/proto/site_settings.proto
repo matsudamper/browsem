@@ -21,6 +21,17 @@ enum SiteGeolocationState {
   SITE_GEOLOCATION_REAL = 2;
 }
 
+// サイトごとのカメラの扱い
+enum SiteCameraState {
+  // 未設定。要求時にユーザーへ確認する
+  SITE_CAMERA_ASK = 0;
+  // 実際のカメラを使わせる。OS のカメラ権限が必要
+  SITE_CAMERA_REAL = 1;
+  // カメラ映像の代わりに設定した画像を返す。OS のカメラ権限は不要
+  SITE_CAMERA_IMAGE = 2;
+  SITE_CAMERA_DENY = 3;
+}
+
 // 1サイト（ホスト）分の権限設定
 message SitePermissionSettings {
   SitePermissionState microphone = 1;
