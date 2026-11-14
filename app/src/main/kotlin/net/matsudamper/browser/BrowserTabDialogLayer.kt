@@ -64,6 +64,7 @@ import androidx.core.graphics.toColorInt
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import net.matsudamper.browser.data.SiteCameraState
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -129,6 +130,20 @@ internal fun BrowserTabDialogLayer(
                     Text("ブロック")
                 }
             },
+        )
+    }
+
+    // サイトごとのカメラ確認ダイアログ。選択はサイト設定として永続化され、
+    // ダイアログを閉じただけの場合は今回のみ拒否する。
+    state.sitePermissionDialogState.cameraDialog?.let { dialog ->
+        CameraPermissionDialog(
+            host = dialog.host,
+            onAllowReal = { state.sitePermissionDialogState.confirmCamera(SiteCameraState.SITE_CAMERA_REAL) },
+            onReplaceWithImage = {
+                state.sitePermissionDialogState.confirmCamera(SiteCameraState.SITE_CAMERA_IMAGE)
+            },
+            onDeny = { state.sitePermissionDialogState.confirmCamera(SiteCameraState.SITE_CAMERA_DENY) },
+            onDismiss = state.sitePermissionDialogState::dismissCamera,
         )
     }
 
@@ -615,6 +630,72 @@ private fun ExternalAppLaunchDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CameraPermissionDialog(
+    host: String,
+    onAllowReal: () -> Unit,
+    onReplaceWithImage: () -> Unit,
+    onDeny: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("カメラの使用") },
+        text = {
+            Text(
+                "$host がカメラの使用を求めています。" +
+                    "「画像に置き換え」を選ぶと、カメラ映像の代わりに設定画面で選んだ画像をサイトへ渡します。" +
+                    "この設定はメニューの「サイトの設定」から変更できます。",
+            )
+        },
+        // 選択肢が3つあり、日本語ラベルは横並びだと狭い画面で見切れるため縦に並べる
+        confirmButton = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                // ダイアログは MainActivity とは別のコンポジションルートになり、
+                // MainActivity で設定した testTagsAsResourceId が届かないためここでも設定する
+                modifier = Modifier.semantics { testTagsAsResourceId = true },
+            ) {
+                TextButton(
+                    onClick = onAllowReal,
+                    modifier = Modifier.testTag(CameraPermissionDialogTestTags.AllowReal.testTag),
+                ) {
+                    Text("カメラを許可")
+                }
+                TextButton(
+                    onClick = onReplaceWithImage,
+                    modifier = Modifier.testTag(CameraPermissionDialogTestTags.ReplaceWithImage.testTag),
+                ) {
+                    Text("画像に置き換え")
+                }
+                TextButton(
+                    onClick = onDeny,
+                    modifier = Modifier.testTag(CameraPermissionDialogTestTags.Deny.testTag),
+                ) {
+                    Text("ブロック")
+                }
+            }
+        },
+    )
+}
+
+sealed interface CameraPermissionDialogTestTags {
+    val id: String
+    val testTag get() = "${CameraPermissionDialogTestTags::class.java.name}#$id"
+
+    object AllowReal : CameraPermissionDialogTestTags {
+        override val id = "allow_real"
+    }
+
+    object ReplaceWithImage : CameraPermissionDialogTestTags {
+        override val id = "replace_with_image"
+    }
+
+    object Deny : CameraPermissionDialogTestTags {
+        override val id = "deny"
     }
 }
 
@@ -1384,6 +1465,20 @@ private fun PreviewAutoplayPermissionDialog() {
             host = "www.example.com",
             onAllow = {},
             onAllowOnce = {},
+            onDeny = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "CameraPermissionDialog")
+@Composable
+private fun PreviewCameraPermissionDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        CameraPermissionDialog(
+            host = "www.example.com",
+            onAllowReal = {},
+            onReplaceWithImage = {},
             onDeny = {},
             onDismiss = {},
         )

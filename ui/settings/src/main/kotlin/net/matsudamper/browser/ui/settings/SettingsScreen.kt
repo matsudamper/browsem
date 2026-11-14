@@ -1,12 +1,16 @@
 package net.matsudamper.browser.ui.settings
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +49,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -443,6 +449,68 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("地図で確認")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "カメラ") {
+                Column {
+                    Text(
+                        text = "置き換え画像",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "サイトごとの設定が「画像に置き換え」のサイトへ、カメラ映像の代わりにこの画像を渡します" +
+                            "（未設定の場合は「No Image」と書いた画像を渡します）",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    // 画像の有無で下のボタンの位置が変わらないよう、表示領域の高さを固定する
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    ) {
+                        val image = uiState.cameraReplacementImage
+                        if (image != null) {
+                            Image(
+                                bitmap = image,
+                                contentDescription = "置き換え画像",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Text(
+                                text = "画像が設定されていません",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Button(
+                            onClick = uiState.callbacks::pickCameraReplacementImage,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("画像を選択")
+                        }
+                        OutlinedButton(
+                            onClick = uiState.callbacks::clearCameraReplacementImage,
+                            enabled = uiState.cameraReplacementImageClearButtonEnabled,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("削除")
+                        }
                     }
                 }
             }
@@ -887,6 +955,9 @@ private fun SettingsScreenPreviewContent(
                     override fun dismissExtensionsProcessRestartDialog() = Unit
                     override fun setMockLocationInput(input: String) = Unit
                     override fun openMockLocationOnMap() = Unit
+                    override fun pickCameraReplacementImage() = Unit
+                    override fun onCameraReplacementImagePicked(uri: Uri?) = Unit
+                    override fun clearCameraReplacementImage() = Unit
                     override fun requestBackupExport() = Unit
                     override fun requestBackupImport() = Unit
                     override fun confirmBackup() = Unit
@@ -911,6 +982,8 @@ private fun SettingsScreenPreviewContent(
                 webAuthnPlatformAuthenticatorAvailableOverrideEnabled = true,
                 mockLocationInput = "35.685175,139.752797",
                 mockLocationInputError = null,
+                cameraReplacementImage = null,
+                cameraReplacementImageClearButtonEnabled = false,
                 backupConfirmDialog = null,
                 extensionsProcessRestartDialog = false,
                 showDefaultBrowserBanner = showDefaultBrowserBanner,
