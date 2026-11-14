@@ -43,6 +43,7 @@ import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
+import net.matsudamper.browser.feature.camerareplace.CameraReplaceWebExtension
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
@@ -272,6 +273,11 @@ internal fun findInPageWebExtension(runtime: GeckoRuntime): FindInPageWebExtensi
 @Single
 internal fun devToolsWebExtension(runtime: GeckoRuntime): DevToolsWebExtension {
     return DevToolsWebExtension().also { it.install(runtime) }
+}
+
+@Single
+internal fun cameraReplaceWebExtension(runtime: GeckoRuntime): CameraReplaceWebExtension {
+    return CameraReplaceWebExtension().also { it.install(runtime) }
 }
 
 @Single

@@ -41,10 +41,13 @@ import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.SiteCameraState
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SiteSettingsRepository
+import net.matsudamper.browser.data.camera.CameraReplacementImageRepository
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.extractSiteHost
+import net.matsudamper.browser.feature.camerareplace.CameraReplaceWebExtension
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.semanticsearch.SemanticSearchConfig
@@ -89,6 +92,7 @@ internal fun rememberBrowserTabScreenState(
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val devToolsWebExtension: DevToolsWebExtension = koinInject()
     val siteSettingsRepository: SiteSettingsRepository = koinInject()
+    val cameraReplacementImageRepository: CameraReplacementImageRepository = koinInject()
     val settingsRepository: SettingsRepository = koinInject()
     val webExtensionActionController: WebExtensionActionController = koinInject()
     val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
@@ -107,6 +111,7 @@ internal fun rememberBrowserTabScreenState(
             findInPageWebExtension = findInPageWebExtension,
             devToolsWebExtension = devToolsWebExtension,
             siteSettingsRepository = siteSettingsRepository,
+            cameraReplacementImageRepository = cameraReplacementImageRepository,
             settingsRepository = settingsRepository,
             webExtensionActionController = webExtensionActionController,
             pageTranslationWebExtension = pageTranslationWebExtension,
@@ -151,6 +156,7 @@ internal class BrowserTabScreenState(
     internal val findInPageWebExtension: FindInPageWebExtension,
     internal val devToolsWebExtension: DevToolsWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
+    private val cameraReplacementImageRepository: CameraReplacementImageRepository,
     private val settingsRepository: SettingsRepository,
     private val webExtensionActionController: WebExtensionActionController,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
@@ -1392,7 +1398,15 @@ internal class BrowserTabScreenState(
             return
         }
         coroutineScope.launch {
-            // OS の権限要求の前に、サイトごとのマイク許可を確認する
+            // OS の権限要求の前に、サイトごとのカメラ・マイク許可を確認する
+            if (Manifest.permission.CAMERA in perms) {
+                // カメラの扱いはトップレベルサイト基準で判定する（コンテンツスクリプトの判定と揃える）
+                val host = extractSiteHost(currentPageUrl)
+                if (host == null || sitePermissionDialogState.resolveCameraState(host) != SiteCameraState.SITE_CAMERA_REAL) {
+                    onReject()
+                    return@launch
+                }
+            }
             if (Manifest.permission.RECORD_AUDIO in perms) {
                 val host = extractSiteHost(currentPageUrl)
                 if (host == null || !sitePermissionDialogState.resolveMicrophonePermission(host)) {
@@ -1416,17 +1430,21 @@ internal class BrowserTabScreenState(
         hasAudio: Boolean,
         onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
     ) {
-        // マイクを含まない要求（カメラのみ等）はサイト設定を確認せず許可する
-        if (!hasAudio) {
-            onResult(hasVideo, false)
-            return
-        }
         coroutineScope.launch {
             // OS 権限が許可済みの場合は onAndroidPermissionsRequest を経由しないため、
-            // ここでもサイトごとのマイク許可を確認する（未設定ならダイアログを表示する）
-            val host = extractSiteHost(uri) ?: extractSiteHost(currentPageUrl)
-            val grantAudio = host != null && sitePermissionDialogState.resolveMicrophonePermission(host)
-            onResult(hasVideo, grantAudio)
+            // ここでもサイトごとのカメラ・マイク許可を確認する（未設定ならダイアログを表示する）。
+            // 画像への置き換えはコンテンツスクリプトが行うため、ここへ到達したカメラ要求は
+            // 「実際のカメラ」設定の場合のみ許可する
+            val grantVideo = hasVideo && run {
+                val cameraHost = extractSiteHost(currentPageUrl) ?: extractSiteHost(uri)
+                cameraHost != null &&
+                    sitePermissionDialogState.resolveCameraState(cameraHost) == SiteCameraState.SITE_CAMERA_REAL
+            }
+            val grantAudio = hasAudio && run {
+                val host = extractSiteHost(uri) ?: extractSiteHost(currentPageUrl)
+                host != null && sitePermissionDialogState.resolveMicrophonePermission(host)
+            }
+            onResult(grantVideo, grantAudio)
         }
     }
 
@@ -1453,6 +1471,35 @@ internal class BrowserTabScreenState(
             // スコープのキャンセル等で onResult まで到達しなかった場合は拒否として完了させる
             if (cause != null && completed.compareAndSet(false, true)) {
                 onResult(false)
+            }
+        }
+    }
+
+    /**
+     * ページの getUserMedia によるカメラ要求の扱いを決める。
+     * 未設定のサイトでは確認ダイアログを表示し、選択はサイト設定として永続化する。
+     */
+    fun resolveCameraDecision(host: String, onResult: (CameraReplaceWebExtension.CameraDecision) -> Unit) {
+        // ページの getUserMedia を未完了のまま残さないよう、onResult は必ず一度呼ぶ
+        val completed = AtomicBoolean(false)
+        val job = coroutineScope.launch {
+            val decision = when (sitePermissionDialogState.resolveCameraState(host)) {
+                SiteCameraState.SITE_CAMERA_REAL -> CameraReplaceWebExtension.CameraDecision.Real
+
+                SiteCameraState.SITE_CAMERA_IMAGE -> CameraReplaceWebExtension.CameraDecision.Image(
+                    imageDataUrl = cameraReplacementImageRepository.loadDataUrl(),
+                )
+
+                else -> CameraReplaceWebExtension.CameraDecision.Deny
+            }
+            if (completed.compareAndSet(false, true)) {
+                onResult(decision)
+            }
+        }
+        job.invokeOnCompletion { cause ->
+            // スコープのキャンセル等で onResult まで到達しなかった場合は拒否として完了させる
+            if (cause != null && completed.compareAndSet(false, true)) {
+                onResult(CameraReplaceWebExtension.CameraDecision.Deny)
             }
         }
     }

@@ -97,6 +97,7 @@ import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.download.DownloadMediaStoreMimeType
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
+import net.matsudamper.browser.feature.camerareplace.CameraReplaceWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
 import net.matsudamper.browser.feature.media.GeckoMediaSessionDelegate
@@ -916,6 +917,19 @@ internal fun GeckoBrowserTab(
         mockLocationWebExtension.registerSession(session) { state.currentPageUrl }
         onDispose {
             mockLocationWebExtension.unregisterSession(session)
+        }
+    }
+
+    val cameraReplaceWebExtension: CameraReplaceWebExtension = koinInject()
+    DisposableEffect(session, state, cameraReplaceWebExtension) {
+        // iframe からのカメラ要求をトップレベルサイトの設定で制御するため、現在ページ URL を渡す
+        cameraReplaceWebExtension.registerSession(
+            session = session,
+            topUrlProvider = { state.currentPageUrl },
+            resolver = state::resolveCameraDecision,
+        )
+        onDispose {
+            cameraReplaceWebExtension.unregisterSession(session)
         }
     }
 
