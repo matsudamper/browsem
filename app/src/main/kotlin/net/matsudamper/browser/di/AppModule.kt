@@ -33,6 +33,7 @@ import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.camera.CameraReplacementImageRepository
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.forminput.FormInputOrigin
@@ -108,6 +109,10 @@ internal fun settingsRepository(context: Context): SettingsRepository = Settings
 
 @Single
 internal fun siteSettingsRepository(context: Context): SiteSettingsRepository = SiteSettingsRepository(context)
+
+@Single
+internal fun cameraReplacementImageRepository(context: Context): CameraReplacementImageRepository =
+    CameraReplacementImageRepository(context)
 
 @Single
 internal fun tabRepository(context: Context): TabRepository = TabRepository(context)
@@ -361,12 +366,14 @@ internal fun settingsScreenViewModel(
     runtime: GeckoRuntime,
     webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
     webAuthnSettingsUpdateQueue: WebAuthnSettingsUpdateQueue,
+    cameraReplacementImageRepository: CameraReplacementImageRepository,
 ): SettingsScreenViewModel {
     return SettingsScreenViewModel(
         settingsRepository = settingsRepository,
         runtime = runtime,
         webAuthnCompatWebExtension = webAuthnCompatWebExtension,
         webAuthnSettingsUpdateQueue = webAuthnSettingsUpdateQueue,
+        cameraReplacementImageRepository = cameraReplacementImageRepository,
     )
 }
 

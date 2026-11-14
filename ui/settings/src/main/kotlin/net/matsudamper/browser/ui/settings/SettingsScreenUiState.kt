@@ -1,6 +1,7 @@
 package net.matsudamper.browser.ui.settings
 
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.graphics.ImageBitmap
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.SemanticSearchProvider
@@ -28,6 +29,9 @@ data class SettingsScreenUiState(
     val webAuthnPlatformAuthenticatorAvailableOverrideEnabled: Boolean,
     val mockLocationInput: String,
     val mockLocationInputError: String?,
+    /** カメラの代わりにサイトへ渡す画像のサムネイル。未設定の場合は null */
+    val cameraReplacementImage: ImageBitmap?,
+    val cameraReplacementImageClearButtonEnabled: Boolean,
     val backupConfirmDialog: BackupConfirmType?,
     val extensionsProcessRestartDialog: Boolean,
     val showDefaultBrowserBanner: Boolean,
@@ -66,6 +70,8 @@ data class SettingsScreenUiState(
         fun dismissExtensionsProcessRestartDialog()
         fun setMockLocationInput(input: String)
         fun openMockLocationOnMap()
+        fun pickCameraReplacementImage()
+        fun clearCameraReplacementImage()
 
         /** バックアップのエクスポートを要求する（確認ダイアログを表示） */
         fun requestBackupExport()
