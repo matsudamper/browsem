@@ -1327,8 +1327,9 @@ private fun flattenChoices(
     choices: Array<GeckoSession.PromptDelegate.ChoicePrompt.Choice>,
 ): List<GeckoSession.PromptDelegate.ChoicePrompt.Choice> {
     return choices.flatMap { choice ->
-        if (choice.items != null) {
-            choice.items!!.toList()
+        val nestedItems = choice.items
+        if (nestedItems != null) {
+            nestedItems.toList()
         } else {
             listOf(choice)
         }
