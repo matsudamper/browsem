@@ -257,7 +257,8 @@ internal fun BrowserAppShell(
                 pendingDownloadsOpenRequest.requestId.value = request.requestId
                 pendingDownloadsOpenRequest.isRequested.value = true
                 val existingIndex = outerBackStack.indexOfLast { it is AppDestination.Downloads }
-                if (existingIndex < 0) {
+                    .takeIf { it >= 0 }
+                if (existingIndex == null) {
                     outerBackStack.add(AppDestination.Downloads)
                 } else if (existingIndex < outerBackStack.lastIndex) {
                     val removeCount = outerBackStack.lastIndex - existingIndex

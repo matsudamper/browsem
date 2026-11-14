@@ -200,8 +200,8 @@ class TabRepository(context: Context) {
             .toMutableList()
 
         if (moveTabId != null && targetIndex != null) {
-            val currentIndex = visibleTabs.indexOfFirst { it.tabId == moveTabId }
-            if (currentIndex >= 0) {
+            val currentIndex = visibleTabs.indexOfFirst { it.tabId == moveTabId }.takeIf { it >= 0 }
+            if (currentIndex != null) {
                 val entity = visibleTabs.removeAt(currentIndex)
                 visibleTabs.add(targetIndex.coerceIn(0, visibleTabs.size), entity)
             }

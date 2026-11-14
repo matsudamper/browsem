@@ -18,8 +18,8 @@ internal fun resolveAmoInstallUriFromPage(pageUrl: String): String? {
         ?.filter { it.isNotBlank() }
         ?: return null
 
-    val addonIndex = segments.indexOf("addon")
-    if (addonIndex == -1 || addonIndex + 1 >= segments.size) {
+    val addonIndex = segments.indexOf("addon").takeIf { it >= 0 }
+    if (addonIndex == null || addonIndex + 1 >= segments.size) {
         return null
     }
 

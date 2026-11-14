@@ -22,8 +22,8 @@ object DownloadUrl {
 
     /** URLのスキームを小文字で返す。スキームを判別できない場合は null */
     private fun scheme(url: String): String? {
-        val separatorIndex = url.indexOf(':')
-        if (separatorIndex <= 0) return null
+        val separatorIndex = url.indexOf(':').takeIf { it > 0 }
+        if (separatorIndex == null) return null
         return url.substring(0, separatorIndex).lowercase(Locale.US)
     }
 

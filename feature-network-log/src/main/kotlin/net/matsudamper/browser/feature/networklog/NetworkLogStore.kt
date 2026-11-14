@@ -26,8 +26,8 @@ class NetworkLogStore(
         _entries.update { current ->
             val merged = current.toMutableList()
             entries.forEach { entry ->
-                val index = merged.indexOfFirst { it.requestId == entry.requestId }
-                if (index >= 0) {
+                val index = merged.indexOfFirst { it.requestId == entry.requestId }.takeIf { it >= 0 }
+                if (index != null) {
                     merged[index] = entry
                 } else {
                     merged.add(entry)

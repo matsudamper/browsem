@@ -36,7 +36,8 @@ class NavController(
     fun replaceCurrentBrowserTab(tabId: String, beforeTab: BrowserNavDestination.Browser? = null) {
         val destination = BrowserNavDestination.Browser(tabId, beforeTab)
         val browserIndex = backStack.indexOfLast { it is BrowserNavDestination.Browser }
-        if (browserIndex < 0) {
+            .takeIf { it >= 0 }
+        if (browserIndex == null) {
             selectTab(tabId, beforeTab)
             return
         }
