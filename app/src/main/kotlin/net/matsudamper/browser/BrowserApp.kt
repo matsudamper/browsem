@@ -57,7 +57,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BackupRepository
-import net.matsudamper.browser.data.ProfileIcon
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
@@ -94,7 +93,6 @@ import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
-import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -127,6 +125,9 @@ internal fun BrowserApp(
             val tabGroupRepository: TabGroupRepository = koinInject()
             val profileRepository: ProfileRepository = koinInject()
             val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
+            // uiState を直接キャプチャすると更新のたびにラムダが作り直され、
+            // BrowserAppShell の外部タブ要求の収集が再起動して処理中の要求が失われる
+            val callbacks = uiState.callbacks
             BrowserAppShell(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
@@ -187,7 +188,7 @@ internal fun BrowserApp(
                             pageTranslationWebExtension.unregisterSession(requestedSession)
                         }
                     }
-                    viewModel.registerExternalTab(newTab.tabId, request.url)
+                    callbacks.onExternalTabOpened(newTab.tabId, request.url)
                     selectTabRequester.request(newTab.tabId)
                 },
                 onNavigateToUrl = { url ->
@@ -451,7 +452,7 @@ private fun MainBrowserContent(
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
     val themeColorExtension = viewModel.themeColorExtension
     val mediaWebExtension = viewModel.mediaWebExtension
-    val profileSwitcher by viewModel.profileSwitcher.collectAsState()
+    val profileSwitcher = uiState.profileSwitcher
 
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
@@ -634,7 +635,7 @@ private fun MainBrowserContent(
                                 }
 
                                 override fun onExternalDownloadDialogResolved(tabId: String) {
-                                    viewModel.onExternalDownloadDialogResolved(tabId)
+                                    uiState.callbacks.onExternalDownloadDialogResolved(tabId)
                                 }
                             })
                         }
@@ -719,7 +720,7 @@ private fun MainBrowserContent(
                                     onOpenTabs = { innerBackStack.add(BrowserNavDestination.Tabs) },
                                     profileSwitcher = profileSwitcher,
                                     onMoveTabToProfile = { tabId, url, profileId ->
-                                        viewModel.moveTabToProfile(tabId, url, profileId)
+                                        uiState.callbacks.onMoveTabToProfile(tabId, url, profileId)
                                     },
                                     browserSessionLifecycleController = browserSessionLifecycleController,
                                     onOpenNewSessionRequest = { uri ->
@@ -800,10 +801,12 @@ private fun MainBrowserContent(
                                     // 表示中のタブを閉じた場合だけ代替タブを作る
                                     if (nextSelectedTabId == null && wasCurrentBrowserTab) {
                                         scope.launch {
-                                            val newTab = viewModel.createTabWithHomepage(
+                                            val newTabId = uiState.callbacks.onCreateHomepageTab(
                                                 tabId = UUID.randomUUID().toString(),
+                                                insertAfterSelectedTab = true,
+                                                profileId = null,
                                             )
-                                            selectTab(newTab.tabId, null)
+                                            selectTab(newTabId, null)
                                         }
                                     } else if (wasCurrentBrowserTab && nextSelectedTabId != null) {
                                         navController.replaceCurrentBrowserTab(nextSelectedTabId)
@@ -825,26 +828,20 @@ private fun MainBrowserContent(
                                         if (currentGroupId != null) {
                                             tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                         }
-                                        val newTab = viewModel.createTabWithHomepage(
+                                        val newTabId = uiState.callbacks.onCreateHomepageTab(
                                             tabId = tabId,
                                             insertAfterSelectedTab = false,
                                             profileId = profileId,
                                         )
-                                        selectTab(newTab.tabId, null)
+                                        selectTab(newTabId, null)
                                     }
                                 }
                             })
                         }
                     }
-                    val tabsProfileSwitcher = remember(profileSwitcher) {
-                        profileSwitcher.keepingTabsScreen(
-                            onSelect = viewModel::switchProfileKeepingTabsScreen,
-                            onDelete = viewModel::deleteProfileKeepingTabsScreen,
-                        )
-                    }
                     TabsScreen(
                         uiState = tabsUiState,
-                        profileSwitcher = tabsProfileSwitcher,
+                        profileSwitcher = uiState.tabsProfileSwitcher,
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.surface),
@@ -873,40 +870,6 @@ internal fun copyTextToClipboard(
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-}
-
-/**
- * タブ一覧上のプロファイル操作は、Tabs destination を残す通知へ差し替える。
- * 名前変更とアイコン変更は画面遷移を伴わないため元の listener のままにする。
- */
-private fun ProfileSwitcherUiState.keepingTabsScreen(
-    onSelect: (ProfileId) -> Unit,
-    onDelete: (ProfileId) -> Unit,
-): ProfileSwitcherUiState {
-    return copy(
-        profiles = profiles.map { profile ->
-            val listener = profile.listener
-            profile.copy(
-                listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
-                    override fun onSelect() {
-                        onSelect(profile.id)
-                    }
-
-                    override fun onRename(newName: String) {
-                        listener.onRename(newName)
-                    }
-
-                    override fun onChangeIcon(icon: ProfileIcon) {
-                        listener.onChangeIcon(icon)
-                    }
-
-                    override fun onDelete() {
-                        onDelete(profile.id)
-                    }
-                },
-            )
-        },
-    )
 }
 
 internal fun navEntry(
