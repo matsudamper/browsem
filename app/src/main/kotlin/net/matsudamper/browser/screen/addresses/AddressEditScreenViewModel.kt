@@ -123,7 +123,7 @@ internal class AddressEditScreenViewModel(
             country = "",
             tel = "",
             email = "",
-            canSave = false,
+            saveButtonEnabled = false,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -145,7 +145,7 @@ internal class AddressEditScreenViewModel(
                         country = state.country,
                         tel = state.tel,
                         email = state.email,
-                        canSave = state.canSave,
+                        saveButtonEnabled = state.canSave,
                     )
                 }
             }

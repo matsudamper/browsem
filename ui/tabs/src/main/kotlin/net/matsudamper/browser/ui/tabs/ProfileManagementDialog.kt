@@ -206,7 +206,7 @@ private fun ProfileRow(
                 )
                 DropdownMenuItem(
                     text = { Text("削除") },
-                    enabled = profile.isDeletable,
+                    enabled = profile.deleteMenuEnabled,
                     onClick = {
                         isMenuExpanded = false
                         onClickDelete()

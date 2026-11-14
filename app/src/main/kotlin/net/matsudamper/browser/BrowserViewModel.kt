@@ -318,7 +318,7 @@ internal class BrowserViewModel(
                     icon = profile.icon,
                     tabCount = tabCounts[profile.id] ?: 0,
                     isActive = profile.isActive,
-                    isDeletable = profile.id != ProfileId.DEFAULT,
+                    deleteMenuEnabled = profile.id != ProfileId.DEFAULT,
                     listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
                         override fun onSelect() {
                             switchProfile(profile.id)

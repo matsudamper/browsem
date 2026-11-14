@@ -313,7 +313,7 @@ private fun ConsoleInput(uiState: DevToolsConsoleUiState) {
         Button(
             modifier = Modifier.testTag(DevToolsConsoleTestTags.ExecuteButton.testTag),
             onClick = uiState.callbacks::onClickExecute,
-            enabled = uiState.canExecute,
+            enabled = uiState.executeButtonEnabled,
         ) {
             Text(if (uiState.isExecuting) "実行中" else "実行")
         }
@@ -444,7 +444,7 @@ private fun PreviewDevToolsConsoleScreen() {
                     ),
                 ),
                 scriptText = "document.title",
-                canExecute = true,
+                executeButtonEnabled = true,
                 isExecuting = false,
                 detail = null,
             ),
@@ -461,7 +461,7 @@ private fun PreviewDevToolsConsoleScreenEmpty() {
                 callbacks = PreviewDevToolsConsoleCallbacks,
                 entries = listOf(),
                 scriptText = "",
-                canExecute = false,
+                executeButtonEnabled = false,
                 isExecuting = false,
                 detail = null,
             ),
@@ -478,7 +478,7 @@ private fun PreviewDevToolsConsoleScreenDetail() {
                 callbacks = PreviewDevToolsConsoleCallbacks,
                 entries = listOf(),
                 scriptText = "",
-                canExecute = false,
+                executeButtonEnabled = false,
                 isExecuting = false,
                 detail = DevToolsConsoleUiState.Detail(
                     title = "ERROR",

@@ -13,8 +13,8 @@ internal data class DevToolsConsoleUiState(
     /** 一覧。古い順 */
     val entries: List<Entry>,
     val scriptText: String,
-    /** 実行できるかどうか。入力が空の間や実行中は実行できない */
-    val canExecute: Boolean,
+    /** 入力が空の間や実行中は false */
+    val executeButtonEnabled: Boolean,
     val isExecuting: Boolean,
     /** 詳細を開いている場合の内容。一覧表示中は null */
     val detail: Detail?,

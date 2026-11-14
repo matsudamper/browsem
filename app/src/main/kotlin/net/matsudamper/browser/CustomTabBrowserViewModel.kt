@@ -200,7 +200,7 @@ internal class CustomTabBrowserViewModel(
                     tabCount = tabCounts[profile.id] ?: 0,
                     isActive = profile.id == currentProfileId,
                     // 削除は他画面のセッションも閉じる必要がある。このコントローラーだけでは止められない
-                    isDeletable = false,
+                    deleteMenuEnabled = false,
                     listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
                         override fun onSelect() {
                             moveSelectedTabToProfile(profile.id)

@@ -130,7 +130,7 @@ internal fun NetworkLogScreen(
                     actions = {
                         IconButton(
                             modifier = Modifier.testTag(NetworkLogScreenTestTags.ClearButton.testTag),
-                            enabled = uiState.canClear,
+                            enabled = uiState.clearButtonEnabled,
                             onClick = uiState.callbacks::onClickClear,
                         ) {
                             Icon(
@@ -157,7 +157,7 @@ internal fun NetworkLogScreen(
                         }
                     },
                     actions = {
-                        if (detail.canSaveImage) {
+                        if (detail.saveImageButtonVisible) {
                             IconButton(
                                 modifier = Modifier
                                     .testTag(NetworkLogScreenTestTags.SaveImageButton.testTag),
@@ -506,7 +506,7 @@ private fun NetworkLogPreview(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (preview.canCopyBody) {
+                if (preview.copyBodyButtonVisible) {
                     TextButton(onClick = callbacks::onClickCopyBody) {
                         Text("本文をコピー")
                     }
@@ -774,7 +774,7 @@ private fun previewDetail(preview: NetworkLogUiState.Preview): NetworkLogUiState
             NetworkLogUiState.Detail.Item("開始", "12:34:56.789"),
             NetworkLogUiState.Detail.Item("キャッシュ", "あり"),
         ),
-        canSaveImage = preview is NetworkLogUiState.Preview.Image,
+        saveImageButtonVisible = preview is NetworkLogUiState.Preview.Image,
         requestHeaders = listOf(
             NetworkLogUiState.Header("Accept", "image/avif,image/webp,*/*"),
             NetworkLogUiState.Header("Referer", "https://example.com/"),
@@ -818,7 +818,7 @@ private fun PreviewNetworkLogScreenList() {
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "5 件", sizeLabel = "1.7 MB"),
                 notice = null,
-                canClear = true,
+                clearButtonEnabled = true,
                 detail = null,
             ),
         )
@@ -889,7 +889,7 @@ private fun PreviewNetworkLogScreenImageFilter() {
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "3 件", sizeLabel = "1.2 MB"),
                 notice = null,
-                canClear = true,
+                clearButtonEnabled = true,
                 detail = null,
             ),
         )
@@ -908,7 +908,7 @@ private fun PreviewNetworkLogScreenEmpty() {
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "0 件", sizeLabel = "0 B"),
                 notice = null,
-                canClear = true,
+                clearButtonEnabled = true,
                 detail = null,
             ),
         )
@@ -927,12 +927,12 @@ private fun PreviewNetworkLogScreenImageDetail() {
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "5 件", sizeLabel = "1.7 MB"),
                 notice = null,
-                canClear = true,
+                clearButtonEnabled = true,
                 detail = previewDetail(
                     NetworkLogUiState.Preview.Image(
                         bitmap = previewImageBitmap(),
                         sizeLabel = "240 × 135 · 1.2 MB",
-                        canCopyBody = false,
+                        copyBodyButtonVisible = false,
                     ),
                 ),
             ),
@@ -952,12 +952,12 @@ private fun PreviewNetworkLogScreenSvgDetail() {
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "3 件", sizeLabel = "1.2 MB"),
                 notice = null,
-                canClear = true,
+                clearButtonEnabled = true,
                 detail = previewDetail(
                     NetworkLogUiState.Preview.Image(
                         bitmap = previewImageBitmap(),
                         sizeLabel = "SVG · 8.0 KB",
-                        canCopyBody = true,
+                        copyBodyButtonVisible = true,
                     ),
                 ),
             ),
@@ -977,7 +977,7 @@ private fun PreviewNetworkLogScreenTextDetail() {
                 searchQuery = "main",
                 summary = NetworkLogUiState.Summary(countLabel = "1 件", sizeLabel = "482.0 KB"),
                 notice = null,
-                canClear = true,
+                clearButtonEnabled = true,
                 detail = previewDetail(
                     NetworkLogUiState.Preview.Text(
                         text = """

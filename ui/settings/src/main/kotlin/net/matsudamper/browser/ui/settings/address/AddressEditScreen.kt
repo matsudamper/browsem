@@ -103,7 +103,7 @@ fun AddressEditScreen(
                 actions = {
                     TextButton(
                         onClick = uiState.callbacks::onSave,
-                        enabled = uiState.canSave,
+                        enabled = uiState.saveButtonEnabled,
                         modifier = Modifier.testTag(AddressEditScreenTestTags.SaveButton.testTag),
                     ) {
                         Text("保存")
@@ -286,7 +286,7 @@ private fun PreviewAddressEditScreen() {
             country = "JP",
             tel = "0312345678",
             email = "taro@example.com",
-            canSave = true,
+            saveButtonEnabled = true,
         ),
         onBack = {},
     )
