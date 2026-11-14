@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.data.SiteCameraState
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.resources.R as ResourcesR
@@ -159,8 +160,9 @@ fun SiteSettingsScreen(
             SettingSection(title = "サイトが要求した権限") {
                 val hasGeolocation = uiState.geolocationState != null
                 val hasMicrophone = uiState.microphonePermission != null
+                val hasCamera = uiState.cameraState != null
                 val hasAutoplay = uiState.autoplayPermission != null
-                if (!hasGeolocation && !hasMicrophone && !hasAutoplay) {
+                if (!hasGeolocation && !hasMicrophone && !hasCamera && !hasAutoplay) {
                     Text(
                         text = "このサイトが要求した権限はありません",
                         style = MaterialTheme.typography.bodyMedium,
@@ -243,8 +245,48 @@ fun SiteSettingsScreen(
                             }
                         }
                     }
-                    if (hasAutoplay) {
+                    if (hasCamera) {
                         if (hasGeolocation || hasMicrophone) {
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        PermissionGroup(
+                            title = "カメラ",
+                            iconRes = R.drawable.ic_photo_camera,
+                        ) {
+                            Column(Modifier.selectableGroup()) {
+                                SettingsRadioOption(
+                                    label = "確認する",
+                                    selected = uiState.cameraState == SiteCameraState.SITE_CAMERA_ASK,
+                                    onClick = {
+                                        uiState.callbacks.setCameraState(SiteCameraState.SITE_CAMERA_ASK)
+                                    },
+                                )
+                                SettingsRadioOption(
+                                    label = "実際のカメラ",
+                                    selected = uiState.cameraState == SiteCameraState.SITE_CAMERA_REAL,
+                                    onClick = {
+                                        uiState.callbacks.setCameraState(SiteCameraState.SITE_CAMERA_REAL)
+                                    },
+                                )
+                                SettingsRadioOption(
+                                    label = "画像に置き換え",
+                                    selected = uiState.cameraState == SiteCameraState.SITE_CAMERA_IMAGE,
+                                    onClick = {
+                                        uiState.callbacks.setCameraState(SiteCameraState.SITE_CAMERA_IMAGE)
+                                    },
+                                )
+                                SettingsRadioOption(
+                                    label = "ブロック",
+                                    selected = uiState.cameraState == SiteCameraState.SITE_CAMERA_DENY,
+                                    onClick = {
+                                        uiState.callbacks.setCameraState(SiteCameraState.SITE_CAMERA_DENY)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (hasAutoplay) {
+                        if (hasGeolocation || hasMicrophone || hasCamera) {
                             Spacer(Modifier.height(12.dp))
                         }
                         PermissionGroup(
@@ -415,6 +457,7 @@ private fun CertificateInfoRow(
 private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun setMicrophonePermission(state: SitePermissionState) = Unit
     override fun setGeolocationState(state: SiteGeolocationState) = Unit
+    override fun setCameraState(state: SiteCameraState) = Unit
     override fun setAutoplayPermission(state: SitePermissionState) = Unit
     override fun requestClearData(type: SiteSettingsScreenUiState.ClearDataType) = Unit
     override fun confirmClearData() = Unit
@@ -423,7 +466,7 @@ private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun openSavedFormInputs() = Unit
 }
 
-// 証明書・位置情報・マイク・音声の自動再生・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
+// 証明書・位置情報・マイク・カメラ・音声の自動再生・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
 @Preview(showBackground = true)
 @Composable
 private fun SiteSettingsScreenWithFormInputPreview() {
@@ -434,6 +477,7 @@ private fun SiteSettingsScreenWithFormInputPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
                 tlsCertificate = null,
                 clearDataConfirmDialog = null,
@@ -455,6 +499,7 @@ private fun SiteSettingsScreenPreview() {
                 host = "www.example.com",
                 microphonePermission = SitePermissionState.SITE_PERMISSION_ASK,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                cameraState = SiteCameraState.SITE_CAMERA_IMAGE,
                 autoplayPermission = SitePermissionState.SITE_PERMISSION_DENY,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Available(
                     subjectCommonName = "www.example.com",
@@ -483,6 +528,7 @@ private fun SiteSettingsScreenGeolocationOnlyPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                cameraState = null,
                 autoplayPermission = null,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
@@ -505,6 +551,7 @@ private fun SiteSettingsScreenAutoplayOnlyPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = SitePermissionState.SITE_PERMISSION_ASK,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
@@ -527,6 +574,7 @@ private fun SiteSettingsScreenShortContentPreview() {
                 host = "a.test",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
@@ -549,6 +597,7 @@ private fun SiteSettingsScreenLandscapePreview() {
                 host = "a.test",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
@@ -570,6 +619,7 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
                 tlsCertificate = null,
                 clearDataConfirmDialog = null,
@@ -623,6 +673,7 @@ private fun SiteSettingsScreenClearCookieConfirmPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
                 tlsCertificate = null,
                 clearDataConfirmDialog = SiteSettingsScreenUiState.ClearDataType.Cookie,
