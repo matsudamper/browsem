@@ -530,7 +530,7 @@ class MainActivity : ComponentActivity() {
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpCompleted = true
                 // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
-                applyExtensionAvailability(extensions ?: listOf())
+                applyExtensionAvailability(extensions.orEmpty())
             },
             {
                 webExtensionWarmUpInProgress = false
