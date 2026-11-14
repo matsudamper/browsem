@@ -13,7 +13,7 @@ data class BackupProgressUiState(
 
         data class InProgress(
             val message: String,
-            val fraction: Float? = null,
+            val fraction: Float?,
         ) : Phase
 
         data class Completed(val successMessage: String) : Phase
