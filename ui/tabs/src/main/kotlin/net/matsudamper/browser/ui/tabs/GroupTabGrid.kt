@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -58,6 +59,7 @@ internal fun GroupTabGrid(
     selectedTabId: String?,
     onReorderTabs: (fromIndex: Int, toIndex: Int) -> Unit,
     onTabDragStateChanged: (isDragging: Boolean, centerInRoot: Offset) -> Unit,
+    onGridScrollInProgressChanged: (Boolean) -> Unit,
     onTabDropped: (TabsScreenTabData) -> Unit,
     onTabLongPressWithoutDrag: (TabsScreenTabData) -> Unit,
     floatingActionButtonBoundsInRoot: Rect?,
@@ -115,6 +117,17 @@ internal fun GroupTabGrid(
 
         LaunchedEffect(dragDropState.isDragging, dragDropState.dragCenterInRoot, onTabDragStateChanged) {
             onTabDragStateChanged(dragDropState.isDragging, dragDropState.dragCenterInRoot)
+        }
+
+        val currentOnGridScrollInProgressChanged by rememberUpdatedState(onGridScrollInProgressChanged)
+        val gridScrollInProgress = gridState.isScrollInProgress
+        DisposableEffect(gridScrollInProgress) {
+            currentOnGridScrollInProgressChanged(gridScrollInProgress)
+            onDispose {
+                if (gridScrollInProgress) {
+                    currentOnGridScrollInProgressChanged(false)
+                }
+            }
         }
 
         LaunchedEffect(Unit) {

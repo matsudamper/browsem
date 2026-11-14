@@ -294,6 +294,10 @@ private fun TabsScreenLoadedContent(
     var tabDragCenterInRoot by remember { mutableStateOf(Offset.Zero) }
     var isTabDragging by remember { mutableStateOf(false) }
 
+    // 縦スクロール中に指を止めて横に動かすと Pager が反応して隣のページが一瞬見えるため、
+    // グリッドの縦スクロール中は Pager の横スクロールを止める
+    var isGridScrolling by remember { mutableStateOf(false) }
+
     // ドラッグ中に中心がどのグループタブ上にあるかを判定する
     val highlightedGroupIndex = if (isTabDragging) {
         groupTabBounds.entries.firstOrNull { (_, bounds) ->
@@ -394,7 +398,7 @@ private fun TabsScreenLoadedContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                userScrollEnabled = !isTabDragging,
+                userScrollEnabled = !isTabDragging && !isGridScrolling,
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { listOf() }
                 Box(
@@ -410,6 +414,7 @@ private fun TabsScreenLoadedContent(
                             isTabDragging = dragging
                             tabDragCenterInRoot = centerInRoot
                         },
+                        onGridScrollInProgressChanged = { isGridScrolling = it },
                         onTabDropped = { tab ->
                             val targetIndex = groupTabBounds.entries.firstOrNull { (_, bounds) ->
                                 bounds.contains(tabDragCenterInRoot)
