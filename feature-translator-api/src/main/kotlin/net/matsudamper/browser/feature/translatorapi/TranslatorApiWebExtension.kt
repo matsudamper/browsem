@@ -7,10 +7,12 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -86,8 +88,10 @@ class TranslatorApiWebExtension(
                     val sessionRequestJob = sessionRequestJobs[session]
                         ?: return GeckoResult.fromValue(errorJson("AbortError", "ページが閉じられました"))
                     val result = GeckoResult<Any>()
-                    coroutineScope.launch(sessionRequestJob) {
+                    // 開始前に取り消されても応答を返せるよう、必ず本体を実行させる
+                    coroutineScope.launch(sessionRequestJob, CoroutineStart.ATOMIC) {
                         val response = try {
+                            ensureActive()
                             respond(request)
                         } catch (error: CancellationException) {
                             // 応答を返さないとページ側の Promise が完了しないままになる
