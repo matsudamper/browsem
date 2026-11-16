@@ -25,6 +25,7 @@ internal class GeminiNanoInference(
     private val generativeModel: GenerativeModel,
     private val sourceLanguage: String,
     private val targetLanguage: String,
+    private val refusalLikeOutput: RefusalLikeOutput,
 ) {
     private val inferenceMutex = Mutex()
 
@@ -135,7 +136,7 @@ internal class GeminiNanoInference(
             throw IllegalStateException("Gemini Nanoの翻訳が出力上限で途切れました")
         }
         val translatedText = sanitizeTranslatedText(candidate.text)
-        if (isUnusableTranslation(translatedText)) {
+        if (refusalLikeOutput == RefusalLikeOutput.REJECT && isUnusableTranslation(translatedText)) {
             throw IllegalStateException("Gemini Nanoが訳文ではない返答をしました")
         }
         return translatedText
@@ -190,6 +191,19 @@ internal class GeminiNanoInference(
             }
             append(translatedChunk)
         }
+    }
+
+    /**
+     * 翻訳拒否や指示文の復唱に見える出力の扱い。
+     *
+     * 判定は文字列の一致によるため、「I'm sorry」のような正しい訳文も該当しうる。
+     */
+    enum class RefusalLikeOutput {
+        /** 失敗として扱う。原文のまま残せる場面で、訳文でない出力を差し込まないために使う */
+        REJECT,
+
+        /** 訳文として返す。原文へ戻す先が無く、正しい訳文を失敗にする方が困る場面で使う */
+        ACCEPT,
     }
 
     companion object {

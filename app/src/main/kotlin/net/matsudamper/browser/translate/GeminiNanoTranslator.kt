@@ -85,6 +85,7 @@ class GeminiNanoTranslator(
                 generativeModel = selectedModel.generativeModel,
                 sourceLanguage = sourceLanguage,
                 targetLanguage = targetLanguage,
+                refusalLikeOutput = GeminiNanoInference.RefusalLikeOutput.REJECT,
             )
             try {
                 currentStage = STAGE_MODEL

@@ -66,6 +66,7 @@ internal class GeminiNanoTranslatorApiEngine(
             generativeModel = selectedModel.generativeModel,
             sourceLanguage = languagePair.sourceLanguage,
             targetLanguage = languagePair.targetLanguage,
+            refusalLikeOutput = GeminiNanoInference.RefusalLikeOutput.ACCEPT,
         )
         try {
             if (
