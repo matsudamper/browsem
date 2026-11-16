@@ -8,7 +8,9 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -34,6 +36,9 @@ class TranslatorApiWebExtension(
     private val registeredSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
 
+    // ページを閉じた後に翻訳待ちの要求が残り、後続ページの翻訳を待たせないよう、セッション単位で取り消す
+    private val sessionRequestJobs = ConcurrentHashMap<GeckoSession, Job>()
+
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
         runtime.webExtensionController
@@ -55,12 +60,14 @@ class TranslatorApiWebExtension(
 
     fun registerSession(session: GeckoSession) {
         registeredSessions.add(session)
+        sessionRequestJobs.computeIfAbsent(session) { SupervisorJob(coroutineScope.coroutineContext[Job]) }
         val extension = extension ?: return
         attachSessionMessageDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {
         registeredSessions.remove(session)
+        sessionRequestJobs.remove(session)?.cancel()
         val extension = extension ?: return
         session.webExtensionController.setMessageDelegate(extension, null, NATIVE_APP_ID)
     }
@@ -76,9 +83,17 @@ class TranslatorApiWebExtension(
                 ): GeckoResult<Any>? {
                     val request = (message as? JSONObject)?.toTranslatorApiRequest()
                         ?: return GeckoResult.fromValue(errorJson("TypeError", "無効なリクエストです"))
+                    val sessionRequestJob = sessionRequestJobs[session]
+                        ?: return GeckoResult.fromValue(errorJson("AbortError", "ページが閉じられました"))
                     val result = GeckoResult<Any>()
-                    coroutineScope.launch {
-                        val response = respond(request)
+                    coroutineScope.launch(sessionRequestJob) {
+                        val response = try {
+                            respond(request)
+                        } catch (error: CancellationException) {
+                            // 応答を返さないとページ側の Promise が完了しないままになる
+                            mainHandler.post { result.complete(errorJson("AbortError", "ページが閉じられました")) }
+                            throw error
+                        }
                         mainHandler.post { result.complete(response) }
                     }
                     return result
@@ -119,6 +134,10 @@ class TranslatorApiWebExtension(
                     successJson().put("languages", JSONArray(languages))
                 }
             }
+        } catch (error: TimeoutCancellationException) {
+            // エンジン内部の期限切れはキャンセルの一種として投げられるが、要求自体は取り消されていない
+            Log.w(TAG, "翻訳要求の処理が時間内に完了しなかった", error)
+            errorJson("OperationError", "翻訳が時間内に完了しませんでした")
         } catch (error: CancellationException) {
             throw error
         } catch (error: TranslatorApiEngine.UnsupportedLanguagePairException) {
