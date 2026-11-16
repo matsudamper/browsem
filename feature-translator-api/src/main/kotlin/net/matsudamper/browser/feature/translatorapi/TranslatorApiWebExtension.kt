@@ -142,6 +142,8 @@ class TranslatorApiWebExtension(
             throw error
         } catch (error: TranslatorApiEngine.UnsupportedLanguagePairException) {
             errorJson("NotSupportedError", error.message.orEmpty())
+        } catch (error: TranslatorApiEngine.ModelNotPreparedException) {
+            errorJson("NotAllowedError", error.message.orEmpty())
         } catch (error: Exception) {
             Log.w(TAG, "翻訳要求の処理に失敗", error)
             errorJson("OperationError", "翻訳に失敗しました")

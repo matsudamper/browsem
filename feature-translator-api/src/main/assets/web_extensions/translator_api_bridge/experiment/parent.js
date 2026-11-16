@@ -134,6 +134,18 @@ async function connect(languagePair) {
   return connection;
 }
 
+// モデルのダウンロードはユーザー操作を確認済みの prepare だけが行う。
+// translate で新しく接続するとモデルを取得してしまうため、取得済みかを先に確かめる
+async function isReadyWithoutDownload(languagePair) {
+  const key = languagePair.sourceLanguage + "," + languagePair.targetLanguage;
+  if (connections.has(key)) return true;
+  const downloadSize = await lazy.TranslationsParent.getExpectedTranslationDownloadSize(
+    languagePair.sourceLanguage,
+    languagePair.targetLanguage,
+  );
+  return !(downloadSize > 0);
+}
+
 function requestTranslation(connection, text) {
   return new Promise(function (resolve, reject) {
     if (connection.closed) {
@@ -195,6 +207,13 @@ this.browsemTranslation = class extends ExtensionAPI {
           try {
             const languagePair = await resolveLanguagePair(sourceLanguage, targetLanguage);
             if (!languagePair) return unsupported();
+            if (!(await isReadyWithoutDownload(languagePair))) {
+              return {
+                success: false,
+                errorName: "NotAllowedError",
+                error: "翻訳モデルが準備されていません",
+              };
+            }
             const connection = await connect(languagePair);
             return { success: true, text: await requestTranslation(connection, text) };
           } catch (error) {

@@ -34,13 +34,13 @@ internal class GeminiNanoTranslatorApiEngine(
 
     override suspend fun prepare(languagePair: TranslatorApiEngine.LanguagePair) {
         loadedInferenceMutex.withLock {
-            loadInference(languagePair)
+            loadInference(languagePair, ModelDownload.ALLOWED)
         }
     }
 
     override suspend fun translate(languagePair: TranslatorApiEngine.LanguagePair, text: String): String {
         return loadedInferenceMutex.withLock {
-            loadInference(languagePair).translateText(text)
+            loadInference(languagePair, ModelDownload.FORBIDDEN).translateText(text)
         }
     }
 
@@ -50,7 +50,10 @@ internal class GeminiNanoTranslatorApiEngine(
     }
 
     /** [loadedInferenceMutex] を保持した状態で呼ぶこと */
-    private suspend fun loadInference(languagePair: TranslatorApiEngine.LanguagePair): GeminiNanoInference {
+    private suspend fun loadInference(
+        languagePair: TranslatorApiEngine.LanguagePair,
+        modelDownload: ModelDownload,
+    ): GeminiNanoInference {
         val target = InferenceTarget(savedModelKey(), languagePair)
         val reusableInference = loadedInference?.takeIf { it.target == target }
         if (reusableInference != null) return reusableInference.inference
@@ -65,6 +68,12 @@ internal class GeminiNanoTranslatorApiEngine(
             targetLanguage = languagePair.targetLanguage,
         )
         try {
+            if (
+                modelDownload == ModelDownload.FORBIDDEN &&
+                selectedModel.generativeModel.checkStatus() != FeatureStatus.AVAILABLE
+            ) {
+                throw TranslatorApiEngine.ModelNotPreparedException()
+            }
             inference.prepare()
         } catch (error: Exception) {
             inference.close()
@@ -75,6 +84,11 @@ internal class GeminiNanoTranslatorApiEngine(
     }
 
     private suspend fun savedModelKey(): String = settingsRepository.settings.first().geminiNanoModelKey
+
+    private enum class ModelDownload {
+        ALLOWED,
+        FORBIDDEN,
+    }
 
     private data class InferenceTarget(
         val savedModelKey: String,

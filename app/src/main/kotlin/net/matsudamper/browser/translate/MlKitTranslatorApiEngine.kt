@@ -25,12 +25,7 @@ internal class MlKitTranslatorApiEngine : TranslatorApiEngine {
     ): TranslatorApiEngine.Availability {
         val mlKitLanguagePair = languagePair.toMlKitLanguagePair()
             ?: return TranslatorApiEngine.Availability.UNAVAILABLE
-        val remoteModelManager = RemoteModelManager.getInstance()
-        val isEveryModelDownloaded = listOf(mlKitLanguagePair.sourceLanguage, mlKitLanguagePair.targetLanguage)
-            .all { language ->
-                remoteModelManager.isModelDownloaded(TranslateRemoteModel.Builder(language).build()).await()
-            }
-        return if (isEveryModelDownloaded) {
+        return if (isEveryModelDownloaded(mlKitLanguagePair)) {
             TranslatorApiEngine.Availability.AVAILABLE
         } else {
             TranslatorApiEngine.Availability.DOWNLOADABLE
@@ -39,13 +34,13 @@ internal class MlKitTranslatorApiEngine : TranslatorApiEngine {
 
     override suspend fun prepare(languagePair: TranslatorApiEngine.LanguagePair) {
         loadedTranslatorMutex.withLock {
-            loadTranslator(languagePair)
+            loadTranslator(languagePair, ModelDownload.ALLOWED)
         }
     }
 
     override suspend fun translate(languagePair: TranslatorApiEngine.LanguagePair, text: String): String {
         return loadedTranslatorMutex.withLock {
-            val translator = loadTranslator(languagePair)
+            val translator = loadTranslator(languagePair, ModelDownload.FORBIDDEN)
             // ML Kit は改行を保持しないため、行ごとに翻訳して元の行構造へ戻す
             text.split("\n")
                 .map { line ->
@@ -60,25 +55,46 @@ internal class MlKitTranslatorApiEngine : TranslatorApiEngine {
     }
 
     /** [loadedTranslatorMutex] を保持した状態で呼ぶこと */
-    private suspend fun loadTranslator(languagePair: TranslatorApiEngine.LanguagePair): MlKitTranslator {
+    private suspend fun loadTranslator(
+        languagePair: TranslatorApiEngine.LanguagePair,
+        modelDownload: ModelDownload,
+    ): MlKitTranslator {
         val mlKitLanguagePair = languagePair.toMlKitLanguagePair()
             ?: throw TranslatorApiEngine.UnsupportedLanguagePairException(languagePair)
         val reusableTranslator = loadedTranslator?.takeIf { it.languagePair == mlKitLanguagePair }
-        val translator = if (reusableTranslator != null) {
-            reusableTranslator.translator
-        } else {
-            loadedTranslator?.translator?.close()
-            Translation.getClient(
-                TranslatorOptions.Builder()
-                    .setSourceLanguage(mlKitLanguagePair.sourceLanguage)
-                    .setTargetLanguage(mlKitLanguagePair.targetLanguage)
-                    .build(),
-            ).also { created ->
-                loadedTranslator = LoadedTranslator(mlKitLanguagePair, created)
-            }
+        if (reusableTranslator != null) return reusableTranslator.translator
+
+        if (modelDownload == ModelDownload.FORBIDDEN && !isEveryModelDownloaded(mlKitLanguagePair)) {
+            throw TranslatorApiEngine.ModelNotPreparedException()
         }
-        translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
+        loadedTranslator?.translator?.close()
+        loadedTranslator = null
+        val translator = Translation.getClient(
+            TranslatorOptions.Builder()
+                .setSourceLanguage(mlKitLanguagePair.sourceLanguage)
+                .setTargetLanguage(mlKitLanguagePair.targetLanguage)
+                .build(),
+        )
+        try {
+            translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
+        } catch (error: Exception) {
+            translator.close()
+            throw error
+        }
+        loadedTranslator = LoadedTranslator(mlKitLanguagePair, translator)
         return translator
+    }
+
+    private suspend fun isEveryModelDownloaded(languagePair: MlKitLanguagePair): Boolean {
+        val remoteModelManager = RemoteModelManager.getInstance()
+        return listOf(languagePair.sourceLanguage, languagePair.targetLanguage).all { language ->
+            remoteModelManager.isModelDownloaded(TranslateRemoteModel.Builder(language).build()).await()
+        }
+    }
+
+    private enum class ModelDownload {
+        ALLOWED,
+        FORBIDDEN,
     }
 
     private data class MlKitLanguagePair(

@@ -7,7 +7,12 @@ interface TranslatorApiEngine {
     /** 翻訳に必要なモデルを揃える。対応していない言語の組み合わせでは [UnsupportedLanguagePairException] を投げる */
     suspend fun prepare(languagePair: LanguagePair)
 
-    /** 対応していない言語の組み合わせでは [UnsupportedLanguagePairException] を投げる */
+    /**
+     * 対応していない言語の組み合わせでは [UnsupportedLanguagePairException] を投げる。
+     *
+     * モデルのダウンロードはユーザー操作を確認済みの [prepare] だけが行う。
+     * モデルが揃っていなければダウンロードせず [ModelNotPreparedException] を投げる
+     */
     suspend fun translate(languagePair: LanguagePair, text: String): String
 
     /** 判定できた言語だけを返す。判定不能を表す und は含めない */
@@ -31,6 +36,8 @@ interface TranslatorApiEngine {
         DOWNLOADABLE("downloadable"),
         UNAVAILABLE("unavailable"),
     }
+
+    class ModelNotPreparedException : Exception("翻訳モデルが準備されていません")
 
     class UnsupportedLanguagePairException(languagePair: LanguagePair) :
         Exception("${languagePair.sourceLanguage} から ${languagePair.targetLanguage} へは翻訳できません")
