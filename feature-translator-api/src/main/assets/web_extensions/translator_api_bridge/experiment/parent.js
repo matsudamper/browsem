@@ -15,8 +15,11 @@ ChromeUtils.defineESModuleGetters(lazy, {
 // エンジンは使われないまま一定時間が経つと自ら終了するため、こちらでは寿命を管理しない
 const connections = new Map();
 
-// エンジンは推論に失敗しても応答を返さないため、待ち続けないよう期限を設ける
+// エンジンは推論の失敗や異常終了を通知しないことがあるため、待ち続けないよう期限を設ける。
+// 期限を過ぎた接続は使えなくなっている可能性があるので閉じ、次の要求で接続し直す
 const TRANSLATION_TIMEOUT_MS = 60000;
+// モデルのダウンロードを含むため、翻訳より長く待つ
+const READY_TIMEOUT_MS = 180000;
 
 function unsupported() {
   return {
@@ -49,6 +52,7 @@ function closeConnection(connection, error) {
   if (connections.get(connection.key) === connection) {
     connections.delete(connection.key);
   }
+  lazy.clearTimeout(connection.readyTimeoutId);
   connection.rejectReady(error);
   for (const request of connection.pendingRequests.values()) {
     lazy.clearTimeout(request.timeoutId);
@@ -81,6 +85,7 @@ async function openConnection(connection, languagePair) {
     switch (data.type) {
       case "TranslationsPort:GetEngineStatusResponse":
         if (data.status === "ready") {
+          lazy.clearTimeout(connection.readyTimeoutId);
           connection.resolveReady();
         } else {
           closeConnection(
@@ -126,6 +131,9 @@ async function connect(languagePair) {
     connection.ready.catch(function () {});
     connections.set(key, connection);
     const opening = connection;
+    opening.readyTimeoutId = lazy.setTimeout(function () {
+      closeConnection(opening, new Error("翻訳エンジンの準備が時間内に完了しませんでした"));
+    }, READY_TIMEOUT_MS);
     openConnection(opening, languagePair).catch(function (error) {
       closeConnection(opening, error);
     });
@@ -154,8 +162,7 @@ function requestTranslation(connection, text) {
     }
     const translationId = ++connection.nextTranslationId;
     const timeoutId = lazy.setTimeout(function () {
-      connection.pendingRequests.delete(translationId);
-      reject(new Error("翻訳が時間内に完了しませんでした"));
+      closeConnection(connection, new Error("翻訳が時間内に完了しませんでした"));
     }, TRANSLATION_TIMEOUT_MS);
     connection.pendingRequests.set(translationId, {
       resolve: resolve,
