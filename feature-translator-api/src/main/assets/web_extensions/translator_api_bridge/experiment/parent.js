@@ -7,10 +7,16 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   LanguageDetector: "resource://gre/modules/translations/LanguageDetector.sys.mjs",
   TranslationsParent: "resource://gre/actors/TranslationsParent.sys.mjs",
+  clearTimeout: "resource://gre/modules/Timer.sys.mjs",
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
 
-// 翻訳エンジンとの接続。直近に使った 1 言語ペア分だけを保持する
-let activeConnection = null;
+// 翻訳エンジンとの接続。言語ペアごとに持ち、エンジンが終了を通知してきたら捨てる。
+// エンジンは使われないまま一定時間が経つと自ら終了するため、こちらでは寿命を管理しない
+const connections = new Map();
+
+// エンジンは推論に失敗しても応答を返さないため、待ち続けないよう期限を設ける
+const TRANSLATION_TIMEOUT_MS = 60000;
 
 function unsupported() {
   return {
@@ -40,82 +46,110 @@ async function resolveLanguagePair(sourceLanguage, targetLanguage) {
 function closeConnection(connection, error) {
   if (connection.closed) return;
   connection.closed = true;
+  if (connections.get(connection.key) === connection) {
+    connections.delete(connection.key);
+  }
+  connection.rejectReady(error);
   for (const request of connection.pendingRequests.values()) {
+    lazy.clearTimeout(request.timeoutId);
     request.reject(error);
   }
   connection.pendingRequests.clear();
-  if (connection.port) {
-    try {
-      connection.port.postMessage({ type: "TranslationsPort:Close" });
-    } catch (_error) {
-      // 既に閉じられている
-    }
-    connection.port.close();
+  closePort(connection.port);
+}
+
+function closePort(port) {
+  if (!port) return;
+  try {
+    port.postMessage({ type: "TranslationsPort:Close" });
+  } catch (_error) {
+    // 既に閉じられている
   }
+  port.close();
 }
 
 async function openConnection(connection, languagePair) {
   const port = await lazy.TranslationsParent.requestTranslationsPort(languagePair);
   if (!port) throw new Error("翻訳エンジンへ接続できませんでした");
+  if (connection.closed) {
+    // ポートの取得を待つ間に接続が閉じられた。取得したポートを残さない
+    closePort(port);
+    return;
+  }
   connection.port = port;
-  await new Promise(function (resolve, reject) {
-    port.onmessage = function ({ data }) {
-      switch (data.type) {
-        case "TranslationsPort:GetEngineStatusResponse":
-          if (data.status === "ready") {
-            resolve();
-          } else {
-            reject(new Error(data.error || "翻訳エンジンを準備できませんでした"));
-          }
-          break;
-        case "TranslationsPort:TranslationResponse": {
-          const request = connection.pendingRequests.get(data.translationId);
-          if (request) {
-            connection.pendingRequests.delete(data.translationId);
-            request.resolve(data.targetText);
-          }
-          break;
+  port.onmessage = function ({ data }) {
+    switch (data.type) {
+      case "TranslationsPort:GetEngineStatusResponse":
+        if (data.status === "ready") {
+          connection.resolveReady();
+        } else {
+          closeConnection(
+            connection,
+            new Error(data.error || "翻訳エンジンを準備できませんでした"),
+          );
         }
-        case "TranslationsPort:EngineTerminated":
-          closeConnection(connection, new Error("翻訳エンジンが終了しました"));
-          break;
+        break;
+      case "TranslationsPort:TranslationResponse": {
+        const request = connection.pendingRequests.get(data.translationId);
+        if (request) {
+          connection.pendingRequests.delete(data.translationId);
+          lazy.clearTimeout(request.timeoutId);
+          request.resolve(data.targetText);
+        }
+        break;
       }
-    };
-    port.postMessage({ type: "TranslationsPort:GetEngineStatusRequest" });
-  });
+      case "TranslationsPort:EngineTerminated":
+        closeConnection(connection, new Error("翻訳エンジンが終了しました"));
+        break;
+    }
+  };
+  port.postMessage({ type: "TranslationsPort:GetEngineStatusRequest" });
 }
 
 // 接続の準備（必要ならモデルのダウンロード）が終わるまで待って返す
 async function connect(languagePair) {
   const key = languagePair.sourceLanguage + "," + languagePair.targetLanguage;
-  if (!activeConnection || activeConnection.closed || activeConnection.key !== key) {
-    if (activeConnection) {
-      closeConnection(activeConnection, new Error("別の言語の翻訳に切り替わりました"));
-    }
-    const connection = {
+  let connection = connections.get(key);
+  if (!connection) {
+    connection = {
       key: key,
       port: null,
       closed: false,
       nextTranslationId: 0,
       pendingRequests: new Map(),
-      ready: null,
     };
-    connection.ready = openConnection(connection, languagePair).catch(function (error) {
-      closeConnection(connection, error);
-      throw error;
+    connection.ready = new Promise(function (resolve, reject) {
+      connection.resolveReady = resolve;
+      connection.rejectReady = reject;
     });
-    activeConnection = connection;
+    // 誰も待っていない間に閉じられても、未処理の reject として報告されないようにする
+    connection.ready.catch(function () {});
+    connections.set(key, connection);
+    const opening = connection;
+    openConnection(opening, languagePair).catch(function (error) {
+      closeConnection(opening, error);
+    });
   }
-  const connection = activeConnection;
   await connection.ready;
-  if (connection.closed) throw new Error("翻訳エンジンとの接続が閉じられました");
   return connection;
 }
 
 function requestTranslation(connection, text) {
   return new Promise(function (resolve, reject) {
+    if (connection.closed) {
+      reject(new Error("翻訳エンジンとの接続が閉じられました"));
+      return;
+    }
     const translationId = ++connection.nextTranslationId;
-    connection.pendingRequests.set(translationId, { resolve: resolve, reject: reject });
+    const timeoutId = lazy.setTimeout(function () {
+      connection.pendingRequests.delete(translationId);
+      reject(new Error("翻訳が時間内に完了しませんでした"));
+    }, TRANSLATION_TIMEOUT_MS);
+    connection.pendingRequests.set(translationId, {
+      resolve: resolve,
+      reject: reject,
+      timeoutId: timeoutId,
+    });
     connection.port.postMessage({
       type: "TranslationsPort:TranslationRequest",
       translationId: translationId,
@@ -189,9 +223,8 @@ this.browsemTranslation = class extends ExtensionAPI {
   }
 
   onShutdown() {
-    if (activeConnection) {
-      closeConnection(activeConnection, new Error("拡張機能が終了しました"));
-      activeConnection = null;
+    for (const connection of Array.from(connections.values())) {
+      closeConnection(connection, new Error("拡張機能が終了しました"));
     }
   }
 };
