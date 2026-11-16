@@ -102,25 +102,55 @@
     return signal;
   }
 
-  // signal が中断されたら reject する Promise と競わせる。翻訳エンジン側の処理は止めず、結果を捨てる
-  function abortable(promise, signals) {
+  function throwIfAborted(signals) {
+    for (let i = 0; i < signals.length; i++) {
+      if (signals[i].aborted) throw failure(signals[i].reason);
+    }
+  }
+
+  // 中断済みなら start を呼ばずに reject する。開始後に中断された場合は reject するが、
+  // 翻訳エンジン側の処理は止めず、結果を捨てる
+  function abortable(start, signals) {
     return new Promise(function (resolve, reject) {
-      for (let i = 0; i < signals.length; i++) {
-        const signal = signals[i];
-        if (signal.aborted) {
-          reject(failure(signal.reason));
-          return;
-        }
-        signal.addEventListener(
-          "abort",
-          function () {
-            reject(failure(signal.reason));
-          },
-          { once: true },
-        );
+      throwIfAborted(signals);
+      const listeners = signals.map(function (signal) {
+        const listener = function () {
+          settle(reject, failure(signal.reason));
+        };
+        signal.addEventListener("abort", listener);
+        return listener;
+      });
+      // 同じ signal を使い回されてもリスナーが溜まらないよう、終了時に必ず外す
+      function settle(complete, value) {
+        signals.forEach(function (signal, index) {
+          signal.removeEventListener("abort", listeners[index]);
+        });
+        complete(value);
       }
-      promise.then(resolve, reject);
+      start().then(
+        function (value) {
+          settle(resolve, value);
+        },
+        function (error) {
+          settle(reject, error);
+        },
+      );
     });
+  }
+
+  // 仕様どおり、作成時に渡された signal の中断は作成後のインスタンスの破棄としても扱う
+  function createDestroyController(creationSignal) {
+    const destroyController = new AbortController();
+    if (creationSignal) {
+      creationSignal.addEventListener(
+        "abort",
+        function () {
+          destroyController.abort(creationSignal.reason);
+        },
+        { once: true },
+      );
+    }
+    return destroyController;
   }
 
   function dispatchDownloadProgress(monitorTarget, loaded) {
@@ -197,8 +227,8 @@
   function installLanguageDetector() {
     const detectorPrototype = new pageWin.Object();
 
-    function createDetectorInstance(expectedInputLanguages) {
-      const destroyController = new AbortController();
+    function createDetectorInstance(expectedInputLanguages, creationSignal) {
+      const destroyController = createDestroyController(creationSignal);
 
       function detectLanguages(input, options) {
         const signals = [destroyController.signal];
@@ -215,12 +245,11 @@
             failure(pageDomException("入力が長すぎます", "QuotaExceededError")),
           );
         }
-        return abortable(
-          sendToEngine({ action: "detectLanguage", text: text }).then(function (result) {
+        return abortable(function () {
+          return sendToEngine({ action: "detectLanguage", text: text }).then(function (result) {
             return toDetectionResults(result.languages || []);
-          }),
-          signals,
-        );
+          });
+        }, signals);
       }
 
       const instance = pageWin.Object.create(detectorPrototype);
@@ -291,14 +320,14 @@
       const monitorTarget = new pageWin.EventTarget();
       if (monitor) monitor(monitorTarget);
 
-      return abortable(requestAvailability(), signal ? [signal] : []).then(function (availability) {
+      return abortable(requestAvailability, signal ? [signal] : []).then(function (availability) {
         if (availability === "unavailable") {
           throw failure(pageDomException("言語を判定できません", "NotSupportedError"));
         }
         // 言語判定のモデルは同梱されておりダウンロードが起きないため、開始と完了を続けて伝える
         dispatchDownloadProgress(monitorTarget, 0);
         dispatchDownloadProgress(monitorTarget, 1);
-        return createDetectorInstance(expectedInputLanguages);
+        return createDetectorInstance(expectedInputLanguages, signal);
       });
     }
 
@@ -337,8 +366,8 @@
   function installTranslator() {
     const translatorPrototype = new pageWin.Object();
 
-    function createTranslatorInstance(languagePair) {
-      const destroyController = new AbortController();
+    function createTranslatorInstance(languagePair, creationSignal) {
+      const destroyController = createDestroyController(creationSignal);
 
       function translateText(input, options) {
         const signals = [destroyController.signal];
@@ -355,17 +384,16 @@
             failure(pageDomException("入力が長すぎます", "QuotaExceededError")),
           );
         }
-        return abortable(
-          sendToEngine({
+        return abortable(function () {
+          return sendToEngine({
             action: "translate",
             sourceLanguage: languagePair.sourceLanguage,
             targetLanguage: languagePair.targetLanguage,
             text: text,
           }).then(function (result) {
             return String(result.text);
-          }),
-          signals,
-        );
+          });
+        }, signals);
       }
 
       function startTranslation(input, options) {
@@ -448,8 +476,8 @@
       const monitorTarget = new pageWin.EventTarget();
       if (monitor) monitor(monitorTarget);
 
-      return abortable(
-        sendToEngine({
+      return abortable(function () {
+        return sendToEngine({
           action: "availability",
           sourceLanguage: languagePair.sourceLanguage,
           targetLanguage: languagePair.targetLanguage,
@@ -469,17 +497,18 @@
             );
           }
           dispatchDownloadProgress(monitorTarget, 0);
+          // 可用性の応答待ちや進捗イベントの中で中断されていたら、モデルの準備を始めない
+          throwIfAborted(signals);
           return sendToEngine({
             action: "create",
             sourceLanguage: languagePair.sourceLanguage,
             targetLanguage: languagePair.targetLanguage,
           });
-        }),
-        signals,
-      ).then(function () {
+        });
+      }, signals).then(function () {
         // 翻訳エンジンは途中経過を通知しないため、開始と完了だけを伝える
         dispatchDownloadProgress(monitorTarget, 1);
-        return createTranslatorInstance(languagePair);
+        return createTranslatorInstance(languagePair, signal);
       });
     }
 
