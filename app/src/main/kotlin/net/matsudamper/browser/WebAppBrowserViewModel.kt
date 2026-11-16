@@ -21,6 +21,7 @@ import net.matsudamper.browser.data.WebAppId
 import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.feature.media.MediaWebExtension
+import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.mozilla.geckoview.GeckoRuntime
 
@@ -34,6 +35,7 @@ internal class WebAppBrowserViewModel(
     runtime: GeckoRuntime,
     private val mediaWebExtension: MediaWebExtension,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val translatorApiWebExtension: TranslatorApiWebExtension,
     applicationScope: CoroutineScope,
     private val backgroundSessionSuspender: BackgroundSessionSuspender,
 ) : ViewModel() {
@@ -60,15 +62,17 @@ internal class WebAppBrowserViewModel(
                 selectedTabId = browserTabController.selectedTabId,
             )
         }
-        // ページ翻訳ブリッジは content script より先に MessageDelegate が要る。設定画面などで
+        // ページ翻訳と Translator API のブリッジは content script より先に MessageDelegate が要る。設定画面などで
         // タブの Composition が外れても外さないよう、セッションの寿命に合わせて張る。
         browserTabController.onTabSessionCreated = { session ->
             mediaWebExtension.registerSession(session)
             pageTranslationWebExtension.registerSession(session)
+            translatorApiWebExtension.registerSession(session)
         }
         browserTabController.onTabSessionDisposed = { session ->
             mediaWebExtension.releaseSession(session)
             pageTranslationWebExtension.unregisterSession(session)
+            translatorApiWebExtension.unregisterSession(session)
         }
         trackBackgroundSessions(
             suspender = backgroundSessionSuspender,

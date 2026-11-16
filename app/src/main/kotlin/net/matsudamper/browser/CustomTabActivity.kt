@@ -58,6 +58,7 @@ import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -75,6 +76,7 @@ class CustomTabActivity : ComponentActivity() {
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtensionInstance: MediaWebExtension by inject()
     private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
+    private val translatorApiWebExtension: TranslatorApiWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val tabRepository: TabRepository by inject()
     private val applicationScope: CoroutineScope by inject()
@@ -93,6 +95,7 @@ class CustomTabActivity : ComponentActivity() {
                     handoffToken = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN),
                     mediaWebExtension = mediaWebExtensionInstance,
                     pageTranslationWebExtension = pageTranslationWebExtension,
+                    translatorApiWebExtension = translatorApiWebExtension,
                     applicationScope = applicationScope,
                     backgroundSessionSuspender = backgroundSessionSuspender,
                     profileRepository = profileRepository,
@@ -270,7 +273,10 @@ class CustomTabActivity : ComponentActivity() {
                     CustomTabHandoffStore.store(
                         session = handedOffSession,
                         sessionState = sessionState,
-                        onDiscard = { pageTranslationWebExtension.unregisterSession(it) },
+                        onDiscard = {
+                            pageTranslationWebExtension.unregisterSession(it)
+                            translatorApiWebExtension.unregisterSession(it)
+                        },
                     ),
                 )
             },

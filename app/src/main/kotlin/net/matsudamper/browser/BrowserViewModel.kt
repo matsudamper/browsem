@@ -45,6 +45,7 @@ import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import org.mozilla.geckoview.GeckoRuntime
@@ -93,6 +94,7 @@ internal class BrowserViewModel(
     private val profileRepository: ProfileRepository,
     private val mockLocationWebExtension: MockLocationWebExtension,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val translatorApiWebExtension: TranslatorApiWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val applicationScope: CoroutineScope,
     private val backgroundSessionSuspender: BackgroundSessionSuspender,
@@ -114,15 +116,17 @@ internal class BrowserViewModel(
                 selectedTabId = browserTabController.selectedTabId,
             )
         }
-        // ページ翻訳ブリッジは content script より先に MessageDelegate が要る。設定画面などで
+        // ページ翻訳と Translator API のブリッジは content script より先に MessageDelegate が要る。設定画面などで
         // タブの Composition が外れても外さないよう、セッションの寿命に合わせて張る。
         browserTabController.onTabSessionCreated = { session ->
             mediaWebExtension.registerSession(session)
             pageTranslationWebExtension.registerSession(session)
+            translatorApiWebExtension.registerSession(session)
         }
         browserTabController.onTabSessionDisposed = { session ->
             mediaWebExtension.releaseSession(session)
             pageTranslationWebExtension.unregisterSession(session)
+            translatorApiWebExtension.unregisterSession(session)
         }
         trackBackgroundSessions(
             suspender = backgroundSessionSuspender,

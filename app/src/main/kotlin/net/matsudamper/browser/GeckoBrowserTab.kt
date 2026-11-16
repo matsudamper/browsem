@@ -104,7 +104,6 @@ import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
-import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
@@ -1023,14 +1022,6 @@ internal fun GeckoBrowserTab(
         onDispose {
             webShareFilesWebExtension.unregisterSession(session)
             webShareFilesState.cleanupOnDispose()
-        }
-    }
-
-    val translatorApiWebExtension: TranslatorApiWebExtension = koinInject()
-    DisposableEffect(session, translatorApiWebExtension) {
-        translatorApiWebExtension.registerSession(session)
-        onDispose {
-            translatorApiWebExtension.unregisterSession(session)
         }
     }
 

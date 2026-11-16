@@ -344,6 +344,7 @@ internal fun browserViewModel(
     profileRepository: ProfileRepository,
     mockLocationWebExtension: MockLocationWebExtension,
     pageTranslationWebExtension: PageTranslationWebExtension,
+    translatorApiWebExtension: TranslatorApiWebExtension,
     siteSettingsRepository: SiteSettingsRepository,
     applicationCoroutineScope: CoroutineScope,
     backgroundSessionSuspender: BackgroundSessionSuspender,
@@ -359,6 +360,7 @@ internal fun browserViewModel(
         profileRepository = profileRepository,
         mockLocationWebExtension = mockLocationWebExtension,
         pageTranslationWebExtension = pageTranslationWebExtension,
+        translatorApiWebExtension = translatorApiWebExtension,
         siteSettingsRepository = siteSettingsRepository,
         applicationScope = applicationCoroutineScope,
         backgroundSessionSuspender = backgroundSessionSuspender,
@@ -567,6 +569,7 @@ internal fun webAppBrowserViewModel(
     runtime: GeckoRuntime,
     mediaWebExtension: MediaWebExtension,
     pageTranslationWebExtension: PageTranslationWebExtension,
+    translatorApiWebExtension: TranslatorApiWebExtension,
     applicationCoroutineScope: CoroutineScope,
     backgroundSessionSuspender: BackgroundSessionSuspender,
 ): WebAppBrowserViewModel {
@@ -580,6 +583,7 @@ internal fun webAppBrowserViewModel(
         runtime = runtime,
         mediaWebExtension = mediaWebExtension,
         pageTranslationWebExtension = pageTranslationWebExtension,
+        translatorApiWebExtension = translatorApiWebExtension,
         applicationScope = applicationCoroutineScope,
         backgroundSessionSuspender = backgroundSessionSuspender,
     )

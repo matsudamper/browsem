@@ -68,6 +68,7 @@ import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.navigation.AddressEditNavContent
 import net.matsudamper.browser.navigation.AddressesNavContent
 import net.matsudamper.browser.navigation.AppDestination
@@ -127,6 +128,7 @@ internal fun BrowserApp(
             val tabGroupRepository: TabGroupRepository = koinInject()
             val profileRepository: ProfileRepository = koinInject()
             val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
+            val translatorApiWebExtension: TranslatorApiWebExtension = koinInject()
             BrowserAppShell(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
@@ -185,6 +187,7 @@ internal fun BrowserApp(
                     } finally {
                         if (requestedSession != null && !handedOffSessionAttached) {
                             pageTranslationWebExtension.unregisterSession(requestedSession)
+                            translatorApiWebExtension.unregisterSession(requestedSession)
                         }
                     }
                     viewModel.registerExternalTab(newTab.tabId, request.url)
