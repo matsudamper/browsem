@@ -18,6 +18,11 @@
     return (value && value.wrappedJSObject) || value;
   }
 
+  // pageWin 経由の値はページが書き換えられるため、モデルのダウンロード可否の判定には Xray 越しの値を使う
+  function hasUserActivation() {
+    return window.navigator.userActivation.isActive;
+  }
+
   function pageDomException(message, name) {
     return new pageWin.DOMException(message, name);
   }
@@ -455,7 +460,7 @@
             );
           }
           // ページがユーザー操作なしに翻訳モデルを端末へダウンロードさせられないようにする
-          if (result.availability !== "available" && !pageWin.navigator.userActivation.isActive) {
+          if (result.availability !== "available" && !hasUserActivation()) {
             throw failure(
               pageDomException(
                 "翻訳モデルのダウンロードにはユーザー操作が必要です",
