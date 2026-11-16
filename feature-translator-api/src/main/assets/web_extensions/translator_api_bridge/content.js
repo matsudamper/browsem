@@ -332,8 +332,12 @@
           throw failure(pageDomException("言語を判定できません", "NotSupportedError"));
         }
         // 言語判定のモデルは同梱されておりダウンロードが起きないため、開始と完了を続けて伝える
+        // 進捗イベントの中で中断されたら、以降のイベントもインスタンスも渡さない
+        const signals = signal ? [signal] : [];
         dispatchDownloadProgress(monitorTarget, 0);
+        throwIfAborted(signals);
         dispatchDownloadProgress(monitorTarget, 1);
+        throwIfAborted(signals);
         return createDetectorInstance(expectedInputLanguages, signal);
       });
     }
@@ -517,6 +521,7 @@
       }, signals).then(function () {
         // 翻訳エンジンは途中経過を通知しないため、開始と完了だけを伝える
         dispatchDownloadProgress(monitorTarget, 1);
+        throwIfAborted(signals);
         return createTranslatorInstance(languagePair, signal);
       });
     }
