@@ -127,7 +127,14 @@
         });
         complete(value);
       }
-      start().then(
+      let started;
+      try {
+        started = start();
+      } catch (error) {
+        settle(reject, error);
+        return;
+      }
+      started.then(
         function (value) {
           settle(resolve, value);
         },
@@ -482,6 +489,8 @@
           sourceLanguage: languagePair.sourceLanguage,
           targetLanguage: languagePair.targetLanguage,
         }).then(function (result) {
+          // 可用性の応答待ちの間に中断されていたら、進捗イベントも配送しない
+          throwIfAborted(signals);
           if (result.availability === "unavailable") {
             throw failure(
               pageDomException("この言語の組み合わせは翻訳できません", "NotSupportedError"),
@@ -497,7 +506,7 @@
             );
           }
           dispatchDownloadProgress(monitorTarget, 0);
-          // 可用性の応答待ちや進捗イベントの中で中断されていたら、モデルの準備を始めない
+          // 進捗イベントの中で中断されていたら、モデルの準備を始めない
           throwIfAborted(signals);
           return sendToEngine({
             action: "create",
