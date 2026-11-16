@@ -55,6 +55,10 @@ internal class MlKitTranslatorApiEngine : TranslatorApiEngine {
         }
     }
 
+    override suspend fun detectLanguages(text: String): List<TranslatorApiEngine.DetectedLanguage> {
+        return detectLanguagesWithMlKit(text)
+    }
+
     /** [loadedTranslatorMutex] を保持した状態で呼ぶこと */
     private suspend fun loadTranslator(languagePair: TranslatorApiEngine.LanguagePair): MlKitTranslator {
         val mlKitLanguagePair = languagePair.toMlKitLanguagePair()

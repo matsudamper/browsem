@@ -14,6 +14,11 @@ browser.runtime.onMessage.addListener(function (message) {
         message.targetLanguage,
         message.text,
       );
+    case "languageDetectorAvailability":
+      // Gecko の言語判定は同梱されており、常に使える
+      return Promise.resolve({ success: true, availability: "available" });
+    case "detectLanguage":
+      return browser.browsemTranslation.detectLanguage(message.text);
     default:
       return undefined;
   }

@@ -1,10 +1,11 @@
-// Gecko 内蔵の翻訳エンジン（ページ翻訳と同じもの）でテキストを翻訳する experiment API。
+// Gecko 内蔵の翻訳エンジン（ページ翻訳と同じもの）と言語判定を使う experiment API。
 // GeckoView はテキスト単位の翻訳 API を公開していないため、親プロセスの TranslationsParent を直接使う。
 /* global ExtensionAPI, ChromeUtils */
 "use strict";
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  LanguageDetector: "resource://gre/modules/translations/LanguageDetector.sys.mjs",
   TranslationsParent: "resource://gre/actors/TranslationsParent.sys.mjs",
 });
 
@@ -162,6 +163,23 @@ this.browsemTranslation = class extends ExtensionAPI {
             if (!languagePair) return unsupported();
             const connection = await connect(languagePair);
             return { success: true, text: await requestTranslation(connection, text) };
+          } catch (error) {
+            return failed(error);
+          }
+        },
+
+        async detectLanguage(text) {
+          try {
+            const detection = await lazy.LanguageDetector.detectLanguage(text);
+            return {
+              success: true,
+              languages: detection.languages.map(function (language) {
+                return {
+                  detectedLanguage: language.languageCode,
+                  confidence: language.percent / 100,
+                };
+              }),
+            };
           } catch (error) {
             return failed(error);
           }

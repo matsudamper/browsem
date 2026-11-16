@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -17,7 +18,8 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
 
 /**
- * Translator API (https://developer.mozilla.org/en-US/docs/Web/API/Translator) のポリフィル用ビルトイン WebExtension。
+ * Translator and Language Detector APIs
+ * (https://developer.mozilla.org/en-US/docs/Web/API/Translator_and_Language_Detector_APIs) のポリフィル用ビルトイン WebExtension。
  * ページ側ポリフィルが送る要求を受け取り、[TranslatorApiEngine] の結果を返す。
  *
  * @param selectAppEngine 翻訳に使うアプリ側のエンジンを返す。
@@ -102,6 +104,20 @@ class TranslatorApiWebExtension(
                 is TranslatorApiRequest.Translate -> {
                     successJson().put("text", engine.translate(request.languagePair, request.text))
                 }
+
+                // アプリ側の言語判定はモデルを同梱しており、常に使える
+                TranslatorApiRequest.LanguageDetectorAvailability -> {
+                    successJson().put("availability", TranslatorApiEngine.Availability.AVAILABLE.jsonValue)
+                }
+
+                is TranslatorApiRequest.DetectLanguage -> {
+                    val languages = engine.detectLanguages(request.text).map { language ->
+                        JSONObject()
+                            .put("detectedLanguage", language.languageTag)
+                            .put("confidence", language.confidence)
+                    }
+                    successJson().put("languages", JSONArray(languages))
+                }
             }
         } catch (error: CancellationException) {
             throw error
@@ -122,16 +138,18 @@ class TranslatorApiWebExtension(
 }
 
 internal sealed interface TranslatorApiRequest {
-    val languagePair: TranslatorApiEngine.LanguagePair
+    data class Availability(val languagePair: TranslatorApiEngine.LanguagePair) : TranslatorApiRequest
 
-    data class Availability(override val languagePair: TranslatorApiEngine.LanguagePair) : TranslatorApiRequest
-
-    data class Create(override val languagePair: TranslatorApiEngine.LanguagePair) : TranslatorApiRequest
+    data class Create(val languagePair: TranslatorApiEngine.LanguagePair) : TranslatorApiRequest
 
     data class Translate(
-        override val languagePair: TranslatorApiEngine.LanguagePair,
+        val languagePair: TranslatorApiEngine.LanguagePair,
         val text: String,
     ) : TranslatorApiRequest
+
+    data object LanguageDetectorAvailability : TranslatorApiRequest
+
+    data class DetectLanguage(val text: String) : TranslatorApiRequest
 }
 
 // content.js の INPUT_QUOTA と一致させる
@@ -139,26 +157,37 @@ internal const val MAX_INPUT_CHARS = 100_000
 private const val MAX_LANGUAGE_TAG_CHARS = 64
 
 internal fun JSONObject.toTranslatorApiRequest(): TranslatorApiRequest? {
-    val sourceLanguage = optString("sourceLanguage", "")
-    val targetLanguage = optString("targetLanguage", "")
-    if (!isAcceptableLanguageTag(sourceLanguage) || !isAcceptableLanguageTag(targetLanguage)) return null
-    val languagePair = TranslatorApiEngine.LanguagePair(
-        sourceLanguage = sourceLanguage,
-        targetLanguage = targetLanguage,
-    )
     return when (optString("action", "")) {
-        "availability" -> TranslatorApiRequest.Availability(languagePair)
+        "availability" -> toLanguagePair()?.let(TranslatorApiRequest::Availability)
 
-        "create" -> TranslatorApiRequest.Create(languagePair)
+        "create" -> toLanguagePair()?.let(TranslatorApiRequest::Create)
 
         "translate" -> {
-            val text = optString("text", "")
-            if (text.length > MAX_INPUT_CHARS) return null
+            val languagePair = toLanguagePair() ?: return null
+            val text = toInputText() ?: return null
             TranslatorApiRequest.Translate(languagePair, text)
         }
 
+        "languageDetectorAvailability" -> TranslatorApiRequest.LanguageDetectorAvailability
+
+        "detectLanguage" -> toInputText()?.let(TranslatorApiRequest::DetectLanguage)
+
         else -> null
     }
+}
+
+private fun JSONObject.toLanguagePair(): TranslatorApiEngine.LanguagePair? {
+    val sourceLanguage = optString("sourceLanguage", "")
+    val targetLanguage = optString("targetLanguage", "")
+    if (!isAcceptableLanguageTag(sourceLanguage) || !isAcceptableLanguageTag(targetLanguage)) return null
+    return TranslatorApiEngine.LanguagePair(
+        sourceLanguage = sourceLanguage,
+        targetLanguage = targetLanguage,
+    )
+}
+
+private fun JSONObject.toInputText(): String? {
+    return optString("text", "").takeIf { it.length <= MAX_INPUT_CHARS }
 }
 
 private fun isAcceptableLanguageTag(languageTag: String): Boolean {

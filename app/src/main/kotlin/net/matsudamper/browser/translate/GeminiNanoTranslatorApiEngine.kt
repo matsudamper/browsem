@@ -44,6 +44,11 @@ internal class GeminiNanoTranslatorApiEngine(
         }
     }
 
+    // Gemini Nano は確度付きの言語判定を返せないため、ページ翻訳の言語判定と同じ ML Kit を使う
+    override suspend fun detectLanguages(text: String): List<TranslatorApiEngine.DetectedLanguage> {
+        return detectLanguagesWithMlKit(text)
+    }
+
     /** [loadedInferenceMutex] を保持した状態で呼ぶこと */
     private suspend fun loadInference(languagePair: TranslatorApiEngine.LanguagePair): GeminiNanoInference {
         val target = InferenceTarget(savedModelKey(), languagePair)
