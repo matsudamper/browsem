@@ -367,7 +367,7 @@ class GeminiNanoTranslator(
  *
  * 同一モデルへ並行して生成要求を出すと失敗するため、[inferenceMutex] で直列化する。
  */
-private class GeminiNanoInference(
+internal class GeminiNanoInference(
     private val generativeModel: GenerativeModel,
     private val sourceLanguage: String,
     private val targetLanguage: String,

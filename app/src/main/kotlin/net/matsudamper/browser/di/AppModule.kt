@@ -51,6 +51,7 @@ import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogStore
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
@@ -77,6 +78,7 @@ import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.screen.webapp.WebAppsScreenViewModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
+import net.matsudamper.browser.translate.TranslationProviderTranslatorApiEngines
 import org.koin.android.annotation.KoinWorker
 import org.koin.core.annotation.ComponentScan
 import org.koin.core.annotation.Configuration
@@ -296,6 +298,15 @@ internal fun twitterShareWebExtension(runtime: GeckoRuntime): TwitterShareWebExt
 @Single
 internal fun webShareFilesWebExtension(runtime: GeckoRuntime): WebShareFilesWebExtension {
     return WebShareFilesWebExtension().also { it.install(runtime) }
+}
+
+@Single
+internal fun translatorApiWebExtension(
+    settingsRepository: SettingsRepository,
+    runtime: GeckoRuntime,
+): TranslatorApiWebExtension {
+    val engines = TranslationProviderTranslatorApiEngines(settingsRepository)
+    return TranslatorApiWebExtension(engines::selectAppEngine).also { it.install(runtime) }
 }
 
 // 拡張機能のツールバーアクションはランタイム単位で受け取るため single
