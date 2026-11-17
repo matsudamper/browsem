@@ -101,7 +101,6 @@
     if (typeof message.text === "string") lines.push("textLength=" + message.text.length);
     lines.push("totalMs=" + elapsedMs(trace));
     lines.push("outcome=" + outcome);
-    lines.push("page=" + location.origin);
     return lines.concat(trace.steps).join("\n");
   }
 
