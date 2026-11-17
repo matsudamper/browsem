@@ -1,8 +1,14 @@
 package net.matsudamper.browser.screen.settings
 
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Log
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlin.math.max
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,6 +17,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.BrowserSessionRegistry
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
@@ -19,6 +26,7 @@ import net.matsudamper.browser.data.SemanticSearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.camera.CameraReplacementImageRepository
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
@@ -34,6 +42,7 @@ internal class SettingsScreenViewModel(
     private val runtime: GeckoRuntime,
     private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
     private val webAuthnSettingsUpdateQueue: WebAuthnSettingsUpdateQueue,
+    private val cameraReplacementImageRepository: CameraReplacementImageRepository,
 ) : ViewModel() {
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -44,6 +53,12 @@ internal class SettingsScreenViewModel(
     private var mockLocationInputInitialized = false
 
     init {
+        viewModelScope.launch {
+            cameraReplacementImageRepository.imageVersion.collectLatest {
+                val thumbnail = loadCameraReplacementThumbnail()
+                viewModelStateFlow.update { it.copy(cameraReplacementImage = thumbnail) }
+            }
+        }
         viewModelScope.launch {
             val geminiNanoModels = GeminiNanoModel.list()
             viewModelStateFlow.update {
@@ -185,6 +200,23 @@ internal class SettingsScreenViewModel(
             eventHandler.trySend { it.onOpenMockLocationOnMap() }
         }
 
+        override fun pickCameraReplacementImage() {
+            eventHandler.trySend { it.onPickCameraReplacementImage() }
+        }
+
+        override fun onCameraReplacementImagePicked(uri: Uri?) {
+            uri ?: return
+            viewModelScope.launch {
+                if (!cameraReplacementImageRepository.save(uri)) {
+                    eventHandler.trySend { it.onCameraReplacementImageSaveFailed() }
+                }
+            }
+        }
+
+        override fun clearCameraReplacementImage() {
+            viewModelScope.launch { cameraReplacementImageRepository.clear() }
+        }
+
         override fun requestBackupExport() {
             viewModelStateFlow.update {
                 it.copy(backupConfirmDialog = SettingsScreenUiState.BackupConfirmType.Export)
@@ -211,6 +243,20 @@ internal class SettingsScreenViewModel(
 
         override fun openDefaultBrowserSettings() {
             eventHandler.trySend { it.onOpenDefaultBrowserSettings() }
+        }
+    }
+
+    private suspend fun loadCameraReplacementThumbnail(): ImageBitmap? {
+        return withContext(Dispatchers.IO) {
+            val file = cameraReplacementImageRepository.imageFileOrNull() ?: return@withContext null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.path, bounds)
+            var sampleSize = 1
+            while (max(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= THUMBNAIL_LONG_SIDE_PX) {
+                sampleSize *= 2
+            }
+            val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            BitmapFactory.decodeFile(file.path, options)?.asImageBitmap()
         }
     }
 
@@ -283,6 +329,7 @@ internal class SettingsScreenViewModel(
                         settings.toUiState(
                             callbacks = callbacks,
                             mockLocationInput = state.mockLocationInput,
+                            cameraReplacementImage = state.cameraReplacementImage,
                             backupConfirmDialog = state.backupConfirmDialog,
                             extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
                             showDefaultBrowserBanner = state.showDefaultBrowserBanner,
@@ -310,6 +357,10 @@ internal class SettingsScreenViewModel(
         fun onOpenDefaultBrowserSettings()
 
         fun onCheckDefaultBrowserStatus()
+
+        fun onPickCameraReplacementImage()
+
+        fun onCameraReplacementImageSaveFailed()
     }
 
     data class ViewModelState(
@@ -320,6 +371,7 @@ internal class SettingsScreenViewModel(
         val showDefaultBrowserBanner: Boolean = false,
         val geminiNanoModelsLoaded: Boolean = false,
         val geminiNanoModels: List<GeminiNanoModel.Option> = listOf(),
+        val cameraReplacementImage: ImageBitmap? = null,
     )
 }
 
@@ -369,6 +421,7 @@ internal fun formatMockLocationInput(latitude: Double, longitude: Double): Strin
 private fun BrowserSettings.toUiState(
     callbacks: SettingsScreenUiState.Callbacks,
     mockLocationInput: String,
+    cameraReplacementImage: ImageBitmap?,
     backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
     extensionsProcessRestartDialog: Boolean,
     showDefaultBrowserBanner: Boolean,
@@ -395,8 +448,13 @@ private fun BrowserSettings.toUiState(
         resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
+        cameraReplacementImage = cameraReplacementImage,
+        cameraReplacementImageClearButtonEnabled = cameraReplacementImage != null,
         backupConfirmDialog = backupConfirmDialog,
         extensionsProcessRestartDialog = extensionsProcessRestartDialog,
         showDefaultBrowserBanner = showDefaultBrowserBanner,
     )
 }
+
+// サムネイルは設定画面で小さく表示するだけなので、この長辺以上になる範囲で間引いて読む
+private const val THUMBNAIL_LONG_SIDE_PX = 256

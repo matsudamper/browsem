@@ -153,6 +153,7 @@ dependencies {
     implementation(project(":feature-dev-tools"))
     implementation(project(":feature-find-in-page"))
     implementation(project(":feature-media"))
+    implementation(project(":feature-camera-replace"))
     implementation(project(":feature-mock-location"))
     implementation(project(":feature-network-log"))
     implementation(project(":feature-readability"))

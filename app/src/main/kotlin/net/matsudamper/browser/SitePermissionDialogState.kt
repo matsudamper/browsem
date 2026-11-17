@@ -5,11 +5,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CompletableDeferred
+import net.matsudamper.browser.data.SiteCameraState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
 
 /**
- * サイトごとの権限（マイク・自動再生）の確認ダイアログ状態。
+ * サイトごとの権限（マイク・カメラ・自動再生）の確認ダイアログ状態。
  *
  * 未設定のサイトではダイアログでユーザーの応答を待ち、選択をサイト設定へ永続化する。
  */
@@ -24,6 +25,15 @@ internal class SitePermissionDialogState(
     class MicrophoneDialog(
         val host: String,
         internal val onResult: (Boolean?) -> Unit,
+    )
+
+    /**
+     * @param onResult 選択結果。null はダイアログを閉じただけ（今回のみ拒否）
+     */
+    @Stable
+    class CameraDialog(
+        val host: String,
+        internal val onResult: (SiteCameraState?) -> Unit,
     )
 
     enum class AutoplayChoice {
@@ -49,6 +59,9 @@ internal class SitePermissionDialogState(
     var microphoneDialog by mutableStateOf<MicrophoneDialog?>(null)
         private set
 
+    var cameraDialog by mutableStateOf<CameraDialog?>(null)
+        private set
+
     var autoplayDialog by mutableStateOf<AutoplayDialog?>(null)
         private set
 
@@ -61,6 +74,18 @@ internal class SitePermissionDialogState(
     fun dismissMicrophone() {
         val dialog = microphoneDialog ?: return
         microphoneDialog = null
+        dialog.onResult(null)
+    }
+
+    fun confirmCamera(state: SiteCameraState) {
+        val dialog = cameraDialog ?: return
+        cameraDialog = null
+        dialog.onResult(state)
+    }
+
+    fun dismissCamera() {
+        val dialog = cameraDialog ?: return
+        cameraDialog = null
         dialog.onResult(null)
     }
 
@@ -111,6 +136,32 @@ internal class SitePermissionDialogState(
             )
         }
         return choice == true
+    }
+
+    /**
+     * サイトごとのカメラの扱いを解決する。
+     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待ち、選択をサイト設定として永続化する。
+     *
+     * @return 適用する扱い。ダイアログを閉じただけの場合は永続化せず [SiteCameraState.SITE_CAMERA_DENY] を返す
+     */
+    suspend fun resolveCameraState(host: String): SiteCameraState {
+        // 要求があったことを記録し、「サイトの設定」画面にカメラの項目を表示できるようにする
+        siteSettingsRepository.markCameraRequested(host)
+        val savedState = siteSettingsRepository.getCameraState(host)
+        if (savedState != SiteCameraState.SITE_CAMERA_ASK) return savedState
+        // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
+        val dialog = cameraDialog
+        if (dialog != null) {
+            cameraDialog = null
+            dialog.onResult(null)
+        }
+        val result = CompletableDeferred<SiteCameraState?>()
+        cameraDialog = CameraDialog(host) { state ->
+            result.complete(state)
+        }
+        val choice = result.await() ?: return SiteCameraState.SITE_CAMERA_DENY
+        siteSettingsRepository.setCameraState(host = host, state = choice)
+        return choice
     }
 
     /**

@@ -12,11 +12,14 @@ data class SiteSettingsScreenUiState(
     val microphonePermission: SitePermissionState?,
     /** 位置情報の扱い。サイトから一度も要求されていない場合は null で、項目を表示しない */
     val geolocationState: SiteGeolocationState?,
+    /** カメラの扱い。サイトから一度も要求されていない場合は null で、項目を表示しない */
+    val cameraState: CameraOption?,
     /**
      * 音声付きメディアの自動再生の状態。
      * サイトから一度も要求されていない場合は null で、項目を表示しない
      */
     val autoplayPermission: SitePermissionState?,
+    val noRequestedPermissionMessageVisible: Boolean,
     /** TLS 証明書の表示情報。タブから取得できない場合は null で、項目を表示しない */
     val tlsCertificate: TlsCertificate?,
     /** 削除確認ダイアログの対象。null の場合はダイアログを表示しない */
@@ -41,6 +44,13 @@ data class SiteSettingsScreenUiState(
         ) : TlsCertificate
     }
 
+    enum class CameraOption {
+        Ask,
+        Real,
+        Image,
+        Deny,
+    }
+
     enum class ClearDataType {
         Cookie,
         Cache,
@@ -49,6 +59,7 @@ data class SiteSettingsScreenUiState(
     interface Callbacks {
         fun setMicrophonePermission(state: SitePermissionState)
         fun setGeolocationState(state: SiteGeolocationState)
+        fun setCameraOption(option: CameraOption)
         fun setAutoplayPermission(state: SitePermissionState)
         fun requestClearData(type: ClearDataType)
         fun confirmClearData()
