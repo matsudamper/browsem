@@ -41,6 +41,9 @@ class TranslatorApiWebExtension(
     // ページを閉じた後に翻訳待ちの要求が残り、後続ページの翻訳を待たせないよう、セッション単位で取り消す
     private val sessionRequestJobs = ConcurrentHashMap<GeckoSession, Job>()
 
+    // バックグラウンドスクリプトが中継した要求は送信元のセッションが分からないため、まとめて持つ
+    private val relayedRequestJob: Job = SupervisorJob(coroutineScope.coroutineContext[Job])
+
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
         runtime.webExtensionController
@@ -49,7 +52,21 @@ class TranslatorApiWebExtension(
                 { ext ->
                     Log.d(TAG, "インストール完了: id=${ext?.id} version=${ext?.metaData?.version}")
                     if (ext == null) return@accept
+                    if (ext.flags and WebExtension.Flags.ALLOW_CONTENT_MESSAGING == 0L) {
+                        Log.w(TAG, "content script からの直接通信が許可されていない。バックグラウンド経由の中継だけが使える")
+                    }
                     extension = ext
+                    // content script からの直接通信が拒否される場合に、バックグラウンドスクリプトが中継してくる
+                    ext.setMessageDelegate(
+                        object : WebExtension.MessageDelegate {
+                            override fun onMessage(
+                                nativeApp: String,
+                                message: Any,
+                                sender: WebExtension.MessageSender,
+                            ): GeckoResult<Any>? = respondAsync(message, relayedRequestJob)
+                        },
+                        NATIVE_APP_ID,
+                    )
                     registeredSessions.forEach { session ->
                         attachSessionMessageDelegate(session, ext)
                     }
@@ -83,28 +100,36 @@ class TranslatorApiWebExtension(
                     message: Any,
                     sender: WebExtension.MessageSender,
                 ): GeckoResult<Any>? {
-                    val request = (message as? JSONObject)?.toTranslatorApiRequest()
-                        ?: return GeckoResult.fromValue(errorJson("TypeError", "無効なリクエストです"))
                     val sessionRequestJob = sessionRequestJobs[session]
                         ?: return GeckoResult.fromValue(errorJson("AbortError", "ページが閉じられました"))
-                    val result = GeckoResult<Any>()
-                    // 開始前に取り消されても応答を返せるよう、必ず本体を実行させる
-                    coroutineScope.launch(sessionRequestJob, CoroutineStart.ATOMIC) {
-                        val response = try {
-                            ensureActive()
-                            respond(request)
-                        } catch (error: CancellationException) {
-                            // 応答を返さないとページ側の Promise が完了しないままになる
-                            mainHandler.post { result.complete(errorJson("AbortError", "ページが閉じられました")) }
-                            throw error
-                        }
-                        mainHandler.post { result.complete(response) }
-                    }
-                    return result
+                    return respondAsync(message, sessionRequestJob)
                 }
             },
             NATIVE_APP_ID,
         )
+    }
+
+    private fun respondAsync(message: Any, requestJob: Job): GeckoResult<Any> {
+        val request = (message as? JSONObject)?.toTranslatorApiRequest()
+        if (request == null) {
+            Log.w(TAG, "解釈できない要求を受け取った")
+            return GeckoResult.fromValue(errorJson("TypeError", "無効なリクエストです"))
+        }
+        Log.d(TAG, "要求を受信: ${request::class.simpleName}")
+        val result = GeckoResult<Any>()
+        // 開始前に取り消されても応答を返せるよう、必ず本体を実行させる
+        coroutineScope.launch(requestJob, CoroutineStart.ATOMIC) {
+            val response = try {
+                ensureActive()
+                respond(request)
+            } catch (error: CancellationException) {
+                // 応答を返さないとページ側の Promise が完了しないままになる
+                mainHandler.post { result.complete(errorJson("AbortError", "ページが閉じられました")) }
+                throw error
+            }
+            mainHandler.post { result.complete(response) }
+        }
+        return result
     }
 
     private suspend fun respond(request: TranslatorApiRequest): JSONObject {

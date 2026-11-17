@@ -48,12 +48,44 @@
   // 翻訳プロバイダの設定はネイティブアプリが持つため、まずネイティブへ尋ねる。
   // プロバイダが Gecko のときは、Gecko 内蔵の翻訳エンジンを呼べるバックグラウンドへ回すよう返ってくる。
   function requestTranslationEngine(message) {
-    return browser.runtime.sendNativeMessage(NATIVE_APP, message).then(function (response) {
+    return sendToNativeApp(message).then(function (response) {
       if (response && response.useGeckoEngine) {
-        return browser.runtime.sendMessage(message);
+        return browser.runtime.sendMessage(message).catch(function (error) {
+          throw communicationFailure("拡張機能のバックグラウンドとの通信に失敗しました", [error]);
+        });
       }
       return response;
     });
+  }
+
+  // content script からネイティブアプリへの直接通信は Gecko 側で拒否されることがあり、
+  // その場合は原因を問わず同じ定型文のエラーになる。バックグラウンド経由で送り直す
+  let directNativeMessagingFailed = false;
+
+  function sendToNativeApp(message) {
+    if (directNativeMessagingFailed) {
+      return relayToNativeApp(message, []);
+    }
+    return browser.runtime.sendNativeMessage(NATIVE_APP, message).catch(function (directError) {
+      console.warn("translator-api: ネイティブアプリへ直接送れなかったため中継する", directError);
+      directNativeMessagingFailed = true;
+      return relayToNativeApp(message, [directError]);
+    });
+  }
+
+  function relayToNativeApp(message, earlierErrors) {
+    return browser.runtime.sendMessage({ relayToNativeApp: message }).catch(function (relayError) {
+      throw communicationFailure("アプリとの通信に失敗しました", earlierErrors.concat([relayError]));
+    });
+  }
+
+  // どの経路がどう失敗したかをページ側のエラー文言に残し、実機での切り分けに使えるようにする
+  function communicationFailure(summary, errors) {
+    const details = errors.map(function (error) {
+      return (error && error.message) || String(error);
+    });
+    console.error("translator-api: " + summary, details);
+    return failure(pageDomException(summary + " (" + details.join(" / ") + ")", "OperationError"));
   }
 
   function sendToEngine(message) {
