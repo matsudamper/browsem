@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,6 +48,13 @@ class TranslatorApiTest {
                 detected.exceptionOrNull(),
             )
         }
+        // アプリに届かなくても Gecko 内蔵エンジンへ切り替わって結果は返る。それでは設定された
+        // 翻訳プロバイダが使われないため、要求がアプリまで届いていることも確かめる
+        val logcat = readTranslatorApiLogcat()
+        assertTrue(
+            "ページからの要求がアプリへ届いていない\nlogcat:\n$logcat",
+            logcat.contains(REQUEST_RECEIVED_LOG),
+        )
     }
 
     private fun startLocalPageServer(): String {
@@ -74,6 +82,9 @@ class TranslatorApiTest {
         private const val DETECTED_ENGLISH_MARKER = "detected-en"
         private const val DETECTION_TIMEOUT_MS = 90_000L
         private const val LOGCAT_MAX_LINES = 80
+
+        /** TranslatorApiWebExtension が要求を受け取ったときに出すログ */
+        private const val REQUEST_RECEIVED_LOG = "要求を受信"
         private val LOGCAT_KEYWORDS = listOf("TranslatorApi", "translator-api", "translator_api", "browsemTranslation")
 
         private val LANGUAGE_DETECTION_PAGE = """
