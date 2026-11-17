@@ -1,14 +1,8 @@
-// content script からの要求を中継する。
-// - 翻訳プロバイダが Gecko のとき: experiment API へ。experiment API は content script から呼べない
-// - content script がネイティブアプリへ直接送れなかったとき: ネイティブアプリへ
+// 翻訳プロバイダが Gecko のとき、content script からの要求を experiment API へ中継する。
+// experiment API は content script から呼べないため、バックグラウンドを経由する。
 "use strict";
 
-const NATIVE_APP = "translatorApiBridge";
-
 browser.runtime.onMessage.addListener(function (message) {
-  if (message && message.relayToNativeApp) {
-    return browser.runtime.sendNativeMessage(NATIVE_APP, message.relayToNativeApp);
-  }
   switch (message && message.action) {
     case "availability":
       return browser.browsemTranslation.availability(message.sourceLanguage, message.targetLanguage);

@@ -45,36 +45,24 @@ class TranslatorApiWebExtension(
     // ページを閉じた後に翻訳待ちの要求が残り、後続ページの翻訳を待たせないよう、セッション単位で取り消す
     private val sessionRequestJobs = ConcurrentHashMap<GeckoSession, Job>()
 
-    // バックグラウンドスクリプトが中継した要求は送信元のセッションが分からないため、まとめて持つ
-    private val relayedRequestJob: Job = SupervisorJob(coroutineScope.coroutineContext[Job])
-
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
+        // installBuiltIn は起動のたびに動作中の拡張機能を停止して入れ直すため、起動直後に読み込まれた
+        // ページの要求が停止に巻き込まれ、長く待たされた末に失敗する。バージョンが変わったときだけ入れ直す
         runtime.webExtensionController
-            .installBuiltIn(EXTENSION_URI)
+            .ensureBuiltIn(EXTENSION_URI, EXTENSION_ID)
             .accept(
                 { ext ->
                     Log.d(TAG, "インストール完了: id=${ext?.id} version=${ext?.metaData?.version}")
                     if (ext == null) return@accept
                     if (ext.flags and WebExtension.Flags.ALLOW_CONTENT_MESSAGING == 0L) {
-                        Log.w(TAG, "content script からの直接通信が許可されていない。バックグラウンド経由の中継だけが使える")
+                        Log.w(TAG, "content script からアプリへの通信が許可されていない")
                         writeAppLog(
-                            "Translator API 拡張の直接通信が無効",
-                            "content script からの直接通信が許可されていない。バックグラウンド経由の中継だけが使える",
+                            "Translator API 拡張の通信が無効",
+                            "content script からアプリへの通信が許可されていない。ページからの要求はすべて失敗する",
                         )
                     }
                     extension = ext
-                    // content script からの直接通信が拒否される場合に、バックグラウンドスクリプトが中継してくる
-                    ext.setMessageDelegate(
-                        object : WebExtension.MessageDelegate {
-                            override fun onMessage(
-                                nativeApp: String,
-                                message: Any,
-                                sender: WebExtension.MessageSender,
-                            ): GeckoResult<Any>? = respondAsync(message, relayedRequestJob)
-                        },
-                        NATIVE_APP_ID,
-                    )
                     registeredSessions.forEach { session ->
                         attachSessionMessageDelegate(session, ext)
                     }
@@ -207,6 +195,7 @@ class TranslatorApiWebExtension(
     companion object {
         private const val TAG = "TranslatorApiExt"
         private const val NATIVE_APP_ID = "translatorApiBridge"
+        private const val EXTENSION_ID = "translator-api-bridge@browsem"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/translator_api_bridge/"
     }
