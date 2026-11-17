@@ -34,6 +34,8 @@ class TranslatorApiTest {
     @Test
     fun languageDetectorDetectsLanguageFromPage() {
         composeRule.waitForBrowserReady()
+        // 以前の実行のログで要求の到達を誤って確認しないよう、このテストより前のログを捨てる
+        shell("logcat -c")
         val pageUrl = startLocalPageServer()
         composeRule.openUrlFromUrlBar(pageUrl)
 
@@ -67,13 +69,17 @@ class TranslatorApiTest {
     }
 
     private fun readTranslatorApiLogcat(): String {
-        val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("logcat -d")
-        return ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes().decodeToString() }
+        return shell("logcat -d")
             .lineSequence()
             .filter { line -> LOGCAT_KEYWORDS.any { keyword -> line.contains(keyword, ignoreCase = true) } }
             .toList()
             .takeLast(LOGCAT_MAX_LINES)
             .joinToString(separator = "\n")
+    }
+
+    private fun shell(command: String): String {
+        val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+        return ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes().decodeToString() }
     }
 
     companion object {
