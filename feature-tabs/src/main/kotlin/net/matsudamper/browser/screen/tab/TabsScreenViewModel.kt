@@ -252,8 +252,12 @@ class TabsScreenViewModel(
                 val state = viewModelStateFlow.first { it.groups.isNotEmpty() }
                 val assignments = tabGroupRepository.observeTabGroupAssignments().first()
                 val groupId = assignments.find { it.tabId == initialSelectedTabId }?.groupId
-                val index = if (groupId != null) state.groups.indexOfFirst { it.id.value == groupId } else -1
-                viewModelStateFlow.update { it.copy(activeGroupIndex = if (index >= 0) index else 0) }
+                val index = if (groupId != null) {
+                    state.groups.indexOfFirst { it.id.value == groupId }.takeIf { it >= 0 }
+                } else {
+                    null
+                }
+                viewModelStateFlow.update { it.copy(activeGroupIndex = index ?: 0) }
             }
             // 表示グループはユーザー操作（タップ・スワイプ・グループ追加/削除）と上記の初期復元
             // でのみ変更する。selectedTabId の変化への継続追従はタブ閉鎖確定時などに表示グループが
@@ -431,9 +435,9 @@ class TabsScreenViewModel(
         val fromTabId = tabsInGroup[fromLocalIndex].id
         val toTabId = tabsInGroup[toLocalIndex].id
         val currentTabs = tabStore.tabStoreState.value.tabs
-        val fromGlobalIndex = currentTabs.indexOfFirst { it.id == fromTabId }
-        val toGlobalIndex = currentTabs.indexOfFirst { it.id == toTabId }
-        if (fromGlobalIndex < 0 || toGlobalIndex < 0 || fromGlobalIndex == toGlobalIndex) return
+        val fromGlobalIndex = currentTabs.indexOfFirst { it.id == fromTabId }.takeIf { it >= 0 }
+        val toGlobalIndex = currentTabs.indexOfFirst { it.id == toTabId }.takeIf { it >= 0 }
+        if (fromGlobalIndex == null || toGlobalIndex == null || fromGlobalIndex == toGlobalIndex) return
         tabStore.moveTab(fromGlobalIndex, toGlobalIndex)
     }
 

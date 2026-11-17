@@ -471,9 +471,11 @@ internal class DownloadManagementScreenViewModel(
 
     private suspend fun clearDownloadHistory() {
         withContext(Dispatchers.IO) {
-            var records = downloadRepository.getAllDownloads()
-            if (reconcileInactiveWorkRecords(records)) {
-                records = downloadRepository.getAllDownloads()
+            val recordsBeforeReconcile = downloadRepository.getAllDownloads()
+            val records = if (reconcileInactiveWorkRecords(recordsBeforeReconcile)) {
+                downloadRepository.getAllDownloads()
+            } else {
+                recordsBeforeReconcile
             }
             deletePartialFilesForClearableRecords(records)
             downloadRepository.clearHistory()

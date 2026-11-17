@@ -83,18 +83,15 @@ internal object HomeScreenIconFetcher {
             addAll(pageHtmlIcons.icons)
             addAll(fallbackIconCandidates(pageUri))
         }
-            .filterNot { it.isKnownUnsupportedImage() }
+            .map { it.withScalableSize() }
             .distinctBy { it.url }
             .sortedWith(
                 compareByDescending<IconCandidate> { it.source.priority }
                     .thenByDescending { it.size },
             )
 
-        var attemptCount = 0
-        for (candidate in candidates) {
+        for (candidate in candidates.take(MAX_ICON_FETCH_ATTEMPTS)) {
             if (Thread.currentThread().isInterrupted) break
-            if (attemptCount >= MAX_ICON_FETCH_ATTEMPTS) break
-            attemptCount++
             val bitmap = fetchBitmap(candidate.url) ?: continue
             return bitmap.scaleForShortcut()
         }
@@ -247,7 +244,15 @@ internal object HomeScreenIconFetcher {
                 ?.substringBefore(";")
                 ?.trim()
                 ?.lowercase(Locale.US)
-            if (contentType == "image/svg+xml") return null
+            if (contentType == "image/svg+xml" || isSvgPath(url)) {
+                val svgBytes = connection.inputStream.use { input ->
+                    readBoundedBytes(input, MAX_ICON_IMAGE_BYTES, rejectOnOverflow = true)
+                } ?: return null
+                return NetworkLogSvgRenderer.render(
+                    source = String(svgBytes, parseCharset(connection.contentType)),
+                    maxPixels = MAX_SHORTCUT_ICON_SIZE,
+                )
+            }
             // ネットワーク越しに任意サイズの画像を渡されうるため、まずバイト列として
             // 上限付きで読み込み、寸法だけ先に取ってからサンプリングしてデコードする。
             val bytes = connection.inputStream.use { input ->
@@ -281,10 +286,8 @@ internal object HomeScreenIconFetcher {
         val width = boundsOptions.outWidth
         val height = boundsOptions.outHeight
         if (width <= 0 || height <= 0) return null
-        var sampleSize = 1
-        while (max(width, height) / sampleSize > MAX_DECODED_ICON_DIMENSION) {
-            sampleSize *= 2
-        }
+        val sampleSize = generateSequence(1) { it * 2 }
+            .first { max(width, height) / it <= MAX_DECODED_ICON_DIMENSION }
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
     }
@@ -340,12 +343,22 @@ internal object HomeScreenIconFetcher {
         return normalizedScheme == "http" || normalizedScheme == "https"
     }
 
-    private fun IconCandidate.isKnownUnsupportedImage(): Boolean {
+    // SVG は sizes 未指定や "any" でも任意の大きさで描画できるため、
+    // 小さい favicon.ico より優先されるようにショートカットの最大サイズとして扱う。
+    private fun IconCandidate.withScalableSize(): IconCandidate {
+        if (size > 0 || !isSvg()) return this
+        return copy(size = MAX_SHORTCUT_ICON_SIZE)
+    }
+
+    private fun IconCandidate.isSvg(): Boolean {
         val normalizedType = type
             ?.substringBefore(";")
             ?.trim()
             ?.lowercase(Locale.US)
-        if (normalizedType == "image/svg+xml") return true
+        return normalizedType == "image/svg+xml" || isSvgPath(url)
+    }
+
+    private fun isSvgPath(url: String): Boolean {
         val path = runCatching { URI(url).path.orEmpty().lowercase(Locale.US) }.getOrDefault("")
         return path.endsWith(".svg")
     }

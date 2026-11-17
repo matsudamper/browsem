@@ -284,7 +284,7 @@ internal class NetworkLogStateHolder(
     /** ログから消えたリクエストのサムネイルを捨てる */
     private fun pruneThumbnails() {
         if (thumbnails.isEmpty()) return
-        val livingIds = store.entries.value.mapTo(mutableSetOf()) { it.requestId }
+        val livingIds = store.entries.value.map { it.requestId }.toSet()
         if (thumbnails.keys.retainAll(livingIds)) {
             thumbnailOrder.retainAll(livingIds)
         }
@@ -299,10 +299,8 @@ internal class NetworkLogStateHolder(
         runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds) }
         val longerSide = maxOf(bounds.outWidth, bounds.outHeight)
         if (longerSide <= 0) return null
-        var sampleSize = 1
-        while (longerSide / sampleSize > THUMBNAIL_MAX_PIXELS) {
-            sampleSize *= 2
-        }
+        val sampleSize = generateSequence(1) { it * 2 }
+            .first { longerSide / it <= THUMBNAIL_MAX_PIXELS }
         val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         return runCatching {
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)

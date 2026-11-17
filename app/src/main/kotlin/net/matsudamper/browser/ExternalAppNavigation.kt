@@ -268,8 +268,8 @@ private fun buildExternalIntent(
 internal fun redactUrlForLog(url: String): String {
     // 区切りは最初の : で決める。"://" を探すと、クエリに絶対 URL を持つ独自スキーム
     // (myapp:cb?redirect=https://example.com) の内側を区切りと誤認して中身が残る。
-    val schemeEnd = url.indexOf(':')
-    if (schemeEnd <= 0) return "(スキームなし)"
+    val schemeEnd = url.indexOf(':').takeIf { it > 0 }
+    if (schemeEnd == null) return "(スキームなし)"
     val scheme = url.take(schemeEnd)
     val rest = url.drop(schemeEnd + 1)
     if (!rest.startsWith("//")) return "$scheme:"

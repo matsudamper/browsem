@@ -13,12 +13,12 @@ object TabInsertionPolicy {
         selectedTabId: String? = null,
     ): Int {
         if (openerTabId != null) {
-            val openerIndex = tabIds.indexOf(openerTabId)
-            if (openerIndex >= 0) return openerIndex + 1
+            val openerIndex = tabIds.indexOf(openerTabId).takeIf { it >= 0 }
+            if (openerIndex != null) return openerIndex + 1
         }
         if (selectedTabId != null) {
-            val selectedIndex = tabIds.indexOf(selectedTabId)
-            if (selectedIndex >= 0) return selectedIndex + 1
+            val selectedIndex = tabIds.indexOf(selectedTabId).takeIf { it >= 0 }
+            if (selectedIndex != null) return selectedIndex + 1
         }
         return tabIds.size
     }

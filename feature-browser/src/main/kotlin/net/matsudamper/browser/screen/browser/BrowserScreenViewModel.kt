@@ -312,8 +312,8 @@ internal fun resolveAdjacentTabIds(
     anchorTabId: String?,
 ): AdjacentTabIds {
     val tabId = anchorTabId ?: return AdjacentTabIds()
-    val currentIndex = orderedTabIds.indexOf(tabId)
-    if (currentIndex < 0) return AdjacentTabIds()
+    val currentIndex = orderedTabIds.indexOf(tabId).takeIf { it >= 0 }
+    if (currentIndex == null) return AdjacentTabIds()
     return AdjacentTabIds(
         previousTabId = orderedTabIds.getOrNull(currentIndex - 1),
         nextTabId = orderedTabIds.getOrNull(currentIndex + 1),

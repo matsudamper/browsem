@@ -35,10 +35,8 @@ internal data class WebShareFilePayload(
     }
 
     override fun hashCode(): Int {
-        var result = name.hashCode()
-        result = 31 * result + mimeType.hashCode()
-        result = 31 * result + bytes.contentHashCode()
-        return result
+        val nameAndMimeTypeHash = 31 * name.hashCode() + mimeType.hashCode()
+        return 31 * nameAndMimeTypeHash + bytes.contentHashCode()
     }
 }
 

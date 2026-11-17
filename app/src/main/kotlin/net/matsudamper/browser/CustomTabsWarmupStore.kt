@@ -123,10 +123,8 @@ internal class CustomTabsWarmupStore(
         token: CustomTabsSessionToken,
         launchUrl: String,
     ): GeckoSession? {
-        val closableSessions = mutableListOf<GeckoSession>()
-        val prepared = synchronized(lock) {
-            closableSessions += takeStaleSessionsLocked()
-            takePreparedSessionLocked(token)
+        val (closableSessions, prepared) = synchronized(lock) {
+            takeStaleSessionsLocked() to takePreparedSessionLocked(token)
         }
         closeOnMainThread(closableSessions)
         val (session, preparedUrl) = prepared ?: return null
@@ -194,10 +192,8 @@ internal class CustomTabsWarmupStore(
         runtime: GeckoRuntime,
     ) {
         runOnMainThreadBlocking {
-            val closableSessions = mutableListOf<GeckoSession>()
-            val session = synchronized(lock) {
-                closableSessions += takeStaleSessionsLocked()
-                prepareSessionLocked(token, targetUrl, runtime)
+            val (closableSessions, session) = synchronized(lock) {
+                takeStaleSessionsLocked() to prepareSessionLocked(token, targetUrl, runtime)
             }
             closableSessions.forEach { it.close() }
             session?.loadUri(targetUrl)
@@ -256,16 +252,17 @@ internal class CustomTabsWarmupStore(
      */
     private fun takeStaleSessionsLocked(): List<GeckoSession> {
         val now = System.currentTimeMillis()
-        val staleSessions = mutableListOf<GeckoSession>()
-        val iterator = entries.entries.iterator()
-        while (iterator.hasNext()) {
-            val (_, entry) = iterator.next()
-            if (now - entry.updatedAt > STALE_ENTRY_MS) {
-                entry.preparedSession?.let { staleSessions.add(it) }
-                iterator.remove()
+        return buildList {
+            val iterator = entries.entries.iterator()
+            while (iterator.hasNext()) {
+                val (_, entry) = iterator.next()
+                if (now - entry.updatedAt > STALE_ENTRY_MS) {
+                    val stalePreparedSession = entry.preparedSession
+                    if (stalePreparedSession != null) add(stalePreparedSession)
+                    iterator.remove()
+                }
             }
         }
-        return staleSessions
     }
 
     private fun <T> runOnMainThreadBlocking(block: () -> T): T {

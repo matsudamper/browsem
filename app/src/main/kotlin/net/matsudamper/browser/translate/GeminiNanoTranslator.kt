@@ -494,17 +494,17 @@ private class GeminiNanoInference(
 
     private fun splitToChunks(text: String): List<String> {
         if (text.length <= CHUNK_CHAR_LIMIT) return listOf(text)
-        val chunks = mutableListOf<String>()
-        var rest = text
-        while (rest.length > CHUNK_CHAR_LIMIT) {
-            val splitIndex = findChunkSplitIndex(rest)
-            chunks.add(rest.substring(0, splitIndex))
-            rest = rest.substring(splitIndex)
+        return buildList {
+            var rest = text
+            while (rest.length > CHUNK_CHAR_LIMIT) {
+                val splitIndex = findChunkSplitIndex(rest)
+                add(rest.substring(0, splitIndex))
+                rest = rest.substring(splitIndex)
+            }
+            if (rest.isNotEmpty()) {
+                add(rest)
+            }
         }
-        if (rest.isNotEmpty()) {
-            chunks.add(rest)
-        }
-        return chunks
     }
 
     /** 文末・空白を優先しつつ、[CHUNK_CHAR_LIMIT] を超えない位置で区切る */

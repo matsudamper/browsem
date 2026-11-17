@@ -134,8 +134,8 @@ fun DownloadManagementScreen(
             var activeHighlightId by remember { mutableStateOf<UUID?>(null) }
             LaunchedEffect(highlightItemId, uiState.downloads) {
                 val targetId = highlightItemId ?: return@LaunchedEffect
-                val index = uiState.downloads.indexOfFirst { it.id == targetId }
-                if (index < 0) {
+                val index = uiState.downloads.indexOfFirst { it.id == targetId }.takeIf { it >= 0 }
+                if (index == null) {
                     currentOnHighlightComplete(targetId)
                     return@LaunchedEffect
                 }
