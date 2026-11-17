@@ -48,44 +48,57 @@
   // 翻訳プロバイダの設定はネイティブアプリが持つため、まずネイティブへ尋ねる。
   // プロバイダが Gecko のときは、Gecko 内蔵の翻訳エンジンを呼べるバックグラウンドへ回すよう返ってくる。
   function requestTranslationEngine(message) {
-    return sendToNativeApp(message).then(function (response) {
-      if (response && response.useGeckoEngine) {
-        return browser.runtime.sendMessage(message).catch(function (error) {
-          throw communicationFailure("拡張機能のバックグラウンドとの通信に失敗しました", [error]);
-        });
-      }
-      return response;
+    return sendToNativeApp(message).then(
+      function (response) {
+        return response && response.useGeckoEngine ? sendToGeckoEngine(message) : response;
+      },
+      function (errors) {
+        // アプリに届かないと設定された翻訳プロバイダが分からない。機能ごと使えなくするより、
+        // アプリを介さずに動く Gecko 内蔵の翻訳エンジンで処理する
+        console.error("translator-api: アプリと通信できないため Gecko 内蔵エンジンを使う", errors.map(describeError));
+        return sendToGeckoEngine(message);
+      },
+    );
+  }
+
+  function sendToGeckoEngine(message) {
+    return browser.runtime.sendMessage(message).catch(function (error) {
+      const detail = describeError(error);
+      console.error("translator-api: 拡張機能のバックグラウンドとの通信に失敗", detail);
+      throw failure(
+        pageDomException("拡張機能のバックグラウンドとの通信に失敗しました (" + detail + ")", "OperationError"),
+      );
     });
   }
 
-  // content script からネイティブアプリへの直接通信は Gecko 側で拒否されることがあり、
-  // その場合は原因を問わず同じ定型文のエラーになる。バックグラウンド経由で送り直す
   let directNativeMessagingFailed = false;
 
+  // content script からネイティブアプリへの直接通信は Gecko 側で拒否されることがあり、
+  // その場合は原因を問わず同じ定型文のエラーになる。バックグラウンド経由で送り直す。
+  // どちらも失敗したら、各経路のエラーの配列で reject する
   function sendToNativeApp(message) {
     if (directNativeMessagingFailed) {
       return relayToNativeApp(message, []);
     }
-    return browser.runtime.sendNativeMessage(NATIVE_APP, message).catch(function (directError) {
-      console.warn("translator-api: ネイティブアプリへ直接送れなかったため中継する", directError);
-      directNativeMessagingFailed = true;
-      return relayToNativeApp(message, [directError]);
-    });
+    return Promise.resolve()
+      .then(function () {
+        return browser.runtime.sendNativeMessage(NATIVE_APP, message);
+      })
+      .catch(function (directError) {
+        console.warn("translator-api: ネイティブアプリへ直接送れなかったため中継する", describeError(directError));
+        directNativeMessagingFailed = true;
+        return relayToNativeApp(message, [directError]);
+      });
   }
 
   function relayToNativeApp(message, earlierErrors) {
     return browser.runtime.sendMessage({ relayToNativeApp: message }).catch(function (relayError) {
-      throw communicationFailure("アプリとの通信に失敗しました", earlierErrors.concat([relayError]));
+      throw earlierErrors.concat([relayError]);
     });
   }
 
-  // どの経路がどう失敗したかをページ側のエラー文言に残し、実機での切り分けに使えるようにする
-  function communicationFailure(summary, errors) {
-    const details = errors.map(function (error) {
-      return (error && error.message) || String(error);
-    });
-    console.error("translator-api: " + summary, details);
-    return failure(pageDomException(summary + " (" + details.join(" / ") + ")", "OperationError"));
+  function describeError(error) {
+    return (error && error.message) || String(error);
   }
 
   function sendToEngine(message) {
@@ -134,9 +147,15 @@
     return signal;
   }
 
+  // 既定の中断理由 (AbortError) を Xray 越しに読むと content script 側のオブジェクトになり、
+  // ページの Promise へ渡せない。waive してページ側の値として読む
+  function abortReason(signal) {
+    return waive(signal).reason;
+  }
+
   function throwIfAborted(signals) {
     for (let i = 0; i < signals.length; i++) {
-      if (signals[i].aborted) throw failure(signals[i].reason);
+      if (signals[i].aborted) throw failure(abortReason(signals[i]));
     }
   }
 
@@ -147,7 +166,7 @@
       throwIfAborted(signals);
       const listeners = signals.map(function (signal) {
         const listener = function () {
-          settle(reject, failure(signal.reason));
+          settle(reject, failure(abortReason(signal)));
         };
         signal.addEventListener("abort", listener);
         return listener;
@@ -184,7 +203,7 @@
       creationSignal.addEventListener(
         "abort",
         function () {
-          destroyController.abort(creationSignal.reason);
+          destroyController.abort(abortReason(creationSignal));
         },
         { once: true },
       );
@@ -325,7 +344,7 @@
             if (destroyController.signal.aborted) {
               reject(pageDomException("LanguageDetector は破棄されています", "InvalidStateError"));
             } else if (signal && signal.aborted) {
-              reject(signal.reason);
+              reject(abortReason(signal));
             } else {
               resolve(String(input).length);
             }
@@ -491,7 +510,7 @@
             if (destroyController.signal.aborted) {
               reject(pageDomException("Translator は破棄されています", "InvalidStateError"));
             } else if (signal && signal.aborted) {
-              reject(signal.reason);
+              reject(abortReason(signal));
             } else {
               resolve(String(input).length);
             }
