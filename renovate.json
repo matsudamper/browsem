@@ -41,6 +41,18 @@
       "automerge": true
     },
     {
+      "matchDepNames": [
+        "com.google.devtools.ksp"
+      ],
+      "automerge": true
+    },
+    {
+      "matchPackageNames": [
+        "org.robolectric:robolectric"
+      ],
+      "automerge": true
+    },
+    {
       "matchPackageNames": [
         "/^org\\.jetbrains\\.kotlin[.:]/"
       ],

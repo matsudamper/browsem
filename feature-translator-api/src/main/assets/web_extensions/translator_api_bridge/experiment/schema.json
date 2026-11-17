@@ -1,0 +1,68 @@
+[
+  {
+    "namespace": "browsemTranslation",
+    "description": "Gecko 内蔵の翻訳エンジンと言語判定を使う",
+    "functions": [
+      {
+        "name": "availability",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "sourceLanguage",
+            "type": "string"
+          },
+          {
+            "name": "targetLanguage",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "prepare",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "sourceLanguage",
+            "type": "string"
+          },
+          {
+            "name": "targetLanguage",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "translate",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "sourceLanguage",
+            "type": "string"
+          },
+          {
+            "name": "targetLanguage",
+            "type": "string"
+          },
+          {
+            "name": "text",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "detectLanguage",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "text",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  }
+]

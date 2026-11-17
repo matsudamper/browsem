@@ -162,6 +162,7 @@ dependencies {
     implementation(project(":feature-twitter-share"))
     implementation(project(":feature-webauthn-compat"))
     implementation(project(":feature-web-share-files"))
+    implementation(project(":feature-translator-api"))
     implementation(project(":feature-viewport-scale"))
     implementation(project(":data"))
     implementation(project(":resources"))
