@@ -10,6 +10,9 @@ interface CrashLogDao {
     @Insert
     fun insert(entity: CrashLogEntity): Long
 
+    @Query("DELETE FROM crash_log WHERE tag = :tag AND id NOT IN (SELECT id FROM crash_log WHERE tag = :tag ORDER BY id DESC LIMIT :limit)")
+    fun deleteOldByTag(tag: String, limit: Int)
+
     @Query("DELETE FROM crash_log WHERE tag LIKE 'MediaPlayback/%' AND id NOT IN (SELECT id FROM crash_log WHERE tag LIKE 'MediaPlayback/%' ORDER BY id DESC LIMIT :limit)")
     fun deleteOldMediaDiagnostics(limit: Int)
 

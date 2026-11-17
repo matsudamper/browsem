@@ -1,0 +1,120 @@
+package net.matsudamper.browser
+
+import android.os.ParcelFileDescriptor
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import org.junit.After
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * ページから Translator and Language Detector APIs のポリフィルを使えることを確認する。
+ *
+ * ポリフィルは拡張機能・アプリ・Gecko 内蔵エンジンをまたいで動くため、実際の GeckoView 上で
+ * ページから呼んで結果が返るところまでを通す。翻訳はモデルのダウンロードで外部ネットワークに
+ * 依存するため、端末内で完結する言語判定で確認する。
+ */
+@RunWith(AndroidJUnit4::class)
+class TranslatorApiTest {
+    @get:Rule
+    val composeRule = createAndroidComposeRule<MainActivity>()
+
+    private var localHttpServer: LocalHttpServer? = null
+
+    @After
+    fun tearDown() {
+        localHttpServer?.close()
+        localHttpServer = null
+    }
+
+    @Test
+    fun languageDetectorDetectsLanguageFromPage() {
+        composeRule.waitForBrowserReady()
+        // 以前の実行のログで要求の到達を誤って確認しないよう、このテストより前のログを捨てる
+        shell("logcat -c")
+        val pageUrl = startLocalPageServer()
+        composeRule.openUrlFromUrlBar(pageUrl)
+
+        val detected = runCatching {
+            composeRule.waitForUrlBarContains(DETECTED_ENGLISH_MARKER, timeoutMillis = DETECTION_TIMEOUT_MS)
+        }
+        if (detected.isFailure) {
+            // ページは進んだ段階を URL へ書き出すため、URL とログで止まった箇所を切り分けられる
+            throw AssertionError(
+                "言語判定の結果がページへ返らなかった: url=\"${composeRule.currentPageUrlFromUi()}\"\n" +
+                    "logcat:\n${readLogcat(FAILURE_LOGCAT_KEYWORDS)}",
+                detected.exceptionOrNull(),
+            )
+        }
+        // アプリに届かなくても Gecko 内蔵エンジンへ切り替わって結果は返る。それでは設定された
+        // 翻訳プロバイダが使われないため、要求がアプリまで届いていることも確かめる
+        val logcat = readLogcat(LOGCAT_KEYWORDS)
+        assertTrue(
+            "ページからの要求がアプリへ届いていない\nlogcat:\n$logcat",
+            logcat.contains(REQUEST_RECEIVED_LOG),
+        )
+    }
+
+    private fun startLocalPageServer(): String {
+        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val pageDir = File(targetContext.cacheDir, LOCAL_PAGE_DIR_NAME).apply { mkdirs() }
+        File(pageDir, LOCAL_PAGE_FILE_NAME).writeText(LANGUAGE_DETECTION_PAGE)
+        val server = LocalHttpServer(pageDir)
+        localHttpServer = server
+        return server.url(LOCAL_PAGE_FILE_NAME)
+    }
+
+    private fun readLogcat(keywords: List<String>): String {
+        return shell("logcat -d")
+            .lineSequence()
+            .filter { line -> keywords.any { keyword -> line.contains(keyword, ignoreCase = true) } }
+            .toList()
+            .takeLast(LOGCAT_MAX_LINES)
+            .joinToString(separator = "\n")
+    }
+
+    private fun shell(command: String): String {
+        val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+        return ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes().decodeToString() }
+    }
+
+    companion object {
+        private const val LOCAL_PAGE_DIR_NAME = "translator-api"
+        private const val LOCAL_PAGE_FILE_NAME = "translator_api_test.html"
+        private const val DETECTED_ENGLISH_MARKER = "detected-en"
+        private const val DETECTION_TIMEOUT_MS = 90_000L
+        private const val LOGCAT_MAX_LINES = 200
+
+        /** TranslatorApiWebExtension が要求を受け取ったときに出すログ */
+        private const val REQUEST_RECEIVED_LOG = "要求を受信"
+        private val LOGCAT_KEYWORDS = listOf("TranslatorApi", "translator-api", "translator_api", "browsemTranslation")
+
+        /** 失敗時は、拡張機能の中で投げられた例外を Gecko のコンソール出力から読めるよう広く拾う */
+        private val FAILURE_LOGCAT_KEYWORDS = LOGCAT_KEYWORDS + listOf("JavaScript Error", "GeckoConsole", "moz-extension")
+
+        private val LANGUAGE_DETECTION_PAGE = """
+            <html><body><script>
+            (async () => {
+              const report = (stage) => { location.hash = stage; };
+              try {
+                report("secure-" + isSecureContext + "-detector-" + (typeof LanguageDetector) + "-translator-" + (typeof Translator));
+                const availability = await LanguageDetector.availability();
+                report("availability-" + availability);
+                const detector = await LanguageDetector.create();
+                report("created");
+                const results = await detector.detect(
+                  "This is an English sentence written to check that the language detector works on this device."
+                );
+                report("detected-" + results[0].detectedLanguage);
+              } catch (error) {
+                report("error-at-" + location.hash.slice(1) + "-" + encodeURIComponent(error.name + ": " + error.message));
+              }
+            })();
+            </script></body></html>
+        """.trimIndent()
+    }
+}

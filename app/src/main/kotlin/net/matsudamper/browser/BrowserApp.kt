@@ -67,6 +67,7 @@ import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.navigation.AddressEditNavContent
 import net.matsudamper.browser.navigation.AddressesNavContent
 import net.matsudamper.browser.navigation.AppDestination
@@ -125,6 +126,7 @@ internal fun BrowserApp(
             val tabGroupRepository: TabGroupRepository = koinInject()
             val profileRepository: ProfileRepository = koinInject()
             val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
+            val translatorApiWebExtension: TranslatorApiWebExtension = koinInject()
             // uiState を直接キャプチャすると更新のたびにラムダが作り直され、
             // BrowserAppShell の外部タブ要求の収集が再起動して処理中の要求が失われる
             val callbacks = uiState.callbacks
@@ -186,6 +188,7 @@ internal fun BrowserApp(
                     } finally {
                         if (requestedSession != null && !handedOffSessionAttached) {
                             pageTranslationWebExtension.unregisterSession(requestedSession)
+                            translatorApiWebExtension.unregisterSession(requestedSession)
                         }
                     }
                     callbacks.onExternalTabOpened(newTab.tabId, request.url)

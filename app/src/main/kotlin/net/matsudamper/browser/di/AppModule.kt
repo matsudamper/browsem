@@ -2,6 +2,7 @@ package net.matsudamper.browser.di
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +52,7 @@ import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogStore
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
@@ -77,6 +79,7 @@ import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.screen.webapp.WebAppsScreenViewModel
 import net.matsudamper.browser.translate.PageTranslationWebExtension
+import net.matsudamper.browser.translate.TranslationProviderTranslatorApiEngines
 import org.koin.android.annotation.KoinWorker
 import org.koin.core.annotation.ComponentScan
 import org.koin.core.annotation.Configuration
@@ -298,6 +301,25 @@ internal fun webShareFilesWebExtension(runtime: GeckoRuntime): WebShareFilesWebE
     return WebShareFilesWebExtension().also { it.install(runtime) }
 }
 
+@Single
+internal fun translatorApiWebExtension(
+    settingsRepository: SettingsRepository,
+    crashLogRepository: CrashLogRepository,
+    runtime: GeckoRuntime,
+): TranslatorApiWebExtension {
+    val engines = TranslationProviderTranslatorApiEngines(settingsRepository)
+    return TranslatorApiWebExtension(
+        selectAppEngine = engines::selectAppEngine,
+        writeAppLog = { title, body ->
+            try {
+                crashLogRepository.saveSync(tag = CrashLogRepository.TAG_TRANSLATOR_API, title = title, body = body)
+            } catch (error: RuntimeException) {
+                Log.w(CrashLogRepository.TAG_TRANSLATOR_API, "Translator API の診断ログの保存に失敗", error)
+            }
+        },
+    ).also { it.install(runtime) }
+}
+
 // 拡張機能のツールバーアクションはランタイム単位で受け取るため single
 @Single
 internal fun webExtensionActionController(runtime: GeckoRuntime): WebExtensionActionController {
@@ -333,6 +355,7 @@ internal fun browserViewModel(
     profileRepository: ProfileRepository,
     mockLocationWebExtension: MockLocationWebExtension,
     pageTranslationWebExtension: PageTranslationWebExtension,
+    translatorApiWebExtension: TranslatorApiWebExtension,
     siteSettingsRepository: SiteSettingsRepository,
     applicationCoroutineScope: CoroutineScope,
     backgroundSessionSuspender: BackgroundSessionSuspender,
@@ -348,6 +371,7 @@ internal fun browserViewModel(
         profileRepository = profileRepository,
         mockLocationWebExtension = mockLocationWebExtension,
         pageTranslationWebExtension = pageTranslationWebExtension,
+        translatorApiWebExtension = translatorApiWebExtension,
         siteSettingsRepository = siteSettingsRepository,
         applicationScope = applicationCoroutineScope,
         backgroundSessionSuspender = backgroundSessionSuspender,
@@ -556,6 +580,7 @@ internal fun webAppBrowserViewModel(
     runtime: GeckoRuntime,
     mediaWebExtension: MediaWebExtension,
     pageTranslationWebExtension: PageTranslationWebExtension,
+    translatorApiWebExtension: TranslatorApiWebExtension,
     applicationCoroutineScope: CoroutineScope,
     backgroundSessionSuspender: BackgroundSessionSuspender,
 ): WebAppBrowserViewModel {
@@ -569,6 +594,7 @@ internal fun webAppBrowserViewModel(
         runtime = runtime,
         mediaWebExtension = mediaWebExtension,
         pageTranslationWebExtension = pageTranslationWebExtension,
+        translatorApiWebExtension = translatorApiWebExtension,
         applicationScope = applicationCoroutineScope,
         backgroundSessionSuspender = backgroundSessionSuspender,
     )
