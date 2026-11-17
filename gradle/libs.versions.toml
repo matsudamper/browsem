@@ -37,7 +37,7 @@ ktlintGradle = "14.2.0"
 composeRules = "0.6.8"
 mockk = "1.14.12"
 androidsvg = "1.4"
-robolectric = "4.17"
+robolectric = "4.18"
 ktor = "3.6.1"
 
 [libraries]
