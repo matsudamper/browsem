@@ -46,13 +46,13 @@ class TranslatorApiTest {
             // ページは進んだ段階を URL へ書き出すため、URL とログで止まった箇所を切り分けられる
             throw AssertionError(
                 "言語判定の結果がページへ返らなかった: url=\"${composeRule.currentPageUrlFromUi()}\"\n" +
-                    "logcat:\n${readTranslatorApiLogcat()}",
+                    "logcat:\n${readLogcat(FAILURE_LOGCAT_KEYWORDS)}",
                 detected.exceptionOrNull(),
             )
         }
         // アプリに届かなくても Gecko 内蔵エンジンへ切り替わって結果は返る。それでは設定された
         // 翻訳プロバイダが使われないため、要求がアプリまで届いていることも確かめる
-        val logcat = readTranslatorApiLogcat()
+        val logcat = readLogcat(LOGCAT_KEYWORDS)
         assertTrue(
             "ページからの要求がアプリへ届いていない\nlogcat:\n$logcat",
             logcat.contains(REQUEST_RECEIVED_LOG),
@@ -68,10 +68,10 @@ class TranslatorApiTest {
         return server.url(LOCAL_PAGE_FILE_NAME)
     }
 
-    private fun readTranslatorApiLogcat(): String {
+    private fun readLogcat(keywords: List<String>): String {
         return shell("logcat -d")
             .lineSequence()
-            .filter { line -> LOGCAT_KEYWORDS.any { keyword -> line.contains(keyword, ignoreCase = true) } }
+            .filter { line -> keywords.any { keyword -> line.contains(keyword, ignoreCase = true) } }
             .toList()
             .takeLast(LOGCAT_MAX_LINES)
             .joinToString(separator = "\n")
@@ -87,11 +87,14 @@ class TranslatorApiTest {
         private const val LOCAL_PAGE_FILE_NAME = "translator_api_test.html"
         private const val DETECTED_ENGLISH_MARKER = "detected-en"
         private const val DETECTION_TIMEOUT_MS = 90_000L
-        private const val LOGCAT_MAX_LINES = 80
+        private const val LOGCAT_MAX_LINES = 200
 
         /** TranslatorApiWebExtension が要求を受け取ったときに出すログ */
         private const val REQUEST_RECEIVED_LOG = "要求を受信"
         private val LOGCAT_KEYWORDS = listOf("TranslatorApi", "translator-api", "translator_api", "browsemTranslation")
+
+        /** 失敗時は、拡張機能の中で投げられた例外を Gecko のコンソール出力から読めるよう広く拾う */
+        private val FAILURE_LOGCAT_KEYWORDS = LOGCAT_KEYWORDS + listOf("JavaScript Error", "GeckoConsole", "moz-extension")
 
         private val LANGUAGE_DETECTION_PAGE = """
             <html><body><script>
