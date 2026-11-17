@@ -41,6 +41,12 @@ class CrashLogRepository(context: Context) {
                 dao.insert(entry)
                 dao.deleteOldMediaDiagnostics(MAX_MEDIA_DIAGNOSTICS)
             }
+        } else if (tag == TAG_TRANSLATOR_API) {
+            // ページが呼ぶたびに増えるため、ページ側の操作で際限なく溜まらないよう件数を抑える
+            db.runInTransaction {
+                dao.insert(entry)
+                dao.deleteOldByTag(TAG_TRANSLATOR_API, MAX_TRANSLATOR_API_DIAGNOSTICS)
+            }
         } else {
             dao.insert(entry)
         }
@@ -49,6 +55,8 @@ class CrashLogRepository(context: Context) {
     companion object {
         const val TAG_CRASH = "Crash"
         const val TAG_LOG = "Log"
+        const val TAG_TRANSLATOR_API = "TranslatorApi"
         const val MAX_MEDIA_DIAGNOSTICS = 100
+        const val MAX_TRANSLATOR_API_DIAGNOSTICS = 100
     }
 }

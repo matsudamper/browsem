@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedExtensionsEnabled
+import net.matsudamper.browser.feature.translatorapi.TranslatorApiWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatInstallState
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
@@ -64,6 +65,7 @@ class MainActivity : ComponentActivity() {
     private val webExtensionActionController: WebExtensionActionController by inject()
     private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension by inject()
     private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
+    private val translatorApiWebExtension: TranslatorApiWebExtension by inject()
     private val browserViewModel: BrowserViewModel by viewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
@@ -396,6 +398,7 @@ class MainActivity : ComponentActivity() {
         val session = handoff?.session ?: return
         if (session.isOpen) return
         pageTranslationWebExtension.unregisterSession(session)
+        translatorApiWebExtension.unregisterSession(session)
     }
 
     /**
