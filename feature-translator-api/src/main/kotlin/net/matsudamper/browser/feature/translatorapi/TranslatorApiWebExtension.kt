@@ -98,7 +98,7 @@ class TranslatorApiWebExtension(
                     sender: WebExtension.MessageSender,
                 ): GeckoResult<Any>? {
                     val sessionRequestJob = sessionRequestJobs[session]
-                        ?: return GeckoResult.fromValue(errorJson("AbortError", "ページが閉じられました"))
+                        ?: return GeckoResult.fromValue(errorJson("AbortError", "ページが閉じられました").toNativeMessageResponse())
                     return respondAsync(message, sessionRequestJob)
                 }
             },
@@ -110,7 +110,7 @@ class TranslatorApiWebExtension(
         val request = (message as? JSONObject)?.toTranslatorApiRequest()
         if (request == null) {
             Log.w(TAG, "解釈できない要求を受け取った")
-            return GeckoResult.fromValue(errorJson("TypeError", "無効なリクエストです"))
+            return GeckoResult.fromValue(errorJson("TypeError", "無効なリクエストです").toNativeMessageResponse())
         }
         Log.d(TAG, "要求を受信: ${request::class.simpleName}")
         val result = GeckoResult<Any>()
@@ -121,10 +121,10 @@ class TranslatorApiWebExtension(
                 respond(request)
             } catch (error: CancellationException) {
                 // 応答を返さないとページ側の Promise が完了しないままになる
-                mainHandler.post { result.complete(errorJson("AbortError", "ページが閉じられました")) }
+                mainHandler.post { result.complete(errorJson("AbortError", "ページが閉じられました").toNativeMessageResponse()) }
                 throw error
             }
-            mainHandler.post { result.complete(response) }
+            mainHandler.post { result.complete(response.toNativeMessageResponse()) }
         }
         return result
     }
@@ -270,6 +270,9 @@ private fun JSONObject.toInputText(): String? {
 private fun isAcceptableLanguageTag(languageTag: String): Boolean {
     return languageTag.isNotEmpty() && languageTag.length <= MAX_LANGUAGE_TAG_CHARS
 }
+
+// Gecko は応答の JSONObject を拡張機能へ渡せず、応答ごと捨てて要求を失敗させる。文字列なら渡せる
+private fun JSONObject.toNativeMessageResponse(): Any = toString()
 
 private fun successJson(): JSONObject = JSONObject().put("success", true)
 

@@ -59,7 +59,7 @@
       reportToApp("Translator API 応答待ち", describeRequest(message, trace, "応答待ち"));
     }, PENDING_REPORT_MS);
 
-    return timed(trace, "app", browser.runtime.sendNativeMessage(NATIVE_APP, message))
+    return timed(trace, "app", sendToApp(message))
       .then(function (response) {
         if (response && response.useGeckoEngine) {
           return timed(trace, "gecko", browser.runtime.sendMessage(message));
@@ -123,10 +123,14 @@
     );
   }
 
+  // アプリは応答を JSON 文字列で返す
+  function sendToApp(message) {
+    return browser.runtime.sendNativeMessage(NATIVE_APP, message).then(JSON.parse);
+  }
+
   // アプリのログ画面へ残す。記録の失敗で本来の処理を止めないよう、結果は待たず失敗も捨てる
   function reportToApp(title, body) {
-    browser.runtime
-      .sendNativeMessage(NATIVE_APP, { action: "log", title: title, body: body })
+    sendToApp({ action: "log", title: title, body: body })
       .catch(function (error) {
         console.error("translator-api: アプリのログへ記録できなかった", describeError(error), title, body);
       });
