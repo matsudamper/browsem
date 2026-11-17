@@ -2,6 +2,7 @@ package net.matsudamper.browser.feature.translatorapi
 
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
@@ -28,9 +29,12 @@ import org.mozilla.geckoview.WebExtension
  *
  * @param selectAppEngine 翻訳に使うアプリ側のエンジンを返す。
  * null を返すと、拡張機能自身が Gecko 内蔵の翻訳エンジンで処理する
+ * @param writeAppLog アプリのログ画面へ診断を残す。ページ側の処理は拡張機能の中で完結することがあり、
+ * アプリからは見えないため、拡張機能が経路と所要時間を送ってくる
  */
 class TranslatorApiWebExtension(
     private val selectAppEngine: suspend () -> TranslatorApiEngine?,
+    private val writeAppLog: (title: String, body: String) -> Unit,
 ) {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -54,6 +58,10 @@ class TranslatorApiWebExtension(
                     if (ext == null) return@accept
                     if (ext.flags and WebExtension.Flags.ALLOW_CONTENT_MESSAGING == 0L) {
                         Log.w(TAG, "content script からの直接通信が許可されていない。バックグラウンド経由の中継だけが使える")
+                        writeAppLog(
+                            "Translator API 拡張の直接通信が無効",
+                            "content script からの直接通信が許可されていない。バックグラウンド経由の中継だけが使える",
+                        )
                     }
                     extension = ext
                     // content script からの直接通信が拒否される場合に、バックグラウンドスクリプトが中継してくる
@@ -73,6 +81,7 @@ class TranslatorApiWebExtension(
                 },
                 { error ->
                     Log.e(TAG, "インストール失敗", error)
+                    writeAppLog("Translator API 拡張のインストール失敗", error.toString())
                 },
             )
     }
@@ -133,9 +142,21 @@ class TranslatorApiWebExtension(
     }
 
     private suspend fun respond(request: TranslatorApiRequest): JSONObject {
+        return when (request) {
+            is TranslatorApiRequest.Log -> {
+                writeAppLog(request.title, request.body)
+                successJson()
+            }
+
+            is TranslatorApiRequest.EngineRequest -> respondWithEngine(request)
+        }
+    }
+
+    private suspend fun respondWithEngine(request: TranslatorApiRequest.EngineRequest): JSONObject {
         return try {
             val engine = selectAppEngine() ?: return JSONObject().put("useGeckoEngine", true)
-            when (request) {
+            val startedAt = SystemClock.elapsedRealtime()
+            val response = when (request) {
                 is TranslatorApiRequest.Availability -> {
                     successJson().put("availability", engine.availability(request.languagePair).jsonValue)
                 }
@@ -163,6 +184,10 @@ class TranslatorApiWebExtension(
                     successJson().put("languages", JSONArray(languages))
                 }
             }
+            // 遅さの原因がエンジンか通信かを拡張機能側の記録で切り分けられるようにする
+            response
+                .put("engine", engine::class.simpleName)
+                .put("appMs", SystemClock.elapsedRealtime() - startedAt)
         } catch (error: TimeoutCancellationException) {
             // エンジン内部の期限切れはキャンセルの一種として投げられるが、要求自体は取り消されていない
             Log.w(TAG, "翻訳要求の処理が時間内に完了しなかった", error)
@@ -188,23 +213,31 @@ class TranslatorApiWebExtension(
 }
 
 internal sealed interface TranslatorApiRequest {
-    data class Availability(val languagePair: TranslatorApiEngine.LanguagePair) : TranslatorApiRequest
+    /** 翻訳エンジンで処理する要求 */
+    sealed interface EngineRequest : TranslatorApiRequest
 
-    data class Create(val languagePair: TranslatorApiEngine.LanguagePair) : TranslatorApiRequest
+    data class Availability(val languagePair: TranslatorApiEngine.LanguagePair) : EngineRequest
+
+    data class Create(val languagePair: TranslatorApiEngine.LanguagePair) : EngineRequest
 
     data class Translate(
         val languagePair: TranslatorApiEngine.LanguagePair,
         val text: String,
-    ) : TranslatorApiRequest
+    ) : EngineRequest
 
-    data object LanguageDetectorAvailability : TranslatorApiRequest
+    data object LanguageDetectorAvailability : EngineRequest
 
-    data class DetectLanguage(val text: String) : TranslatorApiRequest
+    data class DetectLanguage(val text: String) : EngineRequest
+
+    /** 拡張機能が送ってくる診断。アプリのログ画面へ残す */
+    data class Log(val title: String, val body: String) : TranslatorApiRequest
 }
 
 // content.js の INPUT_QUOTA と一致させる
 internal const val MAX_INPUT_CHARS = 100_000
 private const val MAX_LANGUAGE_TAG_CHARS = 64
+private const val MAX_LOG_TITLE_CHARS = 100
+private const val MAX_LOG_BODY_CHARS = 2_000
 
 internal fun JSONObject.toTranslatorApiRequest(): TranslatorApiRequest? {
     return when (optString("action", "")) {
@@ -221,6 +254,11 @@ internal fun JSONObject.toTranslatorApiRequest(): TranslatorApiRequest? {
         "languageDetectorAvailability" -> TranslatorApiRequest.LanguageDetectorAvailability
 
         "detectLanguage" -> toInputText()?.let(TranslatorApiRequest::DetectLanguage)
+
+        "log" -> TranslatorApiRequest.Log(
+            title = optString("title", "").take(MAX_LOG_TITLE_CHARS),
+            body = optString("body", "").take(MAX_LOG_BODY_CHARS),
+        )
 
         else -> null
     }

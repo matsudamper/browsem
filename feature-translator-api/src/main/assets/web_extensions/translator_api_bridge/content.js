@@ -47,22 +47,89 @@
 
   // 翻訳プロバイダの設定はネイティブアプリが持つため、まずネイティブへ尋ねる。
   // プロバイダが Gecko のときは、Gecko 内蔵の翻訳エンジンを呼べるバックグラウンドへ回すよう返ってくる。
+  // これより長くかかった要求、失敗した要求、迂回した要求をアプリのログへ残す
+  const SLOW_REQUEST_MS = 1000;
+  // 応答が返らないまま止まると完了時の記録が残らないため、待ちが長引いた時点でも記録する
+  const PENDING_REPORT_MS = 5000;
+
   function requestTranslationEngine(message) {
-    return sendToNativeApp(message).then(
+    const trace = { startedAt: Date.now(), steps: [], detoured: false };
+    const pendingTimer = setTimeout(function () {
+      reportToApp("Translator API 応答待ち", describeRequest(message, trace, "応答待ち"));
+    }, PENDING_REPORT_MS);
+
+    return sendToNativeApp(message, trace)
+      .then(
+        function (response) {
+          return response && response.useGeckoEngine ? sendToGeckoEngine(message, trace) : response;
+        },
+        function (errors) {
+          // アプリに届かないと設定された翻訳プロバイダが分からない。機能ごと使えなくするより、
+          // アプリを介さずに動く Gecko 内蔵の翻訳エンジンで処理する
+          trace.detoured = true;
+          console.error("translator-api: アプリと通信できないため Gecko 内蔵エンジンを使う", errors.map(describeError));
+          return sendToGeckoEngine(message, trace);
+        },
+      )
+      .then(
+        function (response) {
+          clearTimeout(pendingTimer);
+          const failed = !response || !response.success;
+          const outcome = failed
+            ? "失敗 " + ((response && response.errorName) || "") + " " + ((response && response.error) || "")
+            : "成功";
+          if (failed || trace.detoured || message.action === "create" || elapsedMs(trace) >= SLOW_REQUEST_MS) {
+            reportToApp(
+              failed ? "Translator API 失敗" : trace.detoured ? "Translator API 迂回" : "Translator API 要求",
+              describeRequest(message, trace, outcome),
+            );
+          }
+          return response;
+        },
+        function (error) {
+          clearTimeout(pendingTimer);
+          reportToApp("Translator API 失敗", describeRequest(message, trace, "失敗 " + describeError(error)));
+          throw error;
+        },
+      );
+  }
+
+  function elapsedMs(trace) {
+    return Date.now() - trace.startedAt;
+  }
+
+  // 本文は記録せず、長さだけを残す
+  function describeRequest(message, trace, outcome) {
+    const lines = ["action=" + message.action];
+    if (message.sourceLanguage) lines.push("languages=" + message.sourceLanguage + "->" + message.targetLanguage);
+    if (typeof message.text === "string") lines.push("textLength=" + message.text.length);
+    lines.push("totalMs=" + elapsedMs(trace));
+    lines.push("outcome=" + outcome);
+    lines.push("page=" + location.origin);
+    return lines.concat(trace.steps).join("\n");
+  }
+
+  // 経路ごとの所要時間と、応答に含まれる内訳を trace へ積む
+  function timed(trace, name, promise) {
+    const startedAt = Date.now();
+    return promise.then(
       function (response) {
-        return response && response.useGeckoEngine ? sendToGeckoEngine(message) : response;
+        const parts = [name + "=" + (Date.now() - startedAt) + "ms"];
+        if (response && response.engine) parts.push("engine=" + response.engine);
+        if (response && response.appMs !== undefined) parts.push("appMs=" + response.appMs);
+        if (response && response.timing) parts.push("timing=" + JSON.stringify(response.timing));
+        trace.steps.push(parts.join(" "));
+        return response;
       },
-      function (errors) {
-        // アプリに届かないと設定された翻訳プロバイダが分からない。機能ごと使えなくするより、
-        // アプリを介さずに動く Gecko 内蔵の翻訳エンジンで処理する
-        console.error("translator-api: アプリと通信できないため Gecko 内蔵エンジンを使う", errors.map(describeError));
-        return sendToGeckoEngine(message);
+      function (error) {
+        trace.steps.push(name + "=" + (Date.now() - startedAt) + "ms failed(" + describeError(error) + ")");
+        throw error;
       },
     );
   }
 
-  function sendToGeckoEngine(message) {
-    return browser.runtime.sendMessage(message).catch(function (error) {
+  function sendToGeckoEngine(message, trace) {
+    return timed(trace, "gecko", browser.runtime.sendMessage(message)).catch(function (error) {
       const detail = describeError(error);
       console.error("translator-api: 拡張機能のバックグラウンドとの通信に失敗", detail);
       throw failure(
@@ -76,25 +143,44 @@
   // content script からネイティブアプリへの直接通信は Gecko 側で拒否されることがあり、
   // その場合は原因を問わず同じ定型文のエラーになる。バックグラウンド経由で送り直す。
   // どちらも失敗したら、各経路のエラーの配列で reject する
-  function sendToNativeApp(message) {
+  function sendToNativeApp(message, trace) {
     if (directNativeMessagingFailed) {
-      return relayToNativeApp(message, []);
+      return relayToNativeApp(message, trace, []);
     }
-    return Promise.resolve()
-      .then(function () {
+    return timed(
+      trace,
+      "app-direct",
+      Promise.resolve().then(function () {
         return browser.runtime.sendNativeMessage(NATIVE_APP, message);
-      })
-      .catch(function (directError) {
-        console.warn("translator-api: ネイティブアプリへ直接送れなかったため中継する", describeError(directError));
-        directNativeMessagingFailed = true;
-        return relayToNativeApp(message, [directError]);
-      });
+      }),
+    ).catch(function (directError) {
+      console.warn("translator-api: ネイティブアプリへ直接送れなかったため中継する", describeError(directError));
+      directNativeMessagingFailed = true;
+      trace.detoured = true;
+      return relayToNativeApp(message, trace, [directError]);
+    });
   }
 
-  function relayToNativeApp(message, earlierErrors) {
-    return browser.runtime.sendMessage({ relayToNativeApp: message }).catch(function (relayError) {
-      throw earlierErrors.concat([relayError]);
-    });
+  function relayToNativeApp(message, trace, earlierErrors) {
+    return timed(trace, "app-relay", browser.runtime.sendMessage({ relayToNativeApp: message })).catch(
+      function (relayError) {
+        throw earlierErrors.concat([relayError]);
+      },
+    );
+  }
+
+  // アプリのログ画面へ残す。記録の失敗で本来の処理を止めないよう、結果は待たず失敗も捨てる。
+  // 直接の通信が止まっている場合でも残せるよう、バックグラウンド経由を先に試す
+  function reportToApp(title, body) {
+    const logMessage = { action: "log", title: title, body: body };
+    browser.runtime
+      .sendMessage({ relayToNativeApp: logMessage })
+      .catch(function () {
+        return browser.runtime.sendNativeMessage(NATIVE_APP, logMessage);
+      })
+      .catch(function (error) {
+        console.error("translator-api: アプリのログへ記録できなかった", describeError(error), title, body);
+      });
   }
 
   function describeError(error) {

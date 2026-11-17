@@ -2,6 +2,7 @@ package net.matsudamper.browser.di
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CoroutineScope
@@ -303,11 +304,23 @@ internal fun webShareFilesWebExtension(runtime: GeckoRuntime): WebShareFilesWebE
 @Single
 internal fun translatorApiWebExtension(
     settingsRepository: SettingsRepository,
+    crashLogRepository: CrashLogRepository,
     runtime: GeckoRuntime,
 ): TranslatorApiWebExtension {
     val engines = TranslationProviderTranslatorApiEngines(settingsRepository)
-    return TranslatorApiWebExtension(engines::selectAppEngine).also { it.install(runtime) }
+    return TranslatorApiWebExtension(
+        selectAppEngine = engines::selectAppEngine,
+        writeAppLog = { title, body ->
+            try {
+                crashLogRepository.saveSync(tag = TRANSLATOR_API_LOG_TAG, title = title, body = body)
+            } catch (error: RuntimeException) {
+                Log.w(TRANSLATOR_API_LOG_TAG, "Translator API の診断ログの保存に失敗", error)
+            }
+        },
+    ).also { it.install(runtime) }
 }
+
+private const val TRANSLATOR_API_LOG_TAG = "TranslatorApi"
 
 // 拡張機能のツールバーアクションはランタイム単位で受け取るため single
 @Single

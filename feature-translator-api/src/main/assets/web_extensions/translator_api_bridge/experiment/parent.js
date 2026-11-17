@@ -201,10 +201,15 @@ this.browsemTranslation = class extends ExtensionAPI {
 
         async prepare(sourceLanguage, targetLanguage) {
           try {
+            const startedAt = Date.now();
             const languagePair = await resolveLanguagePair(sourceLanguage, targetLanguage);
             if (!languagePair) return unsupported();
+            const resolvedAt = Date.now();
             await connect(languagePair);
-            return { success: true };
+            return {
+              success: true,
+              timing: { resolveMs: resolvedAt - startedAt, connectMs: Date.now() - resolvedAt },
+            };
           } catch (error) {
             return failed(error);
           }
@@ -212,6 +217,7 @@ this.browsemTranslation = class extends ExtensionAPI {
 
         async translate(sourceLanguage, targetLanguage, text) {
           try {
+            const startedAt = Date.now();
             const languagePair = await resolveLanguagePair(sourceLanguage, targetLanguage);
             if (!languagePair) return unsupported();
             if (!(await isReadyWithoutDownload(languagePair))) {
@@ -221,8 +227,19 @@ this.browsemTranslation = class extends ExtensionAPI {
                 error: "翻訳モデルが準備されていません",
               };
             }
+            const readyCheckedAt = Date.now();
             const connection = await connect(languagePair);
-            return { success: true, text: await requestTranslation(connection, text) };
+            const connectedAt = Date.now();
+            const translated = await requestTranslation(connection, text);
+            return {
+              success: true,
+              text: translated,
+              timing: {
+                resolveMs: readyCheckedAt - startedAt,
+                connectMs: connectedAt - readyCheckedAt,
+                translateMs: Date.now() - connectedAt,
+              },
+            };
           } catch (error) {
             return failed(error);
           }
@@ -230,9 +247,11 @@ this.browsemTranslation = class extends ExtensionAPI {
 
         async detectLanguage(text) {
           try {
+            const startedAt = Date.now();
             const detection = await lazy.LanguageDetector.detectLanguage(text);
             return {
               success: true,
+              timing: { detectMs: Date.now() - startedAt },
               languages: detection.languages.map(function (language) {
                 return {
                   detectedLanguage: language.languageCode,
