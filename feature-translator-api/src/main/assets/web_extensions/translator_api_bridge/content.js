@@ -34,7 +34,8 @@
   }
 
   function toPageError(error) {
-    if (error && error.pageError) return error.pageError;
+    // 中断理由には null や 0 も指定できるため、値の真偽ではなくプロパティの有無で判定する
+    if (error && typeof error === "object" && "pageError" in error) return error.pageError;
     return pageDomException(
       (error && error.message) || "翻訳に失敗しました",
       (error && error.name) || "OperationError",
