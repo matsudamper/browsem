@@ -312,15 +312,13 @@ internal fun translatorApiWebExtension(
         selectAppEngine = engines::selectAppEngine,
         writeAppLog = { title, body ->
             try {
-                crashLogRepository.saveSync(tag = TRANSLATOR_API_LOG_TAG, title = title, body = body)
+                crashLogRepository.saveSync(tag = CrashLogRepository.TAG_TRANSLATOR_API, title = title, body = body)
             } catch (error: RuntimeException) {
-                Log.w(TRANSLATOR_API_LOG_TAG, "Translator API の診断ログの保存に失敗", error)
+                Log.w(CrashLogRepository.TAG_TRANSLATOR_API, "Translator API の診断ログの保存に失敗", error)
             }
         },
     ).also { it.install(runtime) }
 }
-
-private const val TRANSLATOR_API_LOG_TAG = "TranslatorApi"
 
 // 拡張機能のツールバーアクションはランタイム単位で受け取るため single
 @Single
