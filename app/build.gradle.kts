@@ -199,3 +199,12 @@ dependencies {
     androidTestImplementation(libs.ktor.server.partial.content)
     androidTestUtil(libs.androidx.test.orchestrator)
 }
+
+// strictSafety はインクリメンタルコンパイルでの依存グラフの検証漏れを防ぐ代わりに、
+// :app:compileDebugKotlin をビルドキャッシュの対象外にする。
+// CI は毎回チェックアウト直後のフルコンパイルで検証漏れが起きないため、CI でだけ止めてキャッシュを効かせる
+if (System.getenv("CI") == "true") {
+    koinCompiler {
+        strictSafety.set(false)
+    }
+}
