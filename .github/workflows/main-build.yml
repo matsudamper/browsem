@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   actions: read
+  id-token: write
 
 jobs:
   build:
@@ -15,6 +16,7 @@ jobs:
     permissions:
       contents: write
       actions: read
+      id-token: write
 
     steps:
       - name: Checkout
@@ -34,6 +36,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - uses: matsudamper/actions/gradle-remote-cache-credentials@b23e18acbc459f662854bf84ec879d3e63793193 # v1.3.0
+        continue-on-error: true
 
       - name: Decode debug keystore
         shell: bash
@@ -136,6 +141,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
+      - uses: matsudamper/actions/gradle-remote-cache-credentials@b23e18acbc459f662854bf84ec879d3e63793193 # v1.3.0
+        continue-on-error: true
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm",GROUP="kvm",MODE="0666",OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -190,6 +198,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
+      - uses: matsudamper/actions/gradle-remote-cache-credentials@b23e18acbc459f662854bf84ec879d3e63793193 # v1.3.0
+        continue-on-error: true
+
       - name: Run unit tests
         run: ./gradlew test
 
@@ -224,6 +235,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
+      - uses: matsudamper/actions/gradle-remote-cache-credentials@b23e18acbc459f662854bf84ec879d3e63793193 # v1.3.0
+        continue-on-error: true
+
       - name: Run detekt
         run: ./gradlew detekt
 
@@ -248,6 +262,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - uses: matsudamper/actions/gradle-remote-cache-credentials@b23e18acbc459f662854bf84ec879d3e63793193 # v1.3.0
+        continue-on-error: true
 
       - name: Run ktlint
         run: ./gradlew ktlintCheck --continue
