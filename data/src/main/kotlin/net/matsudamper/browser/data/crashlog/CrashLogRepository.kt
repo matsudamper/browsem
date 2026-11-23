@@ -11,6 +11,8 @@ class CrashLogRepository(context: Context) {
 
     suspend fun getById(id: Long): CrashLogEntity? = dao.getById(id)
 
+    suspend fun getAll(): List<CrashLogEntity> = dao.getAll()
+
     suspend fun deleteAll() = dao.deleteAll()
 
     fun saveCrashSync(thread: Thread, throwable: Throwable) {

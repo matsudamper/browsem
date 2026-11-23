@@ -37,6 +37,7 @@ data class CrashLogsScreenUiState(
     }
 
     interface Callbacks {
+        fun onClickCopyAll()
         fun onClickDeleteAll()
         fun onConfirmDeleteAll()
         fun onDismissDeleteAllDialog()
