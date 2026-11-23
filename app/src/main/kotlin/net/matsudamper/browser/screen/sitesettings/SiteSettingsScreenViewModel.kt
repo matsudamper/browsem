@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.TabSecurityInfo
 import net.matsudamper.browser.awaitGecko
+import net.matsudamper.browser.data.SiteCameraState
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -51,6 +52,12 @@ internal class SiteSettingsScreenViewModel(
         override fun setMicrophonePermission(state: SitePermissionState) {
             viewModelScope.launch {
                 siteSettingsRepository.setMicrophonePermission(host, state)
+            }
+        }
+
+        override fun setCameraOption(option: SiteSettingsScreenUiState.CameraOption) {
+            viewModelScope.launch {
+                siteSettingsRepository.setCameraState(host, option.toSiteCameraState())
             }
         }
 
@@ -117,7 +124,9 @@ internal class SiteSettingsScreenViewModel(
             host = host,
             microphonePermission = null,
             geolocationState = null,
+            cameraState = null,
             autoplayPermission = null,
+            noRequestedPermissionMessageVisible = true,
             tlsCertificate = createTlsCertificateUiState(securityInfo),
             clearDataConfirmDialog = null,
             clearDataResultMessage = null,
@@ -133,17 +142,22 @@ internal class SiteSettingsScreenViewModel(
         }
         viewModelScope.launch {
             siteSettingsRepository.requestedMicrophonePermission(host).collectLatest { permission ->
-                uiStateFlow.update { it.copy(microphonePermission = permission) }
+                uiStateFlow.update { it.copy(microphonePermission = permission).withPermissionMessageVisibility() }
             }
         }
         viewModelScope.launch {
             siteSettingsRepository.requestedGeolocationState(host).collectLatest { state ->
-                uiStateFlow.update { it.copy(geolocationState = state) }
+                uiStateFlow.update { it.copy(geolocationState = state).withPermissionMessageVisibility() }
+            }
+        }
+        viewModelScope.launch {
+            siteSettingsRepository.requestedCameraState(host).collectLatest { state ->
+                uiStateFlow.update { it.copy(cameraState = state?.toCameraOption()).withPermissionMessageVisibility() }
             }
         }
         viewModelScope.launch {
             siteSettingsRepository.requestedAutoplayPermission(host).collectLatest { permission ->
-                uiStateFlow.update { it.copy(autoplayPermission = permission) }
+                uiStateFlow.update { it.copy(autoplayPermission = permission).withPermissionMessageVisibility() }
             }
         }
     }.asStateFlow()
@@ -202,5 +216,32 @@ internal class SiteSettingsScreenViewModel(
             onFailure = { "${targetName}の削除に失敗しました" },
         )
         uiStateFlow.update { it.copy(clearDataResultMessage = message) }
+    }
+}
+
+private fun SiteSettingsScreenUiState.withPermissionMessageVisibility(): SiteSettingsScreenUiState {
+    return copy(
+        noRequestedPermissionMessageVisible = geolocationState == null &&
+            microphonePermission == null &&
+            cameraState == null &&
+            autoplayPermission == null,
+    )
+}
+
+private fun SiteCameraState.toCameraOption(): SiteSettingsScreenUiState.CameraOption {
+    return when (this) {
+        SiteCameraState.SITE_CAMERA_REAL -> SiteSettingsScreenUiState.CameraOption.Real
+        SiteCameraState.SITE_CAMERA_IMAGE -> SiteSettingsScreenUiState.CameraOption.Image
+        SiteCameraState.SITE_CAMERA_DENY -> SiteSettingsScreenUiState.CameraOption.Deny
+        else -> SiteSettingsScreenUiState.CameraOption.Ask
+    }
+}
+
+private fun SiteSettingsScreenUiState.CameraOption.toSiteCameraState(): SiteCameraState {
+    return when (this) {
+        SiteSettingsScreenUiState.CameraOption.Ask -> SiteCameraState.SITE_CAMERA_ASK
+        SiteSettingsScreenUiState.CameraOption.Real -> SiteCameraState.SITE_CAMERA_REAL
+        SiteSettingsScreenUiState.CameraOption.Image -> SiteCameraState.SITE_CAMERA_IMAGE
+        SiteSettingsScreenUiState.CameraOption.Deny -> SiteCameraState.SITE_CAMERA_DENY
     }
 }

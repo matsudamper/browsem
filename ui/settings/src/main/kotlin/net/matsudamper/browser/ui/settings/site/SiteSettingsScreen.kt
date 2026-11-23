@@ -1,6 +1,7 @@
 package net.matsudamper.browser.ui.settings.site
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -157,10 +158,7 @@ fun SiteSettingsScreen(
             // 権限は証明書・データ削除と同じく1つのコンテナにまとめ、
             // 要求が無い場合もタイトル付きセクション内に空メッセージを表示して見た目を揃える
             SettingSection(title = "サイトが要求した権限") {
-                val hasGeolocation = uiState.geolocationState != null
-                val hasMicrophone = uiState.microphonePermission != null
-                val hasAutoplay = uiState.autoplayPermission != null
-                if (!hasGeolocation && !hasMicrophone && !hasAutoplay) {
+                if (uiState.noRequestedPermissionMessageVisible) {
                     Text(
                         text = "このサイトが要求した権限はありません",
                         style = MaterialTheme.typography.bodyMedium,
@@ -168,117 +166,129 @@ fun SiteSettingsScreen(
                     )
                 } else {
                     // 一度でも要求された権限だけをサブ項目として表示する
-                    if (hasGeolocation) {
-                        PermissionGroup(
-                            title = "位置情報",
-                            iconRes = R.drawable.ic_location_on,
-                        ) {
-                            Column(Modifier.selectableGroup()) {
-                                SettingsRadioOption(
-                                    label = "モック位置情報",
-                                    selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_MOCK,
-                                    onClick = {
-                                        uiState.callbacks.setGeolocationState(
-                                            SiteGeolocationState.SITE_GEOLOCATION_MOCK,
-                                        )
-                                    },
-                                )
-                                SettingsRadioOption(
-                                    label = "実際の位置情報",
-                                    selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_REAL,
-                                    onClick = {
-                                        uiState.callbacks.setGeolocationState(
-                                            SiteGeolocationState.SITE_GEOLOCATION_REAL,
-                                        )
-                                    },
-                                )
-                                SettingsRadioOption(
-                                    label = "ブロック",
-                                    selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_DENY,
-                                    onClick = {
-                                        uiState.callbacks.setGeolocationState(
-                                            SiteGeolocationState.SITE_GEOLOCATION_DENY,
-                                        )
-                                    },
-                                )
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (uiState.geolocationState != null) {
+                            PermissionGroup(
+                                title = "位置情報",
+                                iconRes = R.drawable.ic_location_on,
+                            ) {
+                                Column(Modifier.selectableGroup()) {
+                                    SettingsRadioOption(
+                                        label = "モック位置情報",
+                                        selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                                        onClick = {
+                                            uiState.callbacks.setGeolocationState(
+                                                SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                                            )
+                                        },
+                                    )
+                                    SettingsRadioOption(
+                                        label = "実際の位置情報",
+                                        selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                                        onClick = {
+                                            uiState.callbacks.setGeolocationState(
+                                                SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                                            )
+                                        },
+                                    )
+                                    SettingsRadioOption(
+                                        label = "ブロック",
+                                        selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                                        onClick = {
+                                            uiState.callbacks.setGeolocationState(
+                                                SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
-                    }
-                    if (hasMicrophone) {
-                        if (hasGeolocation) {
-                            Spacer(Modifier.height(12.dp))
-                        }
-                        PermissionGroup(
-                            title = "マイク",
-                            iconRes = R.drawable.ic_mic,
-                        ) {
-                            Column(Modifier.selectableGroup()) {
-                                SettingsRadioOption(
-                                    label = "確認する",
-                                    selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ASK,
-                                    onClick = {
-                                        uiState.callbacks.setMicrophonePermission(
-                                            SitePermissionState.SITE_PERMISSION_ASK,
-                                        )
-                                    },
-                                )
-                                SettingsRadioOption(
-                                    label = "許可",
-                                    selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ALLOW,
-                                    onClick = {
-                                        uiState.callbacks.setMicrophonePermission(
-                                            SitePermissionState.SITE_PERMISSION_ALLOW,
-                                        )
-                                    },
-                                )
-                                SettingsRadioOption(
-                                    label = "ブロック",
-                                    selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
-                                    onClick = {
-                                        uiState.callbacks.setMicrophonePermission(
-                                            SitePermissionState.SITE_PERMISSION_DENY,
-                                        )
-                                    },
-                                )
+                        if (uiState.microphonePermission != null) {
+                            PermissionGroup(
+                                title = "マイク",
+                                iconRes = R.drawable.ic_mic,
+                            ) {
+                                Column(Modifier.selectableGroup()) {
+                                    SettingsRadioOption(
+                                        label = "確認する",
+                                        selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ASK,
+                                        onClick = {
+                                            uiState.callbacks.setMicrophonePermission(
+                                                SitePermissionState.SITE_PERMISSION_ASK,
+                                            )
+                                        },
+                                    )
+                                    SettingsRadioOption(
+                                        label = "許可",
+                                        selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ALLOW,
+                                        onClick = {
+                                            uiState.callbacks.setMicrophonePermission(
+                                                SitePermissionState.SITE_PERMISSION_ALLOW,
+                                            )
+                                        },
+                                    )
+                                    SettingsRadioOption(
+                                        label = "ブロック",
+                                        selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
+                                        onClick = {
+                                            uiState.callbacks.setMicrophonePermission(
+                                                SitePermissionState.SITE_PERMISSION_DENY,
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
-                    }
-                    if (hasAutoplay) {
-                        if (hasGeolocation || hasMicrophone) {
-                            Spacer(Modifier.height(12.dp))
+                        uiState.cameraState?.let { cameraState ->
+                            PermissionGroup(
+                                title = "カメラ",
+                                iconRes = R.drawable.ic_photo_camera,
+                            ) {
+                                Column(Modifier.selectableGroup()) {
+                                    SiteSettingsScreenUiState.CameraOption.entries.forEach { option ->
+                                        SettingsRadioOption(
+                                            label = option.label(),
+                                            selected = cameraState == option,
+                                            onClick = { uiState.callbacks.setCameraOption(option) },
+                                        )
+                                    }
+                                }
+                            }
                         }
-                        PermissionGroup(
-                            title = "音声の自動再生",
-                            iconRes = R.drawable.ic_volume_up,
-                        ) {
-                            Column(Modifier.selectableGroup()) {
-                                SettingsRadioOption(
-                                    label = "確認する",
-                                    selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ASK,
-                                    onClick = {
-                                        uiState.callbacks.setAutoplayPermission(
-                                            SitePermissionState.SITE_PERMISSION_ASK,
-                                        )
-                                    },
-                                )
-                                SettingsRadioOption(
-                                    label = "許可",
-                                    selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ALLOW,
-                                    onClick = {
-                                        uiState.callbacks.setAutoplayPermission(
-                                            SitePermissionState.SITE_PERMISSION_ALLOW,
-                                        )
-                                    },
-                                )
-                                SettingsRadioOption(
-                                    label = "ブロック",
-                                    selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_DENY,
-                                    onClick = {
-                                        uiState.callbacks.setAutoplayPermission(
-                                            SitePermissionState.SITE_PERMISSION_DENY,
-                                        )
-                                    },
-                                )
+                        if (uiState.autoplayPermission != null) {
+                            PermissionGroup(
+                                title = "音声の自動再生",
+                                iconRes = R.drawable.ic_volume_up,
+                            ) {
+                                Column(Modifier.selectableGroup()) {
+                                    SettingsRadioOption(
+                                        label = "確認する",
+                                        selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ASK,
+                                        onClick = {
+                                            uiState.callbacks.setAutoplayPermission(
+                                                SitePermissionState.SITE_PERMISSION_ASK,
+                                            )
+                                        },
+                                    )
+                                    SettingsRadioOption(
+                                        label = "許可",
+                                        selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ALLOW,
+                                        onClick = {
+                                            uiState.callbacks.setAutoplayPermission(
+                                                SitePermissionState.SITE_PERMISSION_ALLOW,
+                                            )
+                                        },
+                                    )
+                                    SettingsRadioOption(
+                                        label = "ブロック",
+                                        selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_DENY,
+                                        onClick = {
+                                            uiState.callbacks.setAutoplayPermission(
+                                                SitePermissionState.SITE_PERMISSION_DENY,
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -364,6 +374,15 @@ fun SiteSettingsScreen(
     }
 }
 
+private fun SiteSettingsScreenUiState.CameraOption.label(): String {
+    return when (this) {
+        SiteSettingsScreenUiState.CameraOption.Ask -> "確認する"
+        SiteSettingsScreenUiState.CameraOption.Real -> "実際のカメラ"
+        SiteSettingsScreenUiState.CameraOption.Image -> "画像に置き換え"
+        SiteSettingsScreenUiState.CameraOption.Deny -> "ブロック"
+    }
+}
+
 /** 権限セクション内の個別の権限（位置情報・マイクなど）をサブタイトル付きで表示する */
 @Composable
 private fun PermissionGroup(
@@ -415,6 +434,7 @@ private fun CertificateInfoRow(
 private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun setMicrophonePermission(state: SitePermissionState) = Unit
     override fun setGeolocationState(state: SiteGeolocationState) = Unit
+    override fun setCameraOption(option: SiteSettingsScreenUiState.CameraOption) = Unit
     override fun setAutoplayPermission(state: SitePermissionState) = Unit
     override fun requestClearData(type: SiteSettingsScreenUiState.ClearDataType) = Unit
     override fun confirmClearData() = Unit
@@ -423,7 +443,7 @@ private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun openSavedFormInputs() = Unit
 }
 
-// 証明書・位置情報・マイク・音声の自動再生・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
+// 証明書・位置情報・マイク・カメラ・音声の自動再生・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
 @Preview(showBackground = true)
 @Composable
 private fun SiteSettingsScreenWithFormInputPreview() {
@@ -434,7 +454,9 @@ private fun SiteSettingsScreenWithFormInputPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
+                noRequestedPermissionMessageVisible = true,
                 tlsCertificate = null,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -455,7 +477,9 @@ private fun SiteSettingsScreenPreview() {
                 host = "www.example.com",
                 microphonePermission = SitePermissionState.SITE_PERMISSION_ASK,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                cameraState = SiteSettingsScreenUiState.CameraOption.Image,
                 autoplayPermission = SitePermissionState.SITE_PERMISSION_DENY,
+                noRequestedPermissionMessageVisible = false,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Available(
                     subjectCommonName = "www.example.com",
                     issuer = "Example CA",
@@ -483,7 +507,9 @@ private fun SiteSettingsScreenGeolocationOnlyPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                cameraState = null,
                 autoplayPermission = null,
+                noRequestedPermissionMessageVisible = false,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -505,7 +531,9 @@ private fun SiteSettingsScreenAutoplayOnlyPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = SitePermissionState.SITE_PERMISSION_ASK,
+                noRequestedPermissionMessageVisible = false,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -527,7 +555,9 @@ private fun SiteSettingsScreenShortContentPreview() {
                 host = "a.test",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
+                noRequestedPermissionMessageVisible = true,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -549,7 +579,9 @@ private fun SiteSettingsScreenLandscapePreview() {
                 host = "a.test",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
+                noRequestedPermissionMessageVisible = true,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -570,7 +602,9 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
+                noRequestedPermissionMessageVisible = true,
                 tlsCertificate = null,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -623,7 +657,9 @@ private fun SiteSettingsScreenClearCookieConfirmPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                cameraState = null,
                 autoplayPermission = null,
+                noRequestedPermissionMessageVisible = true,
                 tlsCertificate = null,
                 clearDataConfirmDialog = SiteSettingsScreenUiState.ClearDataType.Cookie,
                 clearDataResultMessage = null,

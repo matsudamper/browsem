@@ -8,6 +8,7 @@ import android.os.Looper
 import android.os.Process
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -57,6 +58,11 @@ internal fun SettingsNavContent(navActions: OuterNavActions) {
             DefaultBrowserChecker.isDefaultBrowser(context),
         )
     }
+    val cameraReplacementImagePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        settingsViewModel.uiState.value?.callbacks?.onCameraReplacementImagePicked(uri)
+    }
     DisposableEffect(lifecycleOwner, settingsViewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -102,6 +108,16 @@ internal fun SettingsNavContent(navActions: OuterNavActions) {
                     val intent = DefaultBrowserChecker.createRequestDefaultBrowserIntent(context)
                         ?: return
                     requestDefaultBrowserLauncher.launch(intent)
+                }
+
+                override fun onPickCameraReplacementImage() {
+                    cameraReplacementImagePickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                }
+
+                override fun onCameraReplacementImageSaveFailed() {
+                    Toast.makeText(context, "画像を保存できませんでした", Toast.LENGTH_SHORT).show()
                 }
 
                 override fun onCheckDefaultBrowserStatus() {

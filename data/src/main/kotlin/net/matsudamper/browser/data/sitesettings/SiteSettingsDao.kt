@@ -34,8 +34,9 @@ internal interface SiteSettingsDao {
 
     @Query(
         "INSERT OR IGNORE INTO site_settings " +
-            "(host, microphone, microphoneRequested, geolocation, geolocationRequested, autoplay, autoplayRequested) " +
-            "VALUES (:host, 0, 0, 0, 0, 0, 0)",
+            "(host, microphone, microphoneRequested, geolocation, geolocationRequested, autoplay, autoplayRequested, " +
+            "camera, cameraRequested) " +
+            "VALUES (:host, 0, 0, 0, 0, 0, 0, 0, 0)",
     )
     suspend fun ensureHost(host: String)
 
@@ -56,4 +57,10 @@ internal interface SiteSettingsDao {
 
     @Query("UPDATE site_settings SET geolocationRequested = 1 WHERE host = :host")
     suspend fun markGeolocationRequested(host: String)
+
+    @Query("UPDATE site_settings SET camera = :state WHERE host = :host")
+    suspend fun updateCameraState(host: String, state: Int)
+
+    @Query("UPDATE site_settings SET cameraRequested = 1 WHERE host = :host")
+    suspend fun markCameraRequested(host: String)
 }

@@ -193,6 +193,54 @@ class SiteSettingsRepository(context: Context) {
         }
     }
 
+    /** 指定ホストのカメラの扱いを監視する。未設定の場合は ASK を返す */
+    fun cameraState(host: String): Flow<SiteCameraState> {
+        return migratedFlow {
+            dao.observe(host).map { settings -> settings?.camera.toSiteCameraState() }
+        }.distinctUntilChanged()
+    }
+
+    suspend fun getCameraState(host: String): SiteCameraState {
+        return cameraState(host).first()
+    }
+
+    /**
+     * 指定ホストのカメラの扱いを監視する。
+     * サイトから一度も要求されていない場合は null を返す
+     */
+    fun requestedCameraState(host: String): Flow<SiteCameraState?> {
+        return migratedFlow {
+            dao.observe(host).map { settings ->
+                if (settings == null) {
+                    null
+                } else {
+                    val state = settings.camera.toSiteCameraState()
+                    if (settings.cameraRequested || state != SiteCameraState.SITE_CAMERA_ASK) {
+                        state
+                    } else {
+                        null
+                    }
+                }
+            }
+        }.distinctUntilChanged()
+    }
+
+    suspend fun markCameraRequested(host: String) {
+        ensureLegacyMigration()
+        database.withTransaction {
+            dao.ensureHost(host)
+            dao.markCameraRequested(host)
+        }
+    }
+
+    suspend fun setCameraState(host: String, state: SiteCameraState) {
+        ensureLegacyMigration()
+        database.withTransaction {
+            dao.ensureHost(host)
+            dao.updateCameraState(host, state.toStoredValue())
+        }
+    }
+
     private fun <T> migratedFlow(source: () -> Flow<T>): Flow<T> {
         return flow {
             ensureLegacyMigration()
@@ -215,6 +263,8 @@ class SiteSettingsRepository(context: Context) {
                             geolocationRequested = permissions.geolocationRequested,
                             autoplay = permissions.autoplayValue,
                             autoplayRequested = permissions.autoplayRequested,
+                            camera = 0,
+                            cameraRequested = false,
                         )
                     }
                     database.withTransaction {
@@ -249,6 +299,24 @@ private fun Int?.toSiteGeolocationState(): SiteGeolocationState {
         1 -> SiteGeolocationState.SITE_GEOLOCATION_DENY
         2 -> SiteGeolocationState.SITE_GEOLOCATION_REAL
         else -> SiteGeolocationState.SITE_GEOLOCATION_MOCK
+    }
+}
+
+private fun Int?.toSiteCameraState(): SiteCameraState {
+    return when (this) {
+        1 -> SiteCameraState.SITE_CAMERA_REAL
+        2 -> SiteCameraState.SITE_CAMERA_IMAGE
+        3 -> SiteCameraState.SITE_CAMERA_DENY
+        else -> SiteCameraState.SITE_CAMERA_ASK
+    }
+}
+
+private fun SiteCameraState.toStoredValue(): Int {
+    return when (this) {
+        SiteCameraState.SITE_CAMERA_REAL -> 1
+        SiteCameraState.SITE_CAMERA_IMAGE -> 2
+        SiteCameraState.SITE_CAMERA_DENY -> 3
+        else -> 0
     }
 }
 

@@ -34,6 +34,7 @@ import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.WebAppRepository
 import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.camera.CameraReplacementImageRepository
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.forminput.FormInputOrigin
@@ -43,6 +44,7 @@ import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
+import net.matsudamper.browser.feature.camerareplace.CameraReplaceWebExtension
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
@@ -111,6 +113,10 @@ internal fun settingsRepository(context: Context): SettingsRepository = Settings
 
 @Single
 internal fun siteSettingsRepository(context: Context): SiteSettingsRepository = SiteSettingsRepository(context)
+
+@Single
+internal fun cameraReplacementImageRepository(context: Context): CameraReplacementImageRepository =
+    CameraReplacementImageRepository(context)
 
 @Single
 internal fun tabRepository(context: Context): TabRepository = TabRepository(context)
@@ -273,6 +279,11 @@ internal fun devToolsWebExtension(runtime: GeckoRuntime): DevToolsWebExtension {
 }
 
 @Single
+internal fun cameraReplaceWebExtension(runtime: GeckoRuntime): CameraReplaceWebExtension {
+    return CameraReplaceWebExtension().also { it.install(runtime) }
+}
+
+@Single
 internal fun mockLocationWebExtension(runtime: GeckoRuntime): MockLocationWebExtension {
     return MockLocationWebExtension().also { it.install(runtime) }
 }
@@ -385,12 +396,14 @@ internal fun settingsScreenViewModel(
     runtime: GeckoRuntime,
     webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
     webAuthnSettingsUpdateQueue: WebAuthnSettingsUpdateQueue,
+    cameraReplacementImageRepository: CameraReplacementImageRepository,
 ): SettingsScreenViewModel {
     return SettingsScreenViewModel(
         settingsRepository = settingsRepository,
         runtime = runtime,
         webAuthnCompatWebExtension = webAuthnCompatWebExtension,
         webAuthnSettingsUpdateQueue = webAuthnSettingsUpdateQueue,
+        cameraReplacementImageRepository = cameraReplacementImageRepository,
     )
 }
 
